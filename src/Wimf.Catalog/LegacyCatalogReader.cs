@@ -20,7 +20,7 @@ public static class LegacyCatalogReader
             : null;
         using var reader = new StreamReader(
             source ?? stream, new UTF8Encoding(false, true),
-            detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+            detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true);
 
         string RequireLine(string description) =>
             reader.ReadLine() ?? throw new InvalidDataException($"Missing catalog {description}.");
