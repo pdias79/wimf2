@@ -42,7 +42,7 @@ public class LegacyCatalogReaderTests
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(17108L * 86400),
             catalog.GetEntry(2)!.ModifiedAt);
         Assert.Single(catalog.Diagnostics);
-        Assert.Equal(9, catalog.Diagnostics[0].LineNumber);
+        Assert.Equal(8, catalog.Diagnostics[0].LineNumber);
     }
 
     [Fact]
