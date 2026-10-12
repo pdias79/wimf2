@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Wimf.Catalog/Wimf.Catalog.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Wimf.Catalog.Tests/Wimf.Catalog.Tests.csproj" />
+  </Folder>
+</Solution>
