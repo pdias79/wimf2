@@ -1,3 +1,4 @@
+using Xunit;
 using System.IO.Compression;
 using System.Text;
 using Wimf.Catalog;
