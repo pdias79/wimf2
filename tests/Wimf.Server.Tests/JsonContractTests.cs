@@ -9,7 +9,7 @@ public class JsonContractTests
     [Fact]
     public void SearchResponseUsesExpectedJavaScriptFieldNames()
     {
-        var hit = new SearchHit("Synthetic", 2, "Rapport.pdf", @"C:\Docs\Rapport.pdf",
+        var hit = new SearchHit("Synthetic", 0, 2, "Rapport.pdf", @"C:\Docs\Rapport.pdf",
             "pdf", 123, DateTimeOffset.UnixEpoch);
         var json = JsonSerializer.Serialize(
             new SearchResponse(1, [hit]), WimfJsonContext.Default.SearchResponse);
@@ -20,6 +20,7 @@ public class JsonContractTests
         Assert.Equal("Rapport.pdf", result.GetProperty("name").GetString());
         Assert.Equal(@"C:\Docs\Rapport.pdf", result.GetProperty("fullPath").GetString());
         Assert.Equal("Synthetic", result.GetProperty("catalog").GetString());
+        Assert.Equal(0, result.GetProperty("catalogIndex").GetInt32());
         Assert.Equal(123UL, result.GetProperty("size").GetUInt64());
     }
 

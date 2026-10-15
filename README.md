@@ -254,3 +254,21 @@ The embedded UI now pages the **returned** results in groups of 25, 50 or 100, w
 Use **Exporter CSV** to save **all returned hits**, not just the currently visible page, in the selected sort order. Exported columns are catalog, original record ID, filename, full path, extension, byte size, and modification timestamp (UTC). The file uses UTF-8 with a BOM, semicolon separators, quoted fields, escaped quotes and CRLF newlines for common spreadsheet compatibility. Cells beginning with spreadsheet formula prefixes (including after whitespace) are prefixed with an apostrophe to reduce CSV formula-injection risk. The export is generated in the browser, without sending results to another service.
 
 The CSV is an export of the current limited search response, **not** a complete database dump. Binary files are not accessed or exported.
+
+
+### Local desktop actions (opt-in)
+
+Restart the Wimf daemon with `--enable-file-actions` to allow per-result **Ouvrir**, **Dossier** and **Copier le fichier** buttons. They operate on the desktop session of the computer running the daemon; they cannot open a file in a browser on a different workstation. The existing **Copier le chemin** button still copies only text in the browser, without requiring the new option.
+
+```powershell
+dotnet run --project src/Wimf.Server -- --catalog "C:\\path\\to\\catalog.txt.gz" --enable-file-actions
+```
+
+- **Ouvrir** uses the operating system's default file association (Windows) or `xdg-open` (Linux). Known executable/script and shortcut extensions are intentionally blocked.
+- **Dossier** selects the file in Windows Explorer; on Linux it opens the containing directory (without guaranteed selection).
+- **Copier le fichier** places the *file reference* on the Windows system clipboard using the native `CF_HDROP` format. You can then paste it into a folder in Explorer. It does **not** copy the filename as text and does not copy bytes into a destination until you paste. The native file clipboard action is not yet available on Linux.
+- **Copier le chemin** uses browser clipboard text and is available regardless of whether native actions are enabled.
+
+The native action API is **disabled by default**, requires a request with the exact Wimf localhost origin and host, and accepts only catalog index + entry ID + expected path; it reconstructs the actual target from the current catalog instead of trusting a browser-provided path. It checks that a target is an existing indexed file, rooted under a local-system absolute catalog root, and rejects invalid/traversal filenames. The operation is a desktop-side effect, and the UI requires an explicit confirmation before invoking it. Remote/browser sessions cannot be assumed to access the same clipboard or Explorer instance.
+
+Security note: file associations and external programs can still have side effects. Enable these functions **only** on a trusted, interactive desktop and do not expose or proxy the daemon beyond localhost. A catalog is metadata: a file may have moved or become unavailable since indexing; stale entries return an error. No file download or arbitrary path-opening endpoint is added.

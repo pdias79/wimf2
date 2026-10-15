@@ -54,6 +54,8 @@ public static class WebUi
     .pager select { padding: 7px 10px; }
     .empty { padding: 28px 0; color: GrayText; text-align: center; }
     .copy { font-size: .8rem; padding: 6px 9px; white-space: nowrap; background: #424f62; }
+    .file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 240px; }
+    .file-actions button { font-size: .78rem; }
     .muted { color: GrayText; font-weight: 400; }
     @media (max-width: 640px) {
       main { padding: 20px 12px; }
@@ -216,16 +218,39 @@ public static class WebUi
       makeCell(row, dateFormatter.format(new Date(hit.modifiedAt)));
       makeCell(row, hit.catalog);
       const action = document.createElement("td");
-      const copy = document.createElement("button");
-      copy.type = "button";
-      copy.className = "copy";
-      copy.textContent = "Copier";
-      copy.setAttribute("aria-label", "Copier le chemin de " + hit.name);
-      copy.addEventListener("click", async () => {
-        try { await navigator.clipboard.writeText(hit.fullPath); message("Chemin copié."); }
-        catch { message("Impossible de copier automatiquement le chemin.", true); }
+      const actions = document.createElement("div");
+      actions.className = "file-actions";
+      function actionButton(label, onClick) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "copy";
+        button.textContent = label;
+        button.setAttribute("aria-label", label + " : " + hit.name);
+        button.addEventListener("click", onClick);
+        actions.appendChild(button);
+      }
+      actionButton("Copier le chemin", async () => {
+        try { await navigator.clipboard.writeText(hit.fullPath); message("Chemin copié en texte."); }
+        catch { message("Impossible de copier le chemin en texte.", true); }
       });
-      action.appendChild(copy);
+      async function fileAction(actionName, buttonLabel) {
+        if (!confirm(buttonLabel + " sur l’ordinateur exécutant Wimf ?\\n" + hit.fullPath)) return;
+        try {
+          const response = await fetch("/api/file-action", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: actionName, catalogIndex: hit.catalogIndex,
+              id: hit.id, fullPath: hit.fullPath })
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Action impossible.");
+          message(actionName === "copy" ? "Fichier copié : collez-le dans l’Explorateur Windows."
+            : "Action demandée au système.");
+        } catch (error) { message(error.message || "Action impossible.", true); }
+      }
+      actionButton("Ouvrir", () => fileAction("open", "Ouvrir ce fichier"));
+      actionButton("Dossier", () => fileAction("reveal", "Afficher le dossier"));
+      actionButton("Copier le fichier", () => fileAction("copy", "Copier ce fichier"));
+      action.appendChild(actions);
       row.appendChild(action);
       fragment.appendChild(row);
     }
