@@ -159,3 +159,12 @@ After the first successful load, scheduled and manual refreshes compare the netw
 If a source becomes unavailable after a successful load, Wimf retains the previously validated in-memory instance, even if the on-disk cache later becomes unavailable. On cold startup the local cache still has to be parsed and validated. Failures continue to be reported as unavailable sources.
 
 **Limitation:** source-change detection relies on length plus modification timestamp, not a content hash; a replacement with identical values will be treated as unchanged. Do not mutate source catalogs in place without updating metadata; publish completed catalogs atomically.
+
+
+### Compact in-memory catalog representation
+
+The legacy reader now stores per-record **value slots** instead of keeping a separate `CatalogEntry` object for every file. Slots preserve the original 1-based record IDs, including malformed gaps. Repeated extension strings share one canonical instance per catalog. The public `Catalog.GetEntry()` and `EnumerateEntries()` interfaces continue to return `CatalogEntry` objects on demand.
+
+`SequentialSearchEngine` reads the compact slots without materializing entries for nonmatching files; full entry objects and paths are created only for retained results. Date filters still use the original Unix-day timestamps.
+
+This change aims to reduce resident memory for large catalogs. It changes internal memory representation, so validate equivalence and compare benchmarks for load time, heap and full-scan search before merging. `GetEntry()` callers that repeatedly request every record now allocate objects on demand instead of reading preexisting references; this trade-off should be measured before adopting it in other performance-sensitive code.
