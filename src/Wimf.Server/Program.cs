@@ -72,8 +72,8 @@ app.MapGet("/api/health", () =>
     Results.Json(new HealthResponse("ok", store.Snapshot.Length), WimfJsonContext.Default.HealthResponse));
 
 app.MapGet("/api/catalogs", () =>
-    Results.Json(store.Snapshot.Select(c =>
-        new CatalogSummary(c.Header.Name, c.Header.RootPath, c.RecordCount,
+    Results.Json(store.Snapshot.Select((c, index) =>
+        new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
             c.Diagnostics.Count, c.Header.CreatedAt)).ToArray(),
         WimfJsonContext.Default.CatalogSummaryArray));
 
@@ -81,7 +81,8 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
 {
     if (request.Text is null || request.Text.Length > 1024 ||
         request.MaxResults < 0 || request.MaxResults > 1000 ||
-        request.Extensions is { Length: > 100 })
+        request.Extensions is { Length: > 100 } ||
+        request.CatalogIndices is { Length: > 1000 })
         return Results.Json(new ErrorResponse("Invalid query or result limit."),
             WimfJsonContext.Default.ErrorResponse, statusCode: 400);
 
@@ -100,9 +101,11 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
             MaxResults = request.MaxResults
         };
         var snapshot = store.Snapshot;
-        var results = engine.Search(snapshot, query, cancellationToken);
+        var indices = CatalogSelection.Resolve(snapshot.Length, request.CatalogIndices);
+        var selected = indices.Select(index => snapshot[index]).ToArray();
+        var results = engine.Search(selected, query, cancellationToken);
         var hits = results.Select(r => new SearchHit(
-            r.Catalog.Header.Name, Array.IndexOf(snapshot, r.Catalog), r.Entry.Id, r.Entry.Name, r.FullPath,
+            r.Catalog.Header.Name, indices[Array.IndexOf(selected, r.Catalog)], r.Entry.Id, r.Entry.Name, r.FullPath,
             r.Entry.Extension, r.Entry.Size, r.Entry.ModifiedAt)).ToArray();
         return Results.Json(new SearchResponse(hits.Length, hits),
             WimfJsonContext.Default.SearchResponse);
