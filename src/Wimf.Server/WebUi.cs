@@ -41,8 +41,12 @@ public static class WebUi
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: .92rem; }
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, Canvas); }
-    td.path { overflow-wrap: anywhere; max-width: 520px; }
-    td.name { font-weight: 600; }
+    td.name { font-weight: 600; max-width: 340px; }
+    .file-name { display: block; width: 100%; max-width: 340px; padding: 0; border: 0;
+                 background: transparent; color: #155bbc; text-align: left;
+                 font: inherit; font-weight: 600; text-decoration: underline;
+                 overflow-wrap: anywhere; cursor: pointer; }
+    .file-name:hover, .file-name:focus-visible { text-decoration-thickness: 2px; }
     th { color: GrayText; font-size: .82rem; }
     tbody tr:hover { background: color-mix(in srgb, CanvasText 6%, Canvas); }
     tbody tr:nth-child(even) { background: color-mix(in srgb, CanvasText 3%, Canvas); }
@@ -125,7 +129,7 @@ public static class WebUi
     </div>
     <div class="table-wrap">
       <table id="results-table" hidden>
-        <thead><tr><th>Fichier</th><th>Chemin</th><th>Taille</th><th>Modifié le</th><th>Catalogue</th><th>Action</th></tr></thead>
+        <thead><tr><th>Fichier</th><th>Taille</th><th>Modifié le</th><th>Catalogue</th><th>Action</th></tr></thead>
         <tbody id="results"></tbody>
       </table>
     </div>
@@ -284,8 +288,17 @@ public static class WebUi
     const fragment = document.createDocumentFragment();
     for (const hit of hits.slice(start, start + pageSize)) {
       const row = document.createElement("tr");
-      makeCell(row, hit.name, "name");
-      makeCell(row, hit.fullPath, "path");
+      const nameCell = document.createElement("td");
+      nameCell.className = "name";
+      const fileName = document.createElement("button");
+      fileName.type = "button";
+      fileName.className = "file-name";
+      fileName.textContent = hit.name;
+      fileName.title = hit.fullPath;
+      fileName.setAttribute("aria-label", "Ouvrir " + hit.name + " — " + hit.fullPath);
+      fileName.addEventListener("click", () => fileAction("open", "Ouvrir ce fichier"));
+      nameCell.appendChild(fileName);
+      row.appendChild(nameCell);
       makeCell(row, new Intl.NumberFormat("fr-FR").format(hit.size) + " o");
       makeCell(row, dateFormatter.format(new Date(hit.modifiedAt)));
       makeCell(row, hit.catalog);
@@ -306,7 +319,7 @@ public static class WebUi
         catch { message("Impossible de copier le chemin en texte.", true); }
       });
       async function fileAction(actionName, buttonLabel) {
-        if (!confirm(buttonLabel + " sur l’ordinateur exécutant Wimf ?\\n" + hit.fullPath)) return;
+        if (actionName !== "open" && !confirm(buttonLabel + " sur l’ordinateur exécutant Wimf ?\\n" + hit.fullPath)) return;
         try {
           const response = await fetch("/api/file-action", {
             method: "POST", headers: { "Content-Type": "application/json" },
@@ -319,7 +332,6 @@ public static class WebUi
             : "Action demandée au système.");
         } catch (error) { message(error.message || "Action impossible.", true); }
       }
-      actionButton("Ouvrir", () => fileAction("open", "Ouvrir ce fichier"));
       actionButton("Dossier", () => fileAction("reveal", "Afficher le dossier"));
       actionButton("Copier le fichier", () => fileAction("copy", "Copier ce fichier"));
       action.appendChild(actions);
