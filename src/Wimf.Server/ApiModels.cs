@@ -25,4 +25,4 @@ public sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SearchRequest))]
 [JsonSerializable(typeof(SearchResponse))]
 [JsonSerializable(typeof(ErrorResponse))]
-internal partial class WimfJsonContext : JsonSerializerContext;
+public partial class WimfJsonContext : JsonSerializerContext;
