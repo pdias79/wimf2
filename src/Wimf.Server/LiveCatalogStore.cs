@@ -13,7 +13,7 @@ public sealed class LiveCatalogStore
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private FileCatalog?[] _sourceCatalogs;
     private FileCatalog[] _snapshot;
-    private DateTimeOffset? _lastRefresh;
+    private RefreshSummary? _lastSummary;
 
     public LiveCatalogStore(IEnumerable<FileCatalog> fixedCatalogs, IEnumerable<string> sources,
         string? cacheDirectory)
@@ -28,7 +28,7 @@ public sealed class LiveCatalogStore
     }
 
     public FileCatalog[] Snapshot => Volatile.Read(ref _snapshot);
-    public DateTimeOffset? LastRefresh => _lastRefresh;
+    public DateTimeOffset? LastRefresh => Volatile.Read(ref _lastSummary)?.CompletedAt;
     public int SourceCount => _sources.Length;
 
     /// <summary>Serializes updates; leaves working source entries intact if refresh fails.</summary>
@@ -61,8 +61,9 @@ public sealed class LiveCatalogStore
             cancellationToken.ThrowIfCancellationRequested();
             _sourceCatalogs = next;
             Volatile.Write(ref _snapshot, snapshot);
-            _lastRefresh = DateTimeOffset.UtcNow;
-            return new RefreshSummary(snapshot.Length, _sources.Length, failures, _lastRefresh.Value);
+            var summary = new RefreshSummary(snapshot.Length, _sources.Length, failures, DateTimeOffset.UtcNow);
+            Volatile.Write(ref _lastSummary, summary);
+            return summary;
         }
         finally { _refreshLock.Release(); }
     }
