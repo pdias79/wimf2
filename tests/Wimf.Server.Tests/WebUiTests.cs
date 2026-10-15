@@ -30,4 +30,19 @@ public class WebUiTests
         Assert.DoesNotContain("<script src=", WebUi.Html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<link rel=\"stylesheet\"", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
+    [Fact]
+    public void ExposesSizeAndUtcDateFiltersWithValidation()
+    {
+        foreach (var id in new[] { "min-size", "max-size", "modified-from", "modified-to" })
+            Assert.Contains("id=\\\"" + id + "\\\"", WebUi.Html);
+        Assert.Contains("payload.minSize = parseSize", WebUi.Html);
+        Assert.Contains("payload.maxSize = parseSize", WebUi.Html);
+        Assert.Contains("Number.isSafeInteger(size)", WebUi.Html);
+        Assert.Contains("payload.minSize > payload.maxSize", WebUi.Html);
+        Assert.Contains("payload.modifiedFrom = modifiedFromText", WebUi.Html);
+        Assert.Contains("T00:00:00.000Z", WebUi.Html);
+        Assert.Contains("T23:59:59.999Z", WebUi.Html);
+        Assert.Contains("modifiedFromText > modifiedToText", WebUi.Html);
+    }
+
 }
