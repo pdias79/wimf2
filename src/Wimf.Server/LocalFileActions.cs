@@ -110,6 +110,13 @@ public static class LocalFileActions
         private static extern bool GlobalUnlock(nint memory);
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern nint GlobalFree(nint memory);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern nint CreateWindowEx(uint exStyle, string className, string windowName,
+            uint style, int x, int y, int width, int height, nint parent, nint menu,
+            nint instance, nint param);
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DestroyWindow(nint window);
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool OpenClipboard(nint hwnd);
@@ -144,16 +151,24 @@ public static class LocalFileActions
                 }
                 finally { GlobalUnlock(memory); }
 
-                if (!OpenClipboard(0)) throw new IOException("Clipboard is unavailable or occupied.");
+                // EmptyClipboard requires a non-null owner or SetClipboardData can fail.
+                var owner = CreateWindowEx(0, "STATIC", "Wimf Clipboard", 0,
+                    0, 0, 0, 0, 0, 0, 0, 0);
+                if (owner == 0) throw new IOException("An interactive clipboard is unavailable.");
                 try
                 {
-                    if (!EmptyClipboard()) throw new IOException("Cannot clear clipboard.");
-                    if (SetClipboardData(CfHdrop, memory) == 0)
-                        throw new IOException("Cannot copy file reference to clipboard.");
-                    // The clipboard owns the movable memory after a successful SetClipboardData.
-                    memory = 0;
+                    if (!OpenClipboard(owner)) throw new IOException("Clipboard is unavailable or occupied.");
+                    try
+                    {
+                        if (!EmptyClipboard()) throw new IOException("Cannot clear clipboard.");
+                        if (SetClipboardData(CfHdrop, memory) == 0)
+                            throw new IOException("Cannot copy file reference to clipboard.");
+                        // The clipboard owns the movable memory after a successful SetClipboardData.
+                        memory = 0;
+                    }
+                    finally { CloseClipboard(); }
                 }
-                finally { CloseClipboard(); }
+                finally { DestroyWindow(owner); }
             }
             finally
             {
