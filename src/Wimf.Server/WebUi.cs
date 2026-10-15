@@ -56,6 +56,11 @@ public static class WebUi
     .copy { font-size: .8rem; padding: 6px 9px; white-space: nowrap; background: #424f62; }
     .file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 240px; }
     .file-actions button { font-size: .78rem; }
+    .catalog-list { display: grid; gap: 8px; margin-top: 12px; }
+    .catalog-item { display: flex; align-items: flex-start; gap: 10px; overflow-wrap: anywhere; }
+    .catalog-item input { margin-top: 4px; flex-shrink: 0; }
+    .catalog-details { font-size: .84rem; color: GrayText; }
+    .catalog-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
     .muted { color: GrayText; font-weight: 400; }
     @media (max-width: 640px) {
       main { padding: 20px 12px; }
@@ -85,6 +90,15 @@ public static class WebUi
       <label for="modified-from">Modifié depuis <input id="modified-from" type="date"></label>
       <label for="modified-to">Modifié jusqu’au <input id="modified-to" type="date"></label>
     </div>
+    <details id="catalog-panel" class="advanced">
+      <summary>Catalogues sélectionnés pour la recherche</summary>
+      <div class="catalog-controls">
+        <button id="catalog-select-all" class="copy" type="button">Tout sélectionner</button>
+        <button id="catalog-select-none" class="copy" type="button">Tout désélectionner</button>
+        <span id="catalog-selection-count" class="status" role="status"></span>
+      </div>
+      <div id="catalog-list" class="catalog-list" aria-label="Catalogues disponibles"></div>
+    </details>
     <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
   <section class="panel" aria-label="Résultats">
@@ -136,6 +150,9 @@ public static class WebUi
   let activeController;
   let currentHits = [];
   let currentPage = 0;
+  let loadedCatalogs = [];
+  let catalogSelection = new Set();
+  const catalogList = byId("catalog-list");
   const pageSizeControl = byId("page-size");
   const pagination = byId("pagination");
   const previousButton = byId("page-prev");
@@ -147,6 +164,59 @@ public static class WebUi
   const refreshButton = byId("refresh");
   const refreshTime = byId("refresh-time");
   const showTime = value => { refreshTime.textContent = value ? " · Dernière actualisation : " + new Date(value).toLocaleString("fr-FR") : ""; };
+  function catalogKey(catalog) {
+    return catalog.name + "\\u0000" + catalog.rootPath;
+  }
+  function renderCatalogs(catalogs) {
+    const oldKeys = new Set(loadedCatalogs.filter(c => catalogSelection.has(c.index)).map(catalogKey));
+    const hadCatalogs = loadedCatalogs.length > 0;
+    loadedCatalogs = catalogs;
+    catalogSelection = new Set(catalogs.filter(c => !hadCatalogs || oldKeys.has(catalogKey(c))).map(c => c.index));
+    catalogList.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    for (const catalog of catalogs) {
+      const label = document.createElement("label");
+      label.className = "catalog-item";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = catalogSelection.has(catalog.index);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) catalogSelection.add(catalog.index);
+        else catalogSelection.delete(catalog.index);
+        updateCatalogSelectionCount();
+      });
+      const content = document.createElement("span");
+      const title = document.createElement("strong");
+      title.textContent = catalog.name;
+      const details = document.createElement("div");
+      details.className = "catalog-details";
+      details.textContent = catalog.rootPath + " · " + catalog.recordCount +
+        " entrées · " + catalog.diagnosticCount + " diagnostics";
+      content.append(title, details);
+      label.append(checkbox, content);
+      fragment.appendChild(label);
+    }
+    catalogList.appendChild(fragment);
+    renderCatalogs(catalogs);
+    updateCatalogSelectionCount();
+  }
+  function updateCatalogSelectionCount() {
+    byId("catalog-selection-count").textContent = catalogSelection.size +
+      " / " + loadedCatalogs.length + " sélectionné(s)";
+  }
+  byId("catalog-select-all").addEventListener("click", () => {
+    catalogSelection = new Set(loadedCatalogs.map(c => c.index));
+    renderSelectionCheckboxes();
+  });
+  byId("catalog-select-none").addEventListener("click", () => {
+    catalogSelection.clear();
+    renderSelectionCheckboxes();
+  });
+  function renderSelectionCheckboxes() {
+    for (const [position, checkbox] of Array.from(catalogList.querySelectorAll("input[type=checkbox]")).entries())
+      checkbox.checked = catalogSelection.has(loadedCatalogs[position].index);
+    updateCatalogSelectionCount();
+  }
   refreshButton.addEventListener("click", async () => {
     refreshButton.disabled = true;
     message("Actualisation des catalogues en cours…");
@@ -154,7 +224,9 @@ public static class WebUi
       const response = await fetch("/api/refresh", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Erreur d’actualisation.");
-      byId("catalogs").textContent = data.catalogCount + " catalogue(s) chargé(s)";
+      const catalogsResponse = await fetch("/api/catalogs");
+      if (!catalogsResponse.ok) throw new Error("Impossible de charger les catalogues actualisés.");
+      renderCatalogs(await catalogsResponse.json());
       showTime(data.completedAt);
       message(data.failedSources ? data.failedSources + " source(s) indisponible(s), cache conservé." : "Catalogues actualisés.", Boolean(data.failedSources));
     } catch (error) { message(error.message || "Erreur réseau.", true); }
@@ -305,7 +377,8 @@ public static class WebUi
     const modifiedToText = byId("modified-to").value;
     const payload = {
       text: byId("query").value, useRegex: byId("regex").checked,
-      extensions, maxResults
+      extensions, maxResults,
+      catalogIndices: [...catalogSelection]
     };
     try {
       if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 1000)
