@@ -76,3 +76,15 @@ Example body:
 ```
 
 The daemon loads all catalog records into memory at startup. It has no authentication, no automatic synchronization, and must **not** be exposed outside localhost. It currently supports at most 1,000 results per request. Native AOT compatibility is a design target; native publication has not been validated yet.
+
+### Embedded Web interface
+
+Run the daemon with a catalog:
+
+```powershell
+dotnet run --project src/Wimf.Server -- --catalog "C:\\path\\to\\catalog.txt.gz"
+```
+
+Open **http://127.0.0.1:5080/** in a browser. The standalone page is served directly by the daemon: no Node.js, external CDN or asset folder. It supports search terms, regex, comma-separated extension filters, a result limit, catalog status, and copying result paths. The UI is in French and does not open or download indexed files.
+
+**Security:** bound to localhost only. Do not expose the daemon over a network or through a proxy until authentication, authorization and request limits have been reviewed. Catalogs are still entirely loaded in memory at startup. This milestone does not implement cache synchronization or the final disk index.
