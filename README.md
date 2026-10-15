@@ -184,3 +184,21 @@ dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --
 ```
 
 Compare cumulative **load allocations**, loading latency, GC collections, retained heap and query timings. Synthetic load timing also includes generation of rows by the benchmark stream; a real catalog provides a complementary measurement.
+
+
+### Hierarchical benchmark scenarios
+
+The synthetic benchmark can now generate **directory records** before file records, including a deterministic nested spine and side branches. Each file receives a valid parent folder ID, with varying path depths. The `--count` argument is the **total number of records**, including folders; `--folders` selects how many records are folders and `--depth` sets the spine depth (1 to 64, no greater than folder count). The default `--folders 0` preserves the previous flat baseline.
+
+```powershell
+# Flat baseline (comparable with PR #13 results)
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --iterations 7 --profile-refresh
+
+# 1 million records: 10,000 directories and 990,000 files, up to 9 folder levels
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --folders 10000 --depth 8 --iterations 7 --profile-refresh
+
+# An alternative shallower hierarchy
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 100000 --folders 2000 --depth 3 --iterations 5
+```
+
+Beyond the existing load, memory, GC, and search metrics, the benchmark prints `GetFullPath` timings and allocated bytes for representative file IDs at different depths. It verifies that repeated calls return the same path. For existing `--catalog` input it samples up to three valid file records. This is a deterministic structural stress test, not a faithful distribution of real-world folder sizes or filename lengths. Compare matching record counts and hardware; hierarchical runs contain fewer files and may therefore produce different search hit counts. No catalog files are written or uploaded.
