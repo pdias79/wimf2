@@ -19,6 +19,7 @@ public sealed record SearchHit(string Catalog, int Id, string Name, string FullP
 public sealed record SearchResponse(int Count, SearchHit[] Results);
 public sealed record ErrorResponse(string Error);
 
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(CatalogSummary[]))]
 [JsonSerializable(typeof(SearchRequest))]
