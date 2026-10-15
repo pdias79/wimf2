@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Wimf.Catalog/Wimf.Catalog.csproj" />
     <Project Path="src/Wimf.Search/Wimf.Search.csproj" />
+    <Project Path="src/Wimf.Server/Wimf.Server.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Wimf.Catalog.Tests/Wimf.Catalog.Tests.csproj" />
