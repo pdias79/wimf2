@@ -74,7 +74,7 @@ public static class LegacyCatalogReader
             catch (Exception ex) when (ex is OverflowException or ArgumentOutOfRangeException)
             {
                 diagnostics.Add(new CatalogDiagnostic(lineNumber, "Entry timestamp out of range."));
-                entries.Add(null);
+                entries.Add(default);
             }
         }
 
