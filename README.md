@@ -228,3 +228,13 @@ These tests use temporary files and deterministic assertions rather than fixed t
 ```powershell
 dotnet test Wimf.slnx -c Release
 ```
+
+
+### Size and date filters in the embedded Web UI
+
+The embedded search form exposes the size and modification-date filters already supported by `POST /api/search`. Set minimum and/or maximum size in **bytes** (whole nonnegative integers), and/or choose inclusive **UTC calendar dates**. Leaving a filter blank does not constrain the search. Combining filters uses AND, as in the API.
+
+The browser refuses reversed size/date ranges, negative or fractional size values, and byte values beyond JavaScript's safe integer precision. The ending date is sent as `23:59:59.999Z`, so a file modified on that day is included. These client-side safeguards complement existing API-side validation; API consumers may still supply 64-bit unsigned byte sizes via JSON.
+
+No external JavaScript or CSS dependencies are introduced, and the UI remains restricted to the localhost daemon.
+
