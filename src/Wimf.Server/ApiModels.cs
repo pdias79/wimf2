@@ -15,9 +15,11 @@ public sealed record SearchRequest
     public DateTimeOffset? ModifiedTo { get; init; }
     public int MaxResults { get; init; } = 100;
 }
-public sealed record SearchHit(string Catalog, int Id, string Name, string FullPath, string Extension, ulong Size, DateTimeOffset ModifiedAt);
+public sealed record SearchHit(string Catalog, int CatalogIndex, int Id, string Name, string FullPath, string Extension, ulong Size, DateTimeOffset ModifiedAt);
 public sealed record SearchResponse(int Count, SearchHit[] Results);
 public sealed record ErrorResponse(string Error);
+public sealed record FileActionRequest(string Action, int CatalogIndex, int Id, string FullPath);
+public sealed record FileActionResponse(bool Success);
 public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOffset? LastRefresh);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
@@ -26,6 +28,8 @@ public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOf
 [JsonSerializable(typeof(SearchRequest))]
 [JsonSerializable(typeof(SearchResponse))]
 [JsonSerializable(typeof(ErrorResponse))]
+[JsonSerializable(typeof(FileActionRequest))]
+[JsonSerializable(typeof(FileActionResponse))]
 [JsonSerializable(typeof(RefreshSummary))]
 [JsonSerializable(typeof(RefreshStatus))]
 public partial class WimfJsonContext : JsonSerializerContext;
