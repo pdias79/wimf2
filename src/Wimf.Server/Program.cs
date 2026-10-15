@@ -35,6 +35,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, WimfJsonContext.Default));
 
 var app = builder.Build();
+
+// The UI and API are deliberately bound to localhost until authentication is implemented.
+app.MapGet("/", WebUi.GetPage);
 var engine = new SequentialSearchEngine();
 
 app.MapGet("/api/health", () =>
