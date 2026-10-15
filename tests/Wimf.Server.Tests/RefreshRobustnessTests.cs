@@ -93,7 +93,7 @@ public sealed class RefreshRobustnessTests
             Assert.Equal("Old", old[0].Header.Name);
             Assert.Equal(128, old[0].RecordCount);
             Assert.Equal(128, engine.Search(old, new SearchQuery { Text = "Old-", MaxResults = 1000 }).Count);
-            Assert.Equal(0, engine.Search(old, new SearchQuery { Text = "New-" }).Count);
+            Assert.Empty(engine.Search(old, new SearchQuery { Text = "New-" }));
         }
         finally { Directory.Delete(root, true); }
     }
