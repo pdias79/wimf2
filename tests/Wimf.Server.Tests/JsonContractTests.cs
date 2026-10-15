@@ -32,4 +32,19 @@ public class JsonContractTests
         using var document = JsonDocument.Parse(json);
         Assert.Equal("Test error", document.RootElement.GetProperty("error").GetString());
     }
+    [Fact]
+    public void CatalogSummaryAndSearchSelectionUseCamelCaseIndices()
+    {
+        var summary = new CatalogSummary(2, "Archives", "/archives", 12, 0, DateTimeOffset.UnixEpoch);
+        var json = JsonSerializer.Serialize(new[] { summary }, WimfJsonContext.Default.CatalogSummaryArray);
+        using var catalogsDocument = JsonDocument.Parse(json);
+        Assert.Equal(2, catalogsDocument.RootElement[0].GetProperty("index").GetInt32());
+
+        var request = new SearchRequest { CatalogIndices = [2, 0], Text = "report" };
+        var requestJson = JsonSerializer.Serialize(request, WimfJsonContext.Default.SearchRequest);
+        using var requestDocument = JsonDocument.Parse(requestJson);
+        Assert.Equal([2, 0], requestDocument.RootElement.GetProperty("catalogIndices")
+            .EnumerateArray().Select(element => element.GetInt32()).ToArray());
+    }
+
 }
