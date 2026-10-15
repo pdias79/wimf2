@@ -168,3 +168,19 @@ The legacy reader now stores per-record **value slots** instead of keeping a sep
 `SequentialSearchEngine` reads the compact slots without materializing entries for nonmatching files; full entry objects and paths are created only for retained results. Date filters still use the original Unix-day timestamps.
 
 This change aims to reduce resident memory for large catalogs. It changes internal memory representation, so validate equivalence and compare benchmarks for load time, heap and full-scan search before merging. `GetEntry()` callers that repeatedly request every record now allocate objects on demand instead of reading preexisting references; this trade-off should be measured before adopting it in other performance-sensitive code.
+
+
+### Lower-allocation legacy parsing
+
+The catalog reader parses semicolon-delimited entry lines directly from `ReadOnlySpan<char>` slices, rather than creating a five-element string array and multiple temporary strings for every row with `string.Split`. Integer fields are parsed directly from spans. A per-catalog ordinal extension pool uses span-based dictionary lookup, allocating an extension string only on its first occurrence. Filenames are still retained as strings.
+
+The reader continues to reject records with too few/many separators, invalid numbers, blank names, out-of-range timestamps and negative parent IDs while preserving original row IDs and diagnostics. The file format, plain-text/Gzip support and public catalog API remain unchanged.
+
+Benchmark the change against the merged PR #12 before adopting it:
+
+```powershell
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 100000 --iterations 5 --profile-refresh
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --iterations 7 --profile-refresh
+```
+
+Compare cumulative **load allocations**, loading latency, GC collections, retained heap and query timings. Synthetic load timing also includes generation of rows by the benchmark stream; a real catalog provides a complementary measurement.

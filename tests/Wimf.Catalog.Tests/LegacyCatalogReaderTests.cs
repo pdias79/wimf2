@@ -80,4 +80,59 @@ public class LegacyCatalogReaderTests
         Assert.Equal(new[] { 1, 3, 4 }, catalog.EnumerateEntries().Select(x => x.Id));
     }
 
+    [Fact]
+    public void SpanParserPreservesMalformedSlotsAndNumericParsing()
+    {
+        const string text = """
+            [WIMF Catalog]
+            Edge cases
+            /data
+            0
+            txt
+            Folder;folder;0;0;2
+            valid.txt;txt;  +42 ;1; +3
+            no-delimiters
+            extra.txt;txt;1;1;3;unexpected
+            ;txt;1;1;3
+            over.txt;txt;18446744073709551616;1;3
+            negative-parent.txt;txt;1;-1;3
+            too-late.txt;txt;1;1;99999999999999
+            last.txt;txt;1;1;3
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
+        var catalog = LegacyCatalogReader.Read(stream, false);
+        Assert.Equal(9, catalog.RecordCount);
+        Assert.Equal(42UL, catalog.GetEntry(2)!.Size);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(3L * 86400), catalog.GetEntry(2)!.ModifiedAt);
+        for (var id = 3; id <= 8; id++)
+        {
+            Assert.Null(catalog.GetEntry(id));
+            Assert.False(catalog.TryGetEntryData(id, out _));
+        }
+        Assert.Equal(9, catalog.GetEntry(9)!.Id);
+        Assert.Equal("/data/Folder/last.txt", catalog.GetFullPath(9));
+        Assert.Equal(6, catalog.Diagnostics.Count);
+        Assert.Equal("Entry timestamp out of range.", catalog.Diagnostics[5].Message);
+    }
+
+    [Fact]
+    public void SpanParserReusesExtensionsAndKeepsTheirCase()
+    {
+        const string text = """
+            [WIMF Catalog]
+            Extensions
+            /data
+            0
+            pdf
+            one.pdf;pdf;1;0;3
+            two.pdf;pdf;2;0;3
+            three.PDF;PDF;3;0;3
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
+        var catalog = LegacyCatalogReader.Read(stream, false);
+        Assert.Same(catalog.GetEntry(1)!.Extension, catalog.GetEntry(2)!.Extension);
+        Assert.Equal("PDF", catalog.GetEntry(3)!.Extension);
+        Assert.NotSame(catalog.GetEntry(1)!.Extension, catalog.GetEntry(3)!.Extension);
+    }
+
 }
