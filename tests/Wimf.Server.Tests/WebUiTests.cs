@@ -140,4 +140,25 @@ public class WebUiTests
         Assert.DoesNotContain("new Intl.NumberFormat(\"fr-FR\").format(hit.size) + \" o\"", WebUi.Html);
     }
 
+    [Fact]
+    public void SearchHistoryAndFavoritesStayLocalAndRestoreAllFilters()
+    {
+        foreach (var id in new[] { "saved-search-panel", "save-favorite", "clear-history",
+            "history-list", "favorites-list", "saved-status" })
+            Assert.Contains("id=" + (char)34 + id + (char)34, WebUi.Html);
+        Assert.Contains("wimf2.history.v1", WebUi.Html);
+        Assert.Contains("wimf2.favorites.v1", WebUi.Html);
+        Assert.Contains("localStorage.getItem", WebUi.Html);
+        Assert.Contains("localStorage.setItem", WebUi.Html);
+        Assert.Contains("const maxSaved = 20", WebUi.Html);
+        Assert.Contains("function restoreSearch(entry)", WebUi.Html);
+        Assert.Contains("byId(\"min-size\").value = entry.minSize", WebUi.Html);
+        Assert.Contains("byId(\"modified-from\").value = entry.modifiedFrom", WebUi.Html);
+        Assert.Contains("catalogSelection = new Set(loadedCatalogs.filter", WebUi.Html);
+        Assert.Contains("const submittedSearch = captureSearch()", WebUi.Html);
+        Assert.Contains("addToHistory(submittedSearch)", WebUi.Html);
+        Assert.Contains("container.replaceChildren()", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
