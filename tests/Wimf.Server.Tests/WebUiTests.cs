@@ -34,7 +34,7 @@ public class WebUiTests
     public void ExposesSizeAndUtcDateFiltersWithValidation()
     {
         foreach (var id in new[] { "min-size", "max-size", "modified-from", "modified-to" })
-            Assert.Contains("id=\\\"" + id + "\\\"", WebUi.Html);
+            Assert.Contains("id=" + (char)34 + id + (char)34, WebUi.Html);
         Assert.Contains("payload.minSize = parseSize", WebUi.Html);
         Assert.Contains("payload.maxSize = parseSize", WebUi.Html);
         Assert.Contains("Number.isSafeInteger(size)", WebUi.Html);
