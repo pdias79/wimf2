@@ -42,7 +42,8 @@ public static class LegacyCatalogReader
         var extensions = RequireLine("extensions")
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
-        var entries = new List<CatalogEntry?> { null }; // ID 0 is the root
+        var entries = new List<CatalogEntryData> { default }; // ID 0 is the root
+        var extensionPool = new Dictionary<string, string>(StringComparer.Ordinal);
         var diagnostics = new List<CatalogDiagnostic>();
         string? line;
         int lineNumber = 5;
@@ -59,27 +60,31 @@ public static class LegacyCatalogReader
                 parentId < 0)
             {
                 diagnostics.Add(new CatalogDiagnostic(lineNumber, "Invalid entry format or numeric field."));
-                entries.Add(null);
+                entries.Add(default);
                 continue;
             }
             try
             {
-                var modified = DateTimeOffset.FromUnixTimeSeconds(checked(days * 86400));
-                entries.Add(new CatalogEntry(id, parts[0], parts[1], size, parentId, modified));
+                _ = DateTimeOffset.FromUnixTimeSeconds(checked(days * 86400));
+                // Canonicalize extensions so repeated values share the same string.
+                if (!extensionPool.TryGetValue(parts[1], out var extension))
+                    extensionPool[parts[1]] = extension = parts[1];
+                entries.Add(new CatalogEntryData(parts[0], extension, size, parentId, days));
             }
             catch (Exception ex) when (ex is OverflowException or ArgumentOutOfRangeException)
             {
                 diagnostics.Add(new CatalogDiagnostic(lineNumber, "Entry timestamp out of range."));
-                entries.Add(null);
+                entries.Add(default);
             }
         }
 
         var slots = entries.ToArray();
-        foreach (var entry in slots)
+        for (var id = 1; id < slots.Length; id++)
         {
-            if (entry is null || entry.ParentId == 0) continue;
-            if (entry.ParentId >= slots.Length || slots[entry.ParentId] is not { IsDirectory: true })
-                diagnostics.Add(new CatalogDiagnostic(entry.Id + 5, $"Invalid parent reference {entry.ParentId}."));
+            var entry = slots[id];
+            if (entry.Name is null || entry.ParentId == 0) continue;
+            if (entry.ParentId >= slots.Length || !slots[entry.ParentId].IsDirectory)
+                diagnostics.Add(new CatalogDiagnostic(id + 5, $"Invalid parent reference {entry.ParentId}."));
         }
 
         return new Catalog(new CatalogHeader(name, rootPath, created, extensions), slots, diagnostics);
