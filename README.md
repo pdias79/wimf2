@@ -281,3 +281,10 @@ Expand **Catalogues sélectionnés pour la recherche** to see the loaded catalog
 The `GET /api/catalogs` endpoint now includes a zero-based `index` for each entry. `POST /api/search` accepts an optional `catalogIndices` array alongside the existing filters. Omitting the property searches all catalogs (backward compatible), while an empty array searches none. Nonexistent, negative and duplicated indices receive HTTP 400; selections are searched in their original catalog order, regardless of checkbox order. Search responses continue to include `catalogIndex` for the existing desktop file actions.
 
 After a manual source refresh, the UI reloads catalog metadata and retains the selection of catalogs with the same name and root. Selections are not persisted across browser restarts. A refresh performed by the automatic timer may change catalog indices until the browser fetches the new list; reload the page if the catalog set changes externally. This phase does not add or remove configured catalog sources at runtime.
+
+
+### Compact search results: clickable filename
+
+The results table intentionally omits the often very long **Chemin** column. Hover over a filename to display the complete indexed path as a native browser tooltip; keyboard users can also focus the filename control to inspect its accessible label. Clicking a filename requests **Ouvrir** directly, using the same opt-in local daemon action and catalog-backed path validation as the former Open button. There is no second confirmation dialog for this deliberate click. Native opening remains disabled unless the daemon was started with `--enable-file-actions`; unsupported executable/script types remain blocked.
+
+The **Copier le chemin** action still copies the full path as text, while **Copier le fichier** remains a separate native Windows clipboard action. Neither CSV export nor the search JSON payload loses the full path.
