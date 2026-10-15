@@ -65,4 +65,21 @@ public class WebUiTests
         Assert.Contains("activeController !== controller", WebUi.Html);
     }
 
+    [Fact]
+    public void PaginationAndCsvExportAreLocalAndSafe()
+    {
+        foreach (var id in new[] { "pagination", "page-prev", "page-next", "page-size", "page-status", "export-csv" })
+            Assert.Contains("id=" + (char)34 + id + (char)34, WebUi.Html);
+        Assert.Contains("hits.slice(start, start + pageSize)", WebUi.Html);
+        Assert.Contains("currentPage = Math.min(currentPage, totalPages - 1)", WebUi.Html);
+        Assert.Contains("previousButton.disabled = currentPage === 0", WebUi.Html);
+        Assert.Contains("sortHits(currentHits).map(hit =>", WebUi.Html);
+        Assert.Contains("function csvField(value)", WebUi.Html);
+        Assert.Contains("safe.replaceAll", WebUi.Html);
+        Assert.Contains("URL.createObjectURL(new Blob", WebUi.Html);
+        Assert.Contains("wimf-resultats.csv", WebUi.Html);
+        Assert.Contains("text/csv;charset=utf-8", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }

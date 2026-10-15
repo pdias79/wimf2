@@ -245,3 +245,12 @@ No external JavaScript or CSS dependencies are introduced, and the UI remains re
 The results table displays **modification dates** alongside file names, full paths, sizes and catalog names. A sorting selector can reorder the **already returned** results by file name (A–Z/Z–A), file size (ascending/descending) or modification date (oldest/newest). The default option keeps the catalog's original result order; tied values preserve that original ordering too.
 
 Sorting happens entirely in the browser, with **no additional server requests**. It does not sort across matching files omitted by the API result limit (maximum 1,000) and does not change the order or semantics of `POST /api/search`. Date display uses UTC to remain consistent with the server's catalog timestamps. File names and paths continue to be inserted as text, never interpreted as HTML. Overlapping searches use the latest request result only.
+
+
+### Browsing and exporting search results
+
+The embedded UI now pages the **returned** results in groups of 25, 50 or 100, with previous/next controls. Paging and the existing local sorting are independent of the server; they do not request any extra catalog records. The search API still returns at most 1,000 hits per query.
+
+Use **Exporter CSV** to save **all returned hits**, not just the currently visible page, in the selected sort order. Exported columns are catalog, original record ID, filename, full path, extension, byte size, and modification timestamp (UTC). The file uses UTF-8 with a BOM, semicolon separators, quoted fields, escaped quotes and CRLF newlines for common spreadsheet compatibility. Cells beginning with spreadsheet formula prefixes (including after whitespace) are prefixed with an apostrophe to reduce CSV formula-injection risk. The export is generated in the browser, without sending results to another service.
+
+The CSV is an export of the current limited search response, **not** a complete database dump. Binary files are not accessed or exported.
