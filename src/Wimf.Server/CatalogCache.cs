@@ -56,7 +56,8 @@ public static class CatalogCache
 
             File.Copy(sourcePath, temporary);
             // Do not publish a partial or malformed catalog.
-            var parsed = LegacyCatalogReader.ReadFile(temporary,
+            using var validationStream = File.OpenRead(temporary);
+            var parsed = LegacyCatalogReader.Read(validationStream,
                 compressed: sourcePath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase));
             File.SetLastWriteTimeUtc(temporary, source.LastWriteTimeUtc);
             File.Move(temporary, target, overwrite: true);
