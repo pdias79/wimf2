@@ -3,10 +3,11 @@ using System.Text.Json.Serialization;
 namespace Wimf.Server;
 
 public sealed record HealthResponse(string Status, int CatalogCount);
-public sealed record CatalogSummary(string Name, string RootPath, int RecordCount, int DiagnosticCount, DateTimeOffset CreatedAt);
+public sealed record CatalogSummary(int Index, string Name, string RootPath, int RecordCount, int DiagnosticCount, DateTimeOffset CreatedAt);
 public sealed record SearchRequest
 {
     public string Text { get; init; } = "";
+    public int[]? CatalogIndices { get; init; }
     public bool UseRegex { get; init; }
     public string[]? Extensions { get; init; }
     public ulong? MinSize { get; init; }

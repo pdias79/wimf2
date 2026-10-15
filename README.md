@@ -272,3 +272,19 @@ dotnet run --project src/Wimf.Server -- --catalog "C:\\path\\to\\catalog.txt.gz"
 The native action API is **disabled by default**, requires a request with the exact Wimf localhost origin and host, and accepts only catalog index + entry ID + expected path; it reconstructs the actual target from the current catalog instead of trusting a browser-provided path. It checks that a target is an existing indexed file, rooted under a local-system absolute catalog root, and rejects invalid/traversal filenames. The operation is a desktop-side effect, and the UI requires an explicit confirmation before invoking it. Remote/browser sessions cannot be assumed to access the same clipboard or Explorer instance.
 
 Security note: file associations and external programs can still have side effects. Enable these functions **only** on a trusted, interactive desktop and do not expose or proxy the daemon beyond localhost. A catalog is metadata: a file may have moved or become unavailable since indexing; stale entries return an error. No file download or arbitrary path-opening endpoint is added.
+
+
+### Selecting catalogs from the Web interface
+
+Expand **Catalogues sélectionnés pour la recherche** to see the loaded catalog name, root path, record count and diagnostic count. Individual checkboxes and **Tout sélectionner / Tout désélectionner** determine which catalogs participate in the next search. All loaded catalogs are selected by default. An explicit empty selection returns no hits.
+
+The `GET /api/catalogs` endpoint now includes a zero-based `index` for each entry. `POST /api/search` accepts an optional `catalogIndices` array alongside the existing filters. Omitting the property searches all catalogs (backward compatible), while an empty array searches none. Nonexistent, negative and duplicated indices receive HTTP 400; selections are searched in their original catalog order, regardless of checkbox order. Search responses continue to include `catalogIndex` for the existing desktop file actions.
+
+After a manual source refresh, the UI reloads catalog metadata and retains the selection of catalogs with the same name and root. Selections are not persisted across browser restarts. A refresh performed by the automatic timer may change catalog indices until the browser fetches the new list; reload the page if the catalog set changes externally. This phase does not add or remove configured catalog sources at runtime.
+
+
+### Compact search results: clickable filename
+
+The results table intentionally omits the often very long **Chemin** column. Hover over a filename to display the complete indexed path as a native browser tooltip; keyboard users can also focus the filename control to inspect its accessible label. Clicking a filename requests **Ouvrir** directly, using the same opt-in local daemon action and catalog-backed path validation as the former Open button. There is no second confirmation dialog for this deliberate click. Native opening remains disabled unless the daemon was started with `--enable-file-actions`; unsupported executable/script types remain blocked.
+
+The **Copier le chemin** action still copies the full path as text, while **Copier le fichier** remains a separate native Windows clipboard action. Neither CSV export nor the search JSON payload loses the full path.

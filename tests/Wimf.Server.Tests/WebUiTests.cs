@@ -98,4 +98,46 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void CatalogPanelListsMetadataAndSubmitsSelectedIndices()
+    {
+        foreach (var id in new[] { "catalog-panel", "catalog-list", "catalog-select-all",
+            "catalog-select-none", "catalog-selection-count" })
+            Assert.Contains("id=" + (char)34 + id + (char)34, WebUi.Html);
+        Assert.Contains("catalog.rootPath", WebUi.Html);
+        Assert.Contains("catalog.recordCount", WebUi.Html);
+        Assert.Contains("catalog.diagnosticCount", WebUi.Html);
+        Assert.Contains("catalogIndices: [...catalogSelection]", WebUi.Html);
+        Assert.Contains("renderCatalogs(await catalogsResponse.json())", WebUi.Html);
+        Assert.Contains("checkbox.checked = catalogSelection.has", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void FileNameIsClickableWithFullPathTooltipAndNoPathColumn()
+    {
+        Assert.Contains("fileName.textContent = hit.name", WebUi.Html);
+        Assert.Contains("fileName.title = hit.fullPath", WebUi.Html);
+        Assert.Contains("fileName.setAttribute(\"aria-label\"", WebUi.Html);
+        Assert.Contains("fileName.addEventListener(\"click\", () => fileAction(\"open\"", WebUi.Html);
+        Assert.Contains("actionName !== \"open\"", WebUi.Html);
+        Assert.DoesNotContain("<th>Chemin</th>", WebUi.Html);
+        Assert.DoesNotContain("makeCell(row, hit.fullPath, \"path\")", WebUi.Html);
+        Assert.Contains("navigator.clipboard.writeText(hit.fullPath)", WebUi.Html);
+        Assert.Contains("actionButton(\"Copier le fichier\"", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SearchResultsShowCompactSizesWithExactByteTooltip()
+    {
+        Assert.Contains("function formatSize(bytes)", WebUi.Html);
+        Assert.Contains("const units = [\"o\", \"Ko\", \"Mo\", \"Go\", \"To\", \"Po\", \"Eo\"]", WebUi.Html);
+        Assert.Contains("while (value >= 1024", WebUi.Html);
+        Assert.Contains("maximumFractionDigits: 1", WebUi.Html);
+        Assert.Contains("makeCell(row, formatSize(hit.size))", WebUi.Html);
+        Assert.Contains("sizeCell.title = exactByteFormatter.format(hit.size) + \" octets\"", WebUi.Html);
+        Assert.DoesNotContain("new Intl.NumberFormat(\"fr-FR\").format(hit.size) + \" o\"", WebUi.Html);
+    }
+
 }
