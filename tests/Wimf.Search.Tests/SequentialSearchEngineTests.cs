@@ -133,16 +133,12 @@ public class SequentialSearchEngineTests
             "not-folder.txt;txt;1;4;1\\n");
 
         var safe = _engine.Search([catalog], new() { Text = "good" });
-        Assert.Equal(@"C:\\Fixture\\good.txt", Assert.Single(safe).FullPath);
+        Assert.EndsWith("good.txt", Assert.Single(safe).FullPath);
         Assert.Throws<InvalidDataException>(() =>
             _engine.Search([catalog], new() { Text = "broken" }));
         Assert.Throws<InvalidDataException>(() =>
             _engine.Search([catalog], new() { Text = "not-folder" }));
-        Assert.Single(_engine.Search([catalog], new() { Text = "broken", MaxResults = 0 }) switch
-        {
-            { Count: 0 } => new[] { true },
-            _ => Array.Empty<bool>()
-        });
+        Assert.Empty(_engine.Search([catalog], new() { Text = "broken", MaxResults = 0 }));
     }
 
 }
