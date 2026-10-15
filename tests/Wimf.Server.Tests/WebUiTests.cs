@@ -113,4 +113,19 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void FileNameIsClickableWithFullPathTooltipAndNoPathColumn()
+    {
+        Assert.Contains("fileName.textContent = hit.name", WebUi.Html);
+        Assert.Contains("fileName.title = hit.fullPath", WebUi.Html);
+        Assert.Contains("fileName.setAttribute(\"aria-label\"", WebUi.Html);
+        Assert.Contains("fileName.addEventListener(\"click\", () => fileAction(\"open\"", WebUi.Html);
+        Assert.Contains("actionName !== \"open\"", WebUi.Html);
+        Assert.DoesNotContain("<th>Chemin</th>", WebUi.Html);
+        Assert.DoesNotContain("makeCell(row, hit.fullPath, \"path\")", WebUi.Html);
+        Assert.Contains("navigator.clipboard.writeText(hit.fullPath)", WebUi.Html);
+        Assert.Contains("actionButton(\"Copier le fichier\"", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
