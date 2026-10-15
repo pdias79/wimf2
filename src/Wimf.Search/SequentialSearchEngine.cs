@@ -53,11 +53,11 @@ public sealed class SequentialSearchEngine
             for (var id = 1; id <= catalog.RecordCount; id++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var entry = catalog.GetEntry(id);
-                if (entry is null || entry.IsDirectory ||
+                if (!catalog.TryGetEntryData(id, out var entry) || entry.IsDirectory ||
                     (extensions.Count != 0 && !extensions.Contains(entry.Extension.TrimStart('.'))) ||
                     entry.Size < query.MinSize || entry.Size > query.MaxSize ||
-                    entry.ModifiedAt < query.ModifiedFrom || entry.ModifiedAt > query.ModifiedTo)
+                    (query.ModifiedFrom.HasValue && entry.ModifiedAt < query.ModifiedFrom.Value) ||
+                    (query.ModifiedTo.HasValue && entry.ModifiedAt > query.ModifiedTo.Value))
                     continue;
                 var matches = true;
                 foreach (var word in words)
@@ -68,7 +68,7 @@ public sealed class SequentialSearchEngine
                     }
                 if (!matches || (regex is not null && !regex.IsMatch(entry.Name))) continue;
                 cancellationToken.ThrowIfCancellationRequested();
-                results.Add(new SearchResult(catalog, entry, catalog.GetFullPath(id)));
+                results.Add(new SearchResult(catalog, catalog.GetEntry(id)!, catalog.GetFullPath(id)));
                 if (results.Count == query.MaxResults) return results;
             }
         }
