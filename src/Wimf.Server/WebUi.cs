@@ -197,7 +197,7 @@ public static class WebUi
       fragment.appendChild(label);
     }
     catalogList.appendChild(fragment);
-    renderCatalogs(catalogs);
+    byId("catalogs").textContent = catalogs.length + " catalogue(s) chargé(s)";
     updateCatalogSelectionCount();
   }
   function updateCatalogSelectionCount() {
@@ -429,7 +429,7 @@ public static class WebUi
     fetch("/api/refresh-status").then(r => { if (!r.ok) throw new Error(); return r.json(); })
   ]).then(([health, catalogs, refreshStatus]) => {
     byId("health").textContent = "Connecté";
-    byId("catalogs").textContent = catalogs.length + " catalogue(s) chargé(s)";
+    renderCatalogs(catalogs);
     showTime(refreshStatus.lastRefresh);
     if (catalogs.length === 0) message("Aucun catalogue chargé : démarrer wimfd avec --catalog.");
   }).catch(() => {
