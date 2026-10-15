@@ -122,4 +122,27 @@ public class SequentialSearchEngineTests
         }
         Assert.Throws<OperationCanceledException>(() => _engine.Search(Catalogs(), new(), during.Token));
     }
+    [Fact]
+    public void SearchIgnoresCorruptPathsUntilResultIsSelected()
+    {
+        var catalog = Read(
+            "loop-one;folder;0;2;1\\n" +
+            "loop-two;folder;0;1;1\\n" +
+            "broken.txt;txt;1;1;1\\n" +
+            "good.txt;txt;1;0;1\\n" +
+            "not-folder.txt;txt;1;4;1\\n");
+
+        var safe = _engine.Search([catalog], new() { Text = "good" });
+        Assert.Equal(@"C:\\Fixture\\good.txt", Assert.Single(safe).FullPath);
+        Assert.Throws<InvalidDataException>(() =>
+            _engine.Search([catalog], new() { Text = "broken" }));
+        Assert.Throws<InvalidDataException>(() =>
+            _engine.Search([catalog], new() { Text = "not-folder" }));
+        Assert.Single(_engine.Search([catalog], new() { Text = "broken", MaxResults = 0 }) switch
+        {
+            { Count: 0 } => new[] { true },
+            _ => Array.Empty<bool>()
+        });
+    }
+
 }
