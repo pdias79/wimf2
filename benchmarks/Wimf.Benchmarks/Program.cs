@@ -176,7 +176,7 @@ if (catalog.RecordCount > 0)
         }
         Array.Sort(times);
         Array.Sort(allocations);
-        var depthOfPath = path.Count(ch => ch == '\\\\' || ch == '/');
+        var depthOfPath = path.Count(ch => ch == '\\' || ch == '/');
         Console.WriteLine($"  Path ID {id} (separators={depthOfPath}): median {Duration(times[iterations / 2])} ms, " +
             $"allocated {allocations[iterations / 2]:F4} MiB/call");
     }
