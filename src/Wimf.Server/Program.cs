@@ -6,6 +6,7 @@ using Wimf.Server;
 var paths = new List<string>();
 var sources = new List<string>();
 string? cacheDirectory = null;
+var refreshSeconds = 300;
 for (var i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -19,8 +20,13 @@ for (var i = 0; i < args.Length; i++)
         case "--cache-dir" when i + 1 < args.Length:
             cacheDirectory = args[++i];
             break;
+        case "--refresh-seconds" when i + 1 < args.Length &&
+            int.TryParse(args[i + 1], out var seconds) && seconds >= 0:
+            refreshSeconds = seconds;
+            i++;
+            break;
         default:
-            Console.Error.WriteLine("Usage: wimfd [--catalog local.gz]... [--source network.gz]... [--cache-dir directory]");
+            Console.Error.WriteLine("Usage: wimfd [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N]");
             return 2;
     }
 }
@@ -43,20 +49,9 @@ foreach (var path in paths)
     }
 }
 
-foreach (var source in sources)
-{
-    try
-    {
-        var (catalog, _) = CatalogCache.Load(source, cacheDirectory!, Console.WriteLine);
-        catalogs.Add(catalog);
-    }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
-                               or System.Text.DecoderFallbackException or ArgumentException)
-    {
-        // Keep serving the catalog sources that are available.
-        Console.Error.WriteLine($"Skipping unavailable source '{source}': {ex.Message}");
-    }
-}
+var store = new LiveCatalogStore(catalogs, sources, cacheDirectory);
+var initialRefresh = await store.RefreshAsync();
+Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s); {initialRefresh.FailedSources} source(s) unavailable.");
 
 var builder = WebApplication.CreateSlimBuilder(Array.Empty<string>());
 builder.WebHost.UseUrls("http://127.0.0.1:5080");
@@ -70,10 +65,10 @@ app.MapGet("/", WebUi.GetPage);
 var engine = new SequentialSearchEngine();
 
 app.MapGet("/api/health", () =>
-    Results.Json(new HealthResponse("ok", catalogs.Count), WimfJsonContext.Default.HealthResponse));
+    Results.Json(new HealthResponse("ok", store.Snapshot.Length), WimfJsonContext.Default.HealthResponse));
 
 app.MapGet("/api/catalogs", () =>
-    Results.Json(catalogs.Select(c =>
+    Results.Json(store.Snapshot.Select(c =>
         new CatalogSummary(c.Header.Name, c.Header.RootPath, c.RecordCount,
             c.Diagnostics.Count, c.Header.CreatedAt)).ToArray(),
         WimfJsonContext.Default.CatalogSummaryArray));
@@ -100,7 +95,7 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
             ModifiedTo = request.ModifiedTo,
             MaxResults = request.MaxResults
         };
-        var results = engine.Search(catalogs, query, cancellationToken);
+        var results = engine.Search(store.Snapshot, query, cancellationToken);
         var hits = results.Select(r => new SearchHit(
             r.Catalog.Header.Name, r.Entry.Id, r.Entry.Name, r.FullPath,
             r.Entry.Extension, r.Entry.Size, r.Entry.ModifiedAt)).ToArray();
@@ -124,6 +119,35 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
     }
 });
 
-Console.WriteLine($"Wimf daemon loaded {catalogs.Count} catalog(s). Listening on http://127.0.0.1:5080");
+app.MapGet("/api/refresh-status", () =>
+    Results.Json(new RefreshStatus(store.Snapshot.Length, store.SourceCount, store.LastRefresh),
+        WimfJsonContext.Default.RefreshStatus));
+
+app.MapPost("/api/refresh", async (CancellationToken cancellationToken) =>
+{
+    var summary = await store.RefreshAsync(cancellationToken);
+    return Results.Json(summary, WimfJsonContext.Default.RefreshSummary);
+});
+
+if (sources.Count > 0 && refreshSeconds > 0)
+{
+    var shutdown = app.Lifetime.ApplicationStopping;
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(refreshSeconds));
+            while (await timer.WaitForNextTickAsync(shutdown))
+            {
+                try { await store.RefreshAsync(shutdown); }
+                catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { break; }
+                catch (Exception ex) { Console.Error.WriteLine($"Catalog refresh failed: {ex.Message}"); }
+            }
+        }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+    }, shutdown);
+}
+
+Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");
 await app.RunAsync();
 return 0;

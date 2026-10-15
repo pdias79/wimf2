@@ -69,7 +69,7 @@ public static class WebUi
     <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
   <section class="panel" aria-label="Résultats">
-    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><span id="catalogs" class="status"></span></div>
+    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span></div></div>
     <div class="table-wrap">
       <table id="results-table" hidden>
         <thead><tr><th>Fichier</th><th>Chemin</th><th>Taille</th><th>Catalogue</th><th>Action</th></tr></thead>
@@ -90,6 +90,22 @@ public static class WebUi
   const table = byId("results-table");
   const empty = byId("empty");
   let activeController;
+  const refreshButton = byId("refresh");
+  const refreshTime = byId("refresh-time");
+  const showTime = value => { refreshTime.textContent = value ? " · Dernière actualisation : " + new Date(value).toLocaleString("fr-FR") : ""; };
+  refreshButton.addEventListener("click", async () => {
+    refreshButton.disabled = true;
+    message("Actualisation des catalogues en cours…");
+    try {
+      const response = await fetch("/api/refresh", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Erreur d’actualisation.");
+      byId("catalogs").textContent = data.catalogCount + " catalogue(s) chargé(s)";
+      showTime(data.completedAt);
+      message(data.failedSources ? data.failedSources + " source(s) indisponible(s), cache conservé." : "Catalogues actualisés.", Boolean(data.failedSources));
+    } catch (error) { message(error.message || "Erreur réseau.", true); }
+    finally { refreshButton.disabled = false; }
+  });
 
   function message(text, isError = false) {
     status.textContent = text;
@@ -177,10 +193,12 @@ public static class WebUi
 
   Promise.all([
     fetch("/api/health").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
-    fetch("/api/catalogs").then(r => { if (!r.ok) throw new Error(); return r.json(); })
-  ]).then(([health, catalogs]) => {
+    fetch("/api/catalogs").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+    fetch("/api/refresh-status").then(r => { if (!r.ok) throw new Error(); return r.json(); })
+  ]).then(([health, catalogs, refreshStatus]) => {
     byId("health").textContent = "Connecté";
     byId("catalogs").textContent = catalogs.length + " catalogue(s) chargé(s)";
+    showTime(refreshStatus.lastRefresh);
     if (catalogs.length === 0) message("Aucun catalogue chargé : démarrer wimfd avec --catalog.");
   }).catch(() => {
     byId("health").textContent = "Déconnecté";

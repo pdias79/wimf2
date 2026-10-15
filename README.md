@@ -103,3 +103,16 @@ Repeat `--source` for multiple catalogs. `--cache-dir` is required when using `-
 At **daemon startup**, the application compares each source file's length and last-modified UTC timestamp with the cached copy. If unchanged, it reuses the cache. Otherwise it copies into a temporary file, parses and validates the catalog, then atomically replaces the cached file. If the source is unavailable or the new copy is invalid, it falls back to a previously valid cached file. Sources with neither a readable original nor valid cache are logged and skipped without stopping other sources. Temporary files are removed after errors.
 
 Important limits: there is **no background polling**, file locking, remote-change notification, checksum comparison, cache eviction, or automatic index rebuild yet. Length + timestamp may miss a change if a producer overwrites a file without changing those values. Source files should be published atomically by the producer. The cache directory may contain private catalog filenames and paths and should be protected with OS filesystem permissions. A live daemon does not reload updated catalogs until restart.
+
+
+### Live catalog refresh
+
+Network sources supplied with `--source` can be refreshed while the daemon runs. The default interval is **300 seconds**. Use `--refresh-seconds 60` for one-minute refresh or `--refresh-seconds 0` to disable scheduled refresh. Each refresh is serialized, validates updated catalogs through the existing cache, then swaps one immutable catalog-array snapshot; searches that have already started continue using their previous snapshot.
+
+The browser includes an **Actualiser les catalogues** button and a last-refresh indicator. The same operation is available via `POST /api/refresh`, with status from `GET /api/refresh-status`. Both endpoints are deliberately available only on localhost because the daemon has no authentication.
+
+```powershell
+dotnet run --project src/Wimf.Server -- --source "\\\\server\\share\\catalog.gz" --cache-dir "C:\\Wimf2\\cache" --refresh-seconds 60
+```
+
+Failed sources retain their last usable in-memory version. A source can reappear on a later refresh. Direct `--catalog` files remain static; only `--source` files are polled. Polling can still perform expensive file-system operations and parser work and does not yet support progress reporting or configuration through the browser.
