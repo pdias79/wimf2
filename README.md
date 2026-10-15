@@ -238,3 +238,10 @@ The browser refuses reversed size/date ranges, negative or fractional size value
 
 No external JavaScript or CSS dependencies are introduced, and the UI remains restricted to the localhost daemon.
 
+
+
+### Sorting and reading search results in the Web UI
+
+The results table displays **modification dates** alongside file names, full paths, sizes and catalog names. A sorting selector can reorder the **already returned** results by file name (A–Z/Z–A), file size (ascending/descending) or modification date (oldest/newest). The default option keeps the catalog's original result order; tied values preserve that original ordering too.
+
+Sorting happens entirely in the browser, with **no additional server requests**. It does not sort across matching files omitted by the API result limit (maximum 1,000) and does not change the order or semantics of `POST /api/search`. Date display uses UTC to remain consistent with the server's catalog timestamps. File names and paths continue to be inserted as text, never interpreted as HTML. Overlapping searches use the latest request result only.
