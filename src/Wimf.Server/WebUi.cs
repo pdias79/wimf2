@@ -44,6 +44,11 @@ public static class WebUi
     td.path { overflow-wrap: anywhere; max-width: 520px; }
     td.name { font-weight: 600; }
     th { color: GrayText; font-size: .82rem; }
+    tbody tr:hover { background: color-mix(in srgb, CanvasText 6%, Canvas); }
+    tbody tr:nth-child(even) { background: color-mix(in srgb, CanvasText 3%, Canvas); }
+    .result-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0 12px; }
+    .result-tools label { font-size: .9rem; color: GrayText; }
+    .result-tools select { padding: 6px 10px; }
     .empty { padding: 28px 0; color: GrayText; text-align: center; }
     .copy { font-size: .8rem; padding: 6px 9px; white-space: nowrap; background: #424f62; }
     .muted { color: GrayText; font-weight: 400; }
@@ -79,9 +84,22 @@ public static class WebUi
   </section>
   <section class="panel" aria-label="Résultats">
     <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span></div></div>
+    <div class="result-tools">
+      <label for="result-sort">Trier les résultats affichés :</label>
+      <select id="result-sort" aria-label="Tri des résultats">
+        <option value="original">Ordre du catalogue</option>
+        <option value="name-asc">Nom A → Z</option>
+        <option value="name-desc">Nom Z → A</option>
+        <option value="size-asc">Taille croissante</option>
+        <option value="size-desc">Taille décroissante</option>
+        <option value="date-desc">Modification récente</option>
+        <option value="date-asc">Modification ancienne</option>
+      </select>
+      <span class="status">Tri local sur les résultats reçus (maximum 1 000).</span>
+    </div>
     <div class="table-wrap">
       <table id="results-table" hidden>
-        <thead><tr><th>Fichier</th><th>Chemin</th><th>Taille</th><th>Catalogue</th><th>Action</th></tr></thead>
+        <thead><tr><th>Fichier</th><th>Chemin</th><th>Taille</th><th>Modifié le</th><th>Catalogue</th><th>Action</th></tr></thead>
         <tbody id="results"></tbody>
       </table>
     </div>
@@ -99,6 +117,10 @@ public static class WebUi
   const table = byId("results-table");
   const empty = byId("empty");
   let activeController;
+  let currentHits = [];
+  const sortControl = byId("result-sort");
+  const nameOrder = new Intl.Collator("fr-FR", { sensitivity: "base", numeric: true });
+  const dateFormatter = new Intl.DateTimeFormat("fr-FR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" });
   const refreshButton = byId("refresh");
   const refreshTime = byId("refresh-time");
   const showTime = value => { refreshTime.textContent = value ? " · Dernière actualisation : " + new Date(value).toLocaleString("fr-FR") : ""; };
@@ -133,9 +155,29 @@ public static class WebUi
     byId("count").textContent = "";
     empty.hidden = false;
   }
-  function displayResults(data) {
+  function sortHits(hits) {
+    const mode = sortControl.value;
+    if (mode === "original") return hits;
+    const sorted = hits.map((hit, index) => ({ hit, index }));
+    sorted.sort((a, b) => {
+      const first = a.hit;
+      const second = b.hit;
+      let order = 0;
+      switch (mode) {
+        case "name-asc": order = nameOrder.compare(first.name, second.name); break;
+        case "name-desc": order = nameOrder.compare(second.name, first.name); break;
+        case "size-asc": order = first.size === second.size ? 0 : first.size < second.size ? -1 : 1; break;
+        case "size-desc": order = first.size === second.size ? 0 : first.size > second.size ? -1 : 1; break;
+        case "date-asc": order = first.modifiedAt < second.modifiedAt ? -1 : first.modifiedAt > second.modifiedAt ? 1 : 0; break;
+        case "date-desc": order = first.modifiedAt > second.modifiedAt ? -1 : first.modifiedAt < second.modifiedAt ? 1 : 0; break;
+      }
+      return order || a.index - b.index;
+    });
+    return sorted.map(item => item.hit);
+  }
+  function displayResults() {
     clearResults();
-    const hits = Array.isArray(data.results) ? data.results : [];
+    const hits = sortHits(currentHits);
     byId("count").textContent = "(" + hits.length + ")";
     if (hits.length === 0) { empty.textContent = "Aucun résultat."; return; }
     const fragment = document.createDocumentFragment();
@@ -144,6 +186,7 @@ public static class WebUi
       makeCell(row, hit.name, "name");
       makeCell(row, hit.fullPath, "path");
       makeCell(row, new Intl.NumberFormat("fr-FR").format(hit.size) + " o");
+      makeCell(row, dateFormatter.format(new Date(hit.modifiedAt)));
       makeCell(row, hit.catalog);
       const action = document.createElement("td");
       const copy = document.createElement("button");
@@ -164,10 +207,13 @@ public static class WebUi
     table.hidden = false;
   }
 
+  sortControl.addEventListener("change", displayResults);
+
   form.addEventListener("submit", async event => {
     event.preventDefault();
     if (activeController) activeController.abort();
-    activeController = new AbortController();
+    const controller = new AbortController();
+    activeController = controller;
     submit.disabled = true;
     message("Recherche en cours…");
     const extensions = byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean);
@@ -202,20 +248,23 @@ public static class WebUi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: activeController.signal
+        signal: controller.signal
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Erreur de recherche.");
-      displayResults(data);
+      if (activeController !== controller) return;
+      currentHits = Array.isArray(data.results) ? data.results : [];
+      displayResults();
       message(data.count + " résultat(s) affiché(s).");
     } catch (error) {
-      if (error.name !== "AbortError") {
+      if (activeController === controller && error.name !== "AbortError") {
+        currentHits = [];
         clearResults();
         empty.textContent = "La recherche a échoué.";
         message(error.message || "Erreur réseau.", true);
       }
     } finally {
-      submit.disabled = false;
+      if (activeController === controller) submit.disabled = false;
     }
   });
 

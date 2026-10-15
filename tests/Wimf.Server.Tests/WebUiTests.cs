@@ -45,4 +45,24 @@ public class WebUiTests
         Assert.Contains("modifiedFromText > modifiedToText", WebUi.Html);
     }
 
+    [Fact]
+    public void ResultTableOffersLocalStableSortingAndDates()
+    {
+        Assert.Contains("id=" + (char)34 + "result-sort" + (char)34, WebUi.Html);
+        foreach (var mode in new[]
+        {
+            "original", "name-asc", "name-desc", "size-asc", "size-desc",
+            "date-asc", "date-desc"
+        })
+            Assert.Contains("value=" + (char)34 + mode + (char)34, WebUi.Html);
+        Assert.Contains("Modifié le", WebUi.Html);
+        Assert.Contains("new Intl.DateTimeFormat", WebUi.Html);
+        Assert.Contains("timeZone: " + (char)34 + "UTC" + (char)34, WebUi.Html);
+        Assert.Contains("nameOrder.compare", WebUi.Html);
+        Assert.Contains("order || a.index - b.index", WebUi.Html);
+        Assert.Contains("sortControl.addEventListener(" + (char)34 + "change" + (char)34, WebUi.Html);
+        Assert.Contains("const hits = sortHits(currentHits)", WebUi.Html);
+        Assert.Contains("activeController !== controller", WebUi.Html);
+    }
+
 }
