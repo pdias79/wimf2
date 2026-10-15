@@ -248,6 +248,19 @@ public static class WebUi
     row.appendChild(cell);
     return cell;
   }
+  const byteFormatter = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
+  const exactByteFormatter = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+  function formatSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes < 0) return "—";
+    const units = ["o", "Ko", "Mo", "Go", "To", "Po", "Eo"];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit++;
+    }
+    return byteFormatter.format(value) + " " + units[unit];
+  }
   function clearResults() {
     tbody.replaceChildren();
     table.hidden = true;
@@ -299,7 +312,8 @@ public static class WebUi
       fileName.addEventListener("click", () => fileAction("open", "Ouvrir ce fichier"));
       nameCell.appendChild(fileName);
       row.appendChild(nameCell);
-      makeCell(row, new Intl.NumberFormat("fr-FR").format(hit.size) + " o");
+      const sizeCell = makeCell(row, formatSize(hit.size));
+      sizeCell.title = exactByteFormatter.format(hit.size) + " octets";
       makeCell(row, dateFormatter.format(new Date(hit.modifiedAt)));
       makeCell(row, hit.catalog);
       const action = document.createElement("td");
