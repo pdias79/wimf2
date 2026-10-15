@@ -12,7 +12,25 @@ Wimf 2 is a cross-platform file catalog indexing and search daemon under develop
 
 ## Current milestone
 
-This first change establishes a .NET 10 solution and implements **legacy catalog reading and path reconstruction**. It does **not** yet implement the daemon, synchronization, indexing, or HTTP search.
+The .NET 10 solution implements **legacy catalog reading, path reconstruction and sequential in-memory search**. The daemon, synchronization, persistent indexing and HTTP API remain future work.
+
+### Search API
+
+`Wimf.Search` depends only on `Wimf.Catalog` and the standard library. It provides a sequential reference for future benchmarks, without UI or hosting dependencies:
+
+```csharp
+var results = new SequentialSearchEngine().Search(catalogs, new SearchQuery
+{
+    Text = "annual report",
+    Extensions = [".pdf"],
+    MinSize = 1024,
+    MaxResults = 100
+}, cancellationToken);
+```
+
+Import `Wimf.Search` to use these types. All whitespace-separated words must occur in the file name, in any order, using ordinal case-insensitive comparison. Empty text matches all files. Directories are excluded. Extension filters accept a leading dot and ignore case; size and modification-date bounds are inclusive. Filters combine with AND. Results retain their source catalog and original record ID, in input catalog and record order; the limit applies across all catalogs (zero returns no results).
+
+Set `UseRegex = true` to treat `Text` as a case-insensitive, culture-invariant regular expression. `RegexTimeout` defaults to 100 milliseconds per match and must be finite and positive. Invalid patterns and regex timeouts propagate to the caller. Cancellation is checked at each record; an active regex match can run until its timeout. Paths are reconstructed only for retained results, preserving the catalog path convention. Invalid retained paths propagate the catalog reader's exception. Searches return a materialized list; failures and cancellation do not return partial results. Catalogs and query collections must remain unchanged during a search.
 
 ### Build and test
 

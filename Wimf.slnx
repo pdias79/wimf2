@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Wimf.Catalog/Wimf.Catalog.csproj" />
+    <Project Path="src/Wimf.Search/Wimf.Search.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Wimf.Catalog.Tests/Wimf.Catalog.Tests.csproj" />
+    <Project Path="tests/Wimf.Search.Tests/Wimf.Search.Tests.csproj" />
   </Folder>
 </Solution>
