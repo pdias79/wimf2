@@ -218,7 +218,8 @@ public static class WebUi
       makeCell(row, dateFormatter.format(new Date(hit.modifiedAt)));
       makeCell(row, hit.catalog);
       const action = document.createElement("td");
-      action.className = "file-actions";
+      const actions = document.createElement("div");
+      actions.className = "file-actions";
       function actionButton(label, onClick) {
         const button = document.createElement("button");
         button.type = "button";
@@ -226,7 +227,7 @@ public static class WebUi
         button.textContent = label;
         button.setAttribute("aria-label", label + " : " + hit.name);
         button.addEventListener("click", onClick);
-        action.appendChild(button);
+        actions.appendChild(button);
       }
       actionButton("Copier le chemin", async () => {
         try { await navigator.clipboard.writeText(hit.fullPath); message("Chemin copié en texte."); }
@@ -249,6 +250,7 @@ public static class WebUi
       actionButton("Ouvrir", () => fileAction("open", "Ouvrir ce fichier"));
       actionButton("Dossier", () => fileAction("reveal", "Afficher le dossier"));
       actionButton("Copier le fichier", () => fileAction("copy", "Copier ce fichier"));
+      action.appendChild(actions);
       row.appendChild(action);
       fragment.appendChild(row);
     }
