@@ -62,28 +62,57 @@ public sealed class Catalog
             ? new CatalogEntry(id, data.Name, data.Extension, data.Size, data.ParentId, data.ModifiedAt)
             : null;
 
+    /// <summary>
+    /// Builds the final path in one allocation. A bounded parent traversal detects
+    /// cycles without allocating a HashSet, then fills the output string backwards.
+    /// </summary>
     public string GetFullPath(int id)
     {
-        if (!TryGetEntryData(id, out var entry))
+        if (!TryGetEntryData(id, out _))
             throw new ArgumentOutOfRangeException(nameof(id));
-        var segments = new List<string> { entry.Name };
-        var visited = new HashSet<int> { id };
-        var parent = entry.ParentId;
-        while (parent != 0)
+
+        var root = Header.RootPath;
+        // Catalog paths can originate on Windows even when Wimf runs on Linux.
+        var separator = root.Contains('\\') ? '\\' : '/';
+        var rootLength = root.AsSpan().TrimEnd('\\', '/').Length;
+        var current = id;
+        var segments = 0;
+        var namesLength = 0;
+        while (current != 0)
         {
-            if (!visited.Add(parent))
-                throw new InvalidDataException($"Cycle in catalog at record {parent}.");
-            if (!TryGetEntryData(parent, out var folder))
-                throw new InvalidDataException($"Record {id} references missing parent {parent}.");
-            if (!folder.IsDirectory)
-                throw new InvalidDataException($"Record {parent} is not a directory.");
-            segments.Add(folder.Name);
-            parent = folder.ParentId;
+            // An acyclic chain contains at most RecordCount distinct records.
+            // A longer chain must contain a cycle, even if IDs jump backwards.
+            if (++segments > RecordCount)
+                throw new InvalidDataException($"Cycle in catalog at record {current}.");
+            if (!TryGetEntryData(current, out var entry))
+                throw new InvalidDataException($"Record {id} references missing parent {current}.");
+            if (current != id && !entry.IsDirectory)
+                throw new InvalidDataException($"Record {current} is not a directory.");
+            namesLength = checked(namesLength + entry.Name.Length);
+            current = entry.ParentId;
         }
-        segments.Reverse();
-        // Catalog paths may come from Windows while running on Linux.
-        var separator = Header.RootPath.Contains('\\') ? '\\' : '/';
-        return Header.RootPath.TrimEnd('\\', '/') + separator + string.Join(separator, segments);
+
+        // Exactly one separator precedes each segment, including the file name.
+        var totalLength = checked(rootLength + namesLength + segments);
+        return string.Create(totalLength,
+            (Catalog: this, Id: id, Root: root, RootLength: rootLength, Separator: separator),
+            static (destination, state) =>
+            {
+                state.Root.AsSpan(0, state.RootLength).CopyTo(destination);
+                destination[state.RootLength] = state.Separator;
+                var end = destination.Length;
+                var current = state.Id;
+                while (current != 0)
+                {
+                    // Already validated by the first traversal; immutable slots.
+                    state.Catalog.TryGetEntryData(current, out var entry);
+                    end -= entry.Name.Length;
+                    entry.Name.AsSpan().CopyTo(destination[end..]);
+                    current = entry.ParentId;
+                    if (current != 0)
+                        destination[--end] = state.Separator;
+                }
+            });
     }
 
     public IEnumerable<CatalogEntry> EnumerateEntries()
