@@ -215,3 +215,16 @@ dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --
 ```
 
 Use a previous commit on `main` for an apples-to-apples before/after path comparison; existing times reported in milliseconds from single calls are too coarse for reliable microsecond comparisons.
+
+
+### Refresh and search robustness regression tests
+
+The server tests include an automated concurrency scenario in which several searches and refresh calls overlap against a locally staged catalog replacement. Every captured search snapshot must remain internally consistent: no mixture of entry counts, catalog names or search paths, and previously captured snapshots must still work after publication.
+
+A separate two-source scenario verifies that a valid update can be published while a corrupt source keeps its last validated in-memory catalog. It checks the failed-source count, preservation of the on-disk cache, removal of temporary files, and recovery on the next valid source update. Cold-start corruption must not publish an unvalidated cache. Search tests verify that malformed/cyclic parent chains are rejected when selected, without breaking unrelated searches.
+
+These tests use temporary files and deterministic assertions rather than fixed timing thresholds; they do not require UNC shares or external services. Run them with:
+
+```powershell
+dotnet test Wimf.slnx -c Release
+```
