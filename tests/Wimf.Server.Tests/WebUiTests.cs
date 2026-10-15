@@ -82,4 +82,20 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ResultActionsDistinguishPathTextFromFileClipboard()
+    {
+        Assert.Contains("Copier le chemin", WebUi.Html);
+        Assert.Contains("Copier le fichier", WebUi.Html);
+        Assert.Contains("Afficher le dossier", WebUi.Html);
+        Assert.Contains("Ouvrir", WebUi.Html);
+        Assert.Contains("navigator.clipboard.writeText(hit.fullPath)", WebUi.Html);
+        Assert.Contains("fileAction(\"copy\"", WebUi.Html);
+        Assert.Contains("fileAction(\"open\"", WebUi.Html);
+        Assert.Contains("fileAction(\"reveal\"", WebUi.Html);
+        Assert.Contains("/api/file-action", WebUi.Html);
+        Assert.Contains("catalogIndex: hit.catalogIndex", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
