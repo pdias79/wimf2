@@ -98,4 +98,19 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void CatalogPanelListsMetadataAndSubmitsSelectedIndices()
+    {
+        foreach (var id in new[] { "catalog-panel", "catalog-list", "catalog-select-all",
+            "catalog-select-none", "catalog-selection-count" })
+            Assert.Contains("id=" + (char)34 + id + (char)34, WebUi.Html);
+        Assert.Contains("catalog.rootPath", WebUi.Html);
+        Assert.Contains("catalog.recordCount", WebUi.Html);
+        Assert.Contains("catalog.diagnosticCount", WebUi.Html);
+        Assert.Contains("catalogIndices: [...catalogSelection]", WebUi.Html);
+        Assert.Contains("renderCatalogs(await catalogsResponse.json())", WebUi.Html);
+        Assert.Contains("checkbox.checked = catalogSelection.has", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
