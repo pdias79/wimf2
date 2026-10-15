@@ -74,7 +74,7 @@ public sealed class Catalog
         var root = Header.RootPath;
         // Catalog paths can originate on Windows even when Wimf runs on Linux.
         var separator = root.Contains('\\') ? '\\' : '/';
-        var rootLength = root.AsSpan().TrimEnd('\\', '/').Length;
+        var rootLength = root.AsSpan().TrimEnd("\\/").Length;
         var current = id;
         var segments = 0;
         var namesLength = 0;
