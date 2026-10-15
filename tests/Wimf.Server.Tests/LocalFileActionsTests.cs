@@ -9,8 +9,8 @@ public sealed class LocalFileActionsTests
 {
     private static Wimf.Catalog.Catalog Catalog(string root, string rows)
     {
-        var content = $"[WIMF Catalog]\\nTest\\n{root}\\n0\\ntxt\\n{rows}";
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content.Replace("\\n", "\n")));
+        var content = $"[WIMF Catalog]\nTest\n{root}\n0\ntxt\n{rows}";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
         return LegacyCatalogReader.Read(stream, compressed: false);
     }
 
