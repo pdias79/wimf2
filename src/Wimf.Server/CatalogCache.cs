@@ -56,9 +56,10 @@ public static class CatalogCache
 
             File.Copy(sourcePath, temporary);
             // Do not publish a partial or malformed catalog.
-            using var validationStream = File.OpenRead(temporary);
-            var parsed = LegacyCatalogReader.Read(validationStream,
-                compressed: sourcePath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase));
+            FileCatalog parsed;
+            using (var validationStream = File.OpenRead(temporary))
+                parsed = LegacyCatalogReader.Read(validationStream,
+                    compressed: sourcePath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase));
             File.SetLastWriteTimeUtc(temporary, source.LastWriteTimeUtc);
             File.Move(temporary, target, overwrite: true);
             report?.Invoke($"Updated cached catalog from '{sourcePath}'.");
