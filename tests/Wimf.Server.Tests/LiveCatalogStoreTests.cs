@@ -74,4 +74,54 @@ public class LiveCatalogStoreTests
         }
         finally { Directory.Delete(root, true); }
     }
+    [Fact]
+    public async Task UnchangedSourceReusesCatalogAndSnapshotWithoutParsingAgain()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-noop-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "source.txt");
+            var cache = Path.Combine(root, "cache");
+            File.WriteAllText(source, Fixture("Stable"), Encoding.UTF8);
+            var store = new LiveCatalogStore([], [source], cache);
+            await store.RefreshAsync();
+            var snapshot = store.Snapshot;
+            var catalog = snapshot[0];
+            var cachePath = CatalogCache.CachePath(source, cache);
+            var timestamp = File.GetLastWriteTimeUtc(cachePath);
+            for (var i = 0; i < 3; i++)
+            {
+                var result = await store.RefreshAsync();
+                Assert.Equal(0, result.FailedSources);
+                Assert.Same(snapshot, store.Snapshot);
+                Assert.Same(catalog, store.Snapshot[0]);
+                Assert.Equal(timestamp, File.GetLastWriteTimeUtc(cachePath));
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task MissingSourceKeepsInMemoryCatalogEvenIfCacheRemoved()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-offline-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "source.txt");
+            var cache = Path.Combine(root, "cache");
+            File.WriteAllText(source, Fixture("Stable"), Encoding.UTF8);
+            var store = new LiveCatalogStore([], [source], cache);
+            await store.RefreshAsync();
+            var snapshot = store.Snapshot;
+            File.Delete(source);
+            File.Delete(CatalogCache.CachePath(source, cache));
+            var result = await store.RefreshAsync();
+            Assert.Equal(1, result.FailedSources);
+            Assert.Same(snapshot, store.Snapshot);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }
