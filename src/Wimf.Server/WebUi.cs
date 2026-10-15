@@ -49,6 +49,9 @@ public static class WebUi
     .result-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0 12px; }
     .result-tools label { font-size: .9rem; color: GrayText; }
     .result-tools select { padding: 6px 10px; }
+    .pager { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .pager button { padding: 7px 12px; }
+    .pager select { padding: 7px 10px; }
     .empty { padding: 28px 0; color: GrayText; text-align: center; }
     .copy { font-size: .8rem; padding: 6px 9px; white-space: nowrap; background: #424f62; }
     .muted { color: GrayText; font-weight: 400; }
@@ -95,13 +98,25 @@ public static class WebUi
         <option value="date-desc">Modification récente</option>
         <option value="date-asc">Modification ancienne</option>
       </select>
-      <span class="status">Tri local sur les résultats reçus (maximum 1 000).</span>
+      <label for="page-size">Par page :</label>
+      <select id="page-size" aria-label="Résultats par page">
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+      </select>
+      <button id="export-csv" type="button" class="copy" disabled>Exporter CSV</button>
+      <span class="status">Tri et export des résultats reçus uniquement (maximum 1 000).</span>
     </div>
     <div class="table-wrap">
       <table id="results-table" hidden>
         <thead><tr><th>Fichier</th><th>Chemin</th><th>Taille</th><th>Modifié le</th><th>Catalogue</th><th>Action</th></tr></thead>
         <tbody id="results"></tbody>
       </table>
+    </div>
+    <div id="pagination" class="pager" hidden aria-label="Pagination des résultats">
+      <button id="page-prev" class="copy" type="button">Précédent</button>
+      <span id="page-status" class="status" role="status"></span>
+      <button id="page-next" class="copy" type="button">Suivant</button>
     </div>
     <p id="empty" class="empty">Lancez une recherche pour afficher les résultats.</p>
   </section>
@@ -118,6 +133,12 @@ public static class WebUi
   const empty = byId("empty");
   let activeController;
   let currentHits = [];
+  let currentPage = 0;
+  const pageSizeControl = byId("page-size");
+  const pagination = byId("pagination");
+  const previousButton = byId("page-prev");
+  const nextButton = byId("page-next");
+  const csvButton = byId("export-csv");
   const sortControl = byId("result-sort");
   const nameOrder = new Intl.Collator("fr-FR", { sensitivity: "base", numeric: true });
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" });
@@ -152,6 +173,8 @@ public static class WebUi
   function clearResults() {
     tbody.replaceChildren();
     table.hidden = true;
+    pagination.hidden = true;
+    csvButton.disabled = currentHits.length === 0;
     byId("count").textContent = "";
     empty.hidden = false;
   }
@@ -180,8 +203,12 @@ public static class WebUi
     const hits = sortHits(currentHits);
     byId("count").textContent = "(" + hits.length + ")";
     if (hits.length === 0) { empty.textContent = "Aucun résultat."; return; }
+    const pageSize = Number(pageSizeControl.value);
+    const totalPages = Math.ceil(hits.length / pageSize);
+    currentPage = Math.min(currentPage, totalPages - 1);
+    const start = currentPage * pageSize;
     const fragment = document.createDocumentFragment();
-    for (const hit of hits) {
+    for (const hit of hits.slice(start, start + pageSize)) {
       const row = document.createElement("tr");
       makeCell(row, hit.name, "name");
       makeCell(row, hit.fullPath, "path");
@@ -205,9 +232,38 @@ public static class WebUi
     tbody.appendChild(fragment);
     empty.hidden = true;
     table.hidden = false;
+    pagination.hidden = totalPages <= 1;
+    previousButton.disabled = currentPage === 0;
+    nextButton.disabled = currentPage >= totalPages - 1;
+    byId("page-status").textContent = "Page " + (currentPage + 1) + " / " + totalPages + " · " + (start + 1) + "–" + Math.min(start + pageSize, hits.length) + " sur " + hits.length;
+    csvButton.disabled = false;
   }
 
-  sortControl.addEventListener("change", displayResults);
+  sortControl.addEventListener("change", () => { currentPage = 0; displayResults(); });
+  pageSizeControl.addEventListener("change", () => { currentPage = 0; displayResults(); });
+  previousButton.addEventListener("click", () => { if (currentPage > 0) { currentPage--; displayResults(); } });
+  nextButton.addEventListener("click", () => { if ((currentPage + 1) * Number(pageSizeControl.value) < currentHits.length) { currentPage++; displayResults(); } });
+
+  // Quote every CSV field, double embedded quotes and guard against spreadsheet formula injection.
+  function csvField(value) {
+    const raw = String(value ?? "");
+    const safe = /^[\\s]*[=+@\\-]/.test(raw) ? "\'" + raw : raw;
+    return '"' + safe.replaceAll('"', '""') + '"';
+  }
+  csvButton.addEventListener("click", () => {
+    if (currentHits.length === 0) return;
+    const headers = ["Catalogue", "ID", "Nom", "Chemin", "Extension", "Taille (octets)", "Modifié (UTC)"];
+    const rows = sortHits(currentHits).map(hit => [hit.catalog, hit.id, hit.name, hit.fullPath,
+      hit.extension, hit.size, hit.modifiedAt]);
+    const csv = "\\uFEFF" + [headers, ...rows].map(row => row.map(csvField).join(";")).join("\\r\\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "wimf-resultats.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    message(rows.length + " résultat(s) exporté(s) en CSV.");
+  });
 
   form.addEventListener("submit", async event => {
     event.preventDefault();
@@ -254,6 +310,7 @@ public static class WebUi
       if (!response.ok) throw new Error(data.error || "Erreur de recherche.");
       if (activeController !== controller) return;
       currentHits = Array.isArray(data.results) ? data.results : [];
+      currentPage = 0;
       displayResults();
       message(data.count + " résultat(s) affiché(s).");
     } catch (error) {
