@@ -24,4 +24,4 @@ jobs:
       - name: Test
         run: dotnet test Wimf.slnx --configuration Release --no-build
       - name: Benchmark smoke test
-        run: dotnet run --project benchmarks/Wimf.Benchmarks --configuration Release --no-build -- --count 1000 --iterations 1
+        run: dotnet run --project benchmarks/Wimf.Benchmarks --configuration Release --no-build -- --count 1000 --iterations 1 --profile-refresh
