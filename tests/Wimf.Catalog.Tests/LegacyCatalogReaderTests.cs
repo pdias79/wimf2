@@ -76,7 +76,7 @@ public class LegacyCatalogReaderTests
         Assert.Equal(10UL, data.Size);
         Assert.Equal(3, catalog.GetEntry(3)!.Id);
         Assert.Equal(data.ModifiedAt, catalog.GetEntry(3)!.ModifiedAt);
-        Assert.Equal(@"C:\\Data\\Folder\\report.pdf", catalog.GetFullPath(3));
+        Assert.Equal(@"C:\Data\Folder\report.pdf", catalog.GetFullPath(3));
         Assert.Equal(new[] { 1, 3, 4 }, catalog.EnumerateEntries().Select(x => x.Id));
     }
 
