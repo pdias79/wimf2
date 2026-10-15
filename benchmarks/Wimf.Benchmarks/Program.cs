@@ -9,10 +9,18 @@ var iterations = 5;
 var maxResults = 100;
 string? existingCatalog = null;
 var profileRefresh = false;
+var folders = 0;
+var depth = 8;
 for (var i = 0; i < args.Length; i++)
 {
     if (args[i] == "--profile-refresh")
         profileRefresh = true;
+    else if (args[i] == "--folders" && i + 1 < args.Length &&
+             int.TryParse(args[++i], out var parsedFolders) && parsedFolders >= 0)
+        folders = parsedFolders;
+    else if (args[i] == "--depth" && i + 1 < args.Length &&
+             int.TryParse(args[++i], out var parsedDepth) && parsedDepth is >= 1 and <= 64)
+        depth = parsedDepth;
     else if (args[i] == "--count" && i + 1 < args.Length &&
         int.TryParse(args[++i], out var parsedCount) && parsedCount is >= 1 and <= 20_000_000)
         count = parsedCount;
@@ -26,9 +34,16 @@ for (var i = 0; i < args.Length; i++)
         existingCatalog = args[++i];
     else
     {
-        Console.Error.WriteLine("Usage: [--count N | --catalog path] [--iterations N] [--max-results N] [--profile-refresh]");
+        Console.Error.WriteLine("Usage: [--count N --folders N --depth N | --catalog path] [--iterations N] [--max-results N] [--profile-refresh]");
         return 2;
     }
+}
+
+if ((existingCatalog is not null && (folders > 0 || depth != 8)) ||
+    (existingCatalog is null && (folders >= count || (folders > 0 && depth > folders))))
+{
+    Console.Error.WriteLine("Folders require a synthetic catalog, with 0 <= folders < count and depth <= folders.");
+    return 2;
 }
 
 var process = Process.GetCurrentProcess();
@@ -58,7 +73,7 @@ static void Report(string label, double ms, long memory, int hits) =>
     Console.WriteLine($"{label,-28} {Duration(ms),12} {MiB(memory),15:F1} {hits,10}");
 
 Console.WriteLine($"Wimf 2 sequential baseline | .NET {Environment.Version} | {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
-Console.WriteLine($"Iterations: {iterations}, max results: {maxResults}");
+Console.WriteLine($"Iterations: {iterations}, max results: {maxResults}; synthetic folders: {folders}, max folder depth: {depth}");
 Console.WriteLine("Memory = process working set (MiB), not managed heap. Results depend on machine, file system and JIT.");
 Console.WriteLine($"{"Operation",-28} {"Time ms",12} {"Working set MiB",15} {"Hits",10}");
 
@@ -73,7 +88,7 @@ if (existingCatalog is not null)
 }
 else
 {
-    using var stream = new SyntheticCatalogStream(count);
+    using var stream = new SyntheticCatalogStream(count, folders, depth);
     catalog = LegacyCatalogReader.Read(stream, compressed: false);
 }
 watch.Stop();
@@ -118,6 +133,54 @@ foreach (var (name, query) in queries)
         $"collections across {iterations} iterations: " +
         $"gen0={gcAfter.Gen0 - gcBefore.Gen0}, gen1={gcAfter.Gen1 - gcBefore.Gen1}, gen2={gcAfter.Gen2 - gcBefore.Gen2}");
 }
+if (catalog.RecordCount > 0)
+{
+    // Independent of name matching, measure path reconstruction at different depths.
+    // Each sample ID is known to be a valid file in synthetic mode; real catalogs may
+    // have malformed slots or directories, so choose eligible IDs explicitly.
+    var pathIds = new List<int>();
+    if (existingCatalog is null)
+    {
+        var firstFile = folders + 1;
+        var lastFile = catalog.RecordCount;
+        pathIds.Add(firstFile);
+        if (lastFile != firstFile) pathIds.Add(lastFile);
+        if (folders > 0)
+        {
+            // File references rotate through all folder IDs; one path at deepest spine.
+            var deepestFile = firstFile + (depth - 1);
+            if (deepestFile <= lastFile && !pathIds.Contains(deepestFile))
+                pathIds.Add(deepestFile);
+        }
+    }
+    else
+    {
+        for (var id = 1; id <= catalog.RecordCount && pathIds.Count < 3; id++)
+            if (catalog.TryGetEntryData(id, out var entry) && !entry.IsDirectory)
+                pathIds.Add(id);
+    }
+    foreach (var id in pathIds)
+    {
+        var path = catalog.GetFullPath(id);
+        var times = new double[iterations];
+        var allocations = new double[iterations];
+        for (var iteration = 0; iteration < iterations; iteration++)
+        {
+            var beforeAlloc = Allocated();
+            var sw = Stopwatch.StartNew();
+            var result = catalog.GetFullPath(id);
+            sw.Stop();
+            times[iteration] = sw.Elapsed.TotalMilliseconds;
+            allocations[iteration] = MiB(Allocated() - beforeAlloc);
+            if (result != path) throw new InvalidOperationException("Path reconstruction is nondeterministic.");
+        }
+        Array.Sort(times);
+        Array.Sort(allocations);
+        var depthOfPath = path.Count(ch => ch == '\\\\' || ch == '/');
+        Console.WriteLine($"  Path ID {id} (separators={depthOfPath}): median {Duration(times[iterations / 2])} ms, " +
+            $"allocated {allocations[iterations / 2]:F4} MiB/call");
+    }
+}
 if (profileRefresh)
 {
     // Simulates retention of an old catalog while reading a replacement.
@@ -153,11 +216,18 @@ return 0;
 internal sealed class SyntheticCatalogStream : Stream
 {
     private readonly int _count;
+    private readonly int _folders;
+    private readonly int _depth;
     private int _next;
     private byte[] _buffer = [];
     private int _offset;
 
-    public SyntheticCatalogStream(int count) => _count = count;
+    public SyntheticCatalogStream(int count, int folders = 0, int depth = 8)
+    {
+        _count = count;
+        _folders = folders;
+        _depth = depth;
+    }
 
     private byte[] NextLine()
     {
