@@ -247,7 +247,7 @@ public static class WebUi
   // Quote every CSV field, double embedded quotes and guard against spreadsheet formula injection.
   function csvField(value) {
     const raw = String(value ?? "");
-    const safe = /^[\\s]*[=+@\\-]/.test(raw) ? "\'" + raw : raw;
+    const safe = /^\s*[=+@-]/.test(raw) ? "'" + raw : raw;
     return '"' + safe.replaceAll('"', '""') + '"';
   }
   csvButton.addEventListener("click", () => {
@@ -255,13 +255,13 @@ public static class WebUi
     const headers = ["Catalogue", "ID", "Nom", "Chemin", "Extension", "Taille (octets)", "Modifié (UTC)"];
     const rows = sortHits(currentHits).map(hit => [hit.catalog, hit.id, hit.name, hit.fullPath,
       hit.extension, hit.size, hit.modifiedAt]);
-    const csv = "\\uFEFF" + [headers, ...rows].map(row => row.map(csvField).join(";")).join("\\r\\n");
+    const csv = "\uFEFF" + [headers, ...rows].map(row => row.map(csvField).join(";")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "wimf-resultats.csv";
     anchor.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
     message(rows.length + " résultat(s) exporté(s) en CSV.");
   });
 
