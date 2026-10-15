@@ -18,6 +18,7 @@ public sealed record SearchRequest
 public sealed record SearchHit(string Catalog, int Id, string Name, string FullPath, string Extension, ulong Size, DateTimeOffset ModifiedAt);
 public sealed record SearchResponse(int Count, SearchHit[] Results);
 public sealed record ErrorResponse(string Error);
+public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOffset? LastRefresh);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(HealthResponse))]
@@ -25,4 +26,6 @@ public sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SearchRequest))]
 [JsonSerializable(typeof(SearchResponse))]
 [JsonSerializable(typeof(ErrorResponse))]
+[JsonSerializable(typeof(RefreshSummary))]
+[JsonSerializable(typeof(RefreshStatus))]
 public partial class WimfJsonContext : JsonSerializerContext;
