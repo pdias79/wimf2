@@ -55,3 +55,24 @@ A catalog begins with five UTF-8 lines: signature `[WIMF Catalog]`, catalog name
 - The importer supports plain text and `.gz`, validating gzip by stream decompression when requested.
 
 Catalog entries are stored in memory only for this compatibility milestone. Large-scale index format and resource budgets will be benchmarked separately.
+
+### HTTP daemon (development)
+
+The first HTTP daemon runs locally only, on `http://127.0.0.1:5080`. Supply existing plaintext or Gzip catalogs with one or more `--catalog` arguments:
+
+```bash
+dotnet run --project src/Wimf.Server -- --catalog /path/to/catalog.txt.gz
+```
+
+Endpoints:
+- `GET /api/health`: status and number of loaded catalogs.
+- `GET /api/catalogs`: loaded catalog metadata, entry counts, diagnostic counts.
+- `POST /api/search`: searches files using the existing sequential engine; no filesystem file download endpoint.
+
+Example body:
+
+```json
+{"text":"report","extensions":["pdf"],"maxResults":25}
+```
+
+The daemon loads all catalog records into memory at startup. It has no authentication, no automatic synchronization, and must **not** be exposed outside localhost. It currently supports at most 1,000 results per request. Native AOT compatibility is a design target; native publication has not been validated yet.
