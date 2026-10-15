@@ -8,9 +8,12 @@ var count = 100_000;
 var iterations = 5;
 var maxResults = 100;
 string? existingCatalog = null;
+var profileRefresh = false;
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] == "--count" && i + 1 < args.Length &&
+    if (args[i] == "--profile-refresh")
+        profileRefresh = true;
+    else if (args[i] == "--count" && i + 1 < args.Length &&
         int.TryParse(args[++i], out var parsedCount) && parsedCount is >= 1 and <= 20_000_000)
         count = parsedCount;
     else if (args[i] == "--iterations" && i + 1 < args.Length &&
@@ -23,7 +26,7 @@ for (var i = 0; i < args.Length; i++)
         existingCatalog = args[++i];
     else
     {
-        Console.Error.WriteLine("Usage: --count N [--iterations N] [--max-results N] OR --catalog path [--iterations N] [--max-results N]");
+        Console.Error.WriteLine("Usage: [--count N | --catalog path] [--iterations N] [--max-results N] [--profile-refresh]");
         return 2;
     }
 }
@@ -36,6 +39,20 @@ long WorkingSet()
 }
 
 static double MiB(long bytes) => bytes / 1048576.0;
+static long Allocated() => GC.GetTotalAllocatedBytes(precise: true);
+static (int Gen0, int Gen1, int Gen2) Collections() =>
+    (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+static void PrintGc(string label, long allocatedBefore, (int Gen0, int Gen1, int Gen2) before)
+{
+    var after = Collections();
+    Console.WriteLine($"{label}: allocated {MiB(Allocated() - allocatedBefore):F2} MiB; " +
+        $"GC gen0={after.Gen0 - before.Gen0}, gen1={after.Gen1 - before.Gen1}, gen2={after.Gen2 - before.Gen2}");
+}
+static void PrintManaged(string label) =>
+    Console.WriteLine($"{label}: managed heap {MiB(GC.GetTotalMemory(forceFullCollection: false)):F2} MiB; " +
+        $"live heap bytes {MiB(GC.GetGCMemoryInfo().HeapSizeBytes):F2} MiB; " +
+        $"fragmentation {MiB(GC.GetGCMemoryInfo().FragmentedBytes):F2} MiB.");
+
 static string Duration(double ms) => ms.ToString("F3", CultureInfo.InvariantCulture);
 static void Report(string label, double ms, long memory, int hits) =>
     Console.WriteLine($"{label,-28} {Duration(ms),12} {MiB(memory),15:F1} {hits,10}");
@@ -46,6 +63,8 @@ Console.WriteLine("Memory = process working set (MiB), not managed heap. Results
 Console.WriteLine($"{"Operation",-28} {"Time ms",12} {"Working set MiB",15} {"Hits",10}");
 
 var baselineMemory = WorkingSet();
+var loadAllocationStart = Allocated();
+var loadGcStart = Collections();
 var watch = Stopwatch.StartNew();
 Wimf.Catalog.Catalog catalog;
 if (existingCatalog is not null)
@@ -60,6 +79,8 @@ else
 watch.Stop();
 Report("Load catalog", watch.Elapsed.TotalMilliseconds, WorkingSet(), catalog.RecordCount);
 Console.WriteLine($"Record count: {catalog.RecordCount:N0}; load working-set delta: {MiB(WorkingSet() - baselineMemory):F1} MiB.");
+PrintGc("Load catalog", loadAllocationStart, loadGcStart);
+PrintManaged("After load");
 Console.WriteLine("Warmup runs are excluded from search timings. No forced GC inside timed regions.");
 
 var engine = new SequentialSearchEngine();
@@ -76,17 +97,52 @@ foreach (var (name, query) in queries)
 {
     var warmup = engine.Search([catalog], query);
     var times = new double[iterations];
+    var allocations = new double[iterations];
+    var gcBefore = Collections();
     int hits = warmup.Count;
     for (var i = 0; i < iterations; i++)
     {
+        var beforeAlloc = Allocated();
         var sw = Stopwatch.StartNew();
         var result = engine.Search([catalog], query);
         sw.Stop();
         times[i] = sw.Elapsed.TotalMilliseconds;
+        allocations[i] = MiB(Allocated() - beforeAlloc);
         hits = result.Count;
     }
     Array.Sort(times);
     Report(name + " median", times[times.Length / 2], WorkingSet(), hits);
+    Array.Sort(allocations);
+    var gcAfter = Collections();
+    Console.WriteLine($"  Allocated/search median: {allocations[allocations.Length / 2]:F4} MiB; " +
+        $"collections across {iterations} iterations: " +
+        $"gen0={gcAfter.Gen0 - gcBefore.Gen0}, gen1={gcAfter.Gen1 - gcBefore.Gen1}, gen2={gcAfter.Gen2 - gcBefore.Gen2}");
+}
+if (profileRefresh)
+{
+    // Simulates retention of an old catalog while reading a replacement.
+    // This models the memory-pressure pattern, not the network/cache update itself.
+    Console.WriteLine("Simulated refresh: keeping old catalog referenced while loading another copy.");
+    var beforeRefreshWorkingSet = WorkingSet();
+    var beforeRefreshAllocated = Allocated();
+    var beforeRefreshGc = Collections();
+    var refreshWatch = Stopwatch.StartNew();
+    Wimf.Catalog.Catalog replacement;
+    if (existingCatalog is not null)
+        replacement = LegacyCatalogReader.ReadFile(existingCatalog);
+    else
+    {
+        using var stream = new SyntheticCatalogStream(count);
+        replacement = LegacyCatalogReader.Read(stream, compressed: false);
+    }
+    refreshWatch.Stop();
+    GC.KeepAlive(catalog);
+    Report("Second catalog load", refreshWatch.Elapsed.TotalMilliseconds, WorkingSet(), replacement.RecordCount);
+    PrintGc("Second catalog load", beforeRefreshAllocated, beforeRefreshGc);
+    PrintManaged("Both catalogs retained");
+    Console.WriteLine($"Working-set change with both catalogs: {MiB(WorkingSet() - beforeRefreshWorkingSet):F2} MiB; " +
+        $"process peak working set: {MiB(process.PeakWorkingSet64):F2} MiB.");
+    GC.KeepAlive(replacement);
 }
 return 0;
 

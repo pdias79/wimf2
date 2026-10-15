@@ -135,3 +135,18 @@ dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --catalog "C:\\loc
 The tool reports catalog-load time, process working-set size, and search medians for absent, rare, common, filtered and regex queries. Common searches are limited to 100 results by default, so they do **not** necessarily scan the entire catalog. The absent query exercises full scanning; rare matches depend on the synthetic distribution. Source generation happens during load timing and makes load figures less directly comparable to real disk/UNC reads. Do not compare results across architectures, SDK configurations or memory-pressure conditions without documenting them.
 
 Benchmarking millions of entries can consume substantial memory and CPU. Start with 100,000 records. No real filenames or private paths are recorded in this repo, and the tool makes no network requests.
+
+
+### Managed memory and refresh profiling
+
+The benchmark also reports total process allocations during load, median allocations per search, collection counts (gen0/1/2), current managed heap (via `GC.GetTotalMemory(false)`), and GC heap statistics. These complement working set; the latter is **process physical memory**, not just managed objects. GC heap-size/fragmentation values describe the **most recent collection** and can lag behind current allocations.
+
+Use `--profile-refresh` to load a second complete catalog while retaining the first. This **simulates the double-catalog memory pressure** of a live refresh, including the second load allocation and observed process peak, without network access or running `LiveCatalogStore` itself. A peak working set is a process-wide high watermark, not necessarily the instantaneous double-catalog memory. For realistic peak usage on UNC sources, run the daemon separately and monitor its process memory during a real refresh.
+
+```powershell
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 100000 --iterations 5 --profile-refresh
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --iterations 7 --profile-refresh
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --catalog "C:\\local\\catalog.gz" --iterations 7 --profile-refresh
+```
+
+Measurements do not force collection inside timed regions. Allocated bytes are total-process counters (including threads other than the benchmark thread); numbers represent measurement overhead plus application allocations, not retained memory. The first load may include JIT and one-time runtime setup.
