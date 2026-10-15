@@ -31,7 +31,10 @@ public static class WebUi
     .options { margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     .options label { display: flex; align-items: center; gap: 5px; }
     .options input[type=checkbox] { width: auto; }
-    .options input[type=number] { width: 90px; }
+    .options input[type=number] { width: 110px; }
+    .options input[type=date] { width: 148px; }
+    .advanced { border-top: 1px solid color-mix(in srgb, CanvasText 15%, Canvas); padding-top: 12px; }
+    .advanced label { font-size: .9rem; }
     .status { font-size: .9rem; color: GrayText; }
     .status.error { color: #ba3636; }
     .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -65,6 +68,12 @@ public static class WebUi
       <label for="extensions">Extensions <input id="extensions" placeholder="pdf, docx" aria-label="Extensions (séparées par virgules)"></label>
       <label for="max-results">Max <input id="max-results" type="number" min="1" max="1000" value="100"></label>
       <label for="regex"><input id="regex" type="checkbox"> Expression régulière</label>
+    </div>
+    <div class="options advanced" aria-label="Filtres supplémentaires">
+      <label for="min-size">Taille min. (octets) <input id="min-size" type="number" min="0" step="1" placeholder="0"></label>
+      <label for="max-size">Taille max. (octets) <input id="max-size" type="number" min="0" step="1" placeholder="Illimitée"></label>
+      <label for="modified-from">Modifié depuis <input id="modified-from" type="date"></label>
+      <label for="modified-to">Modifié jusqu’au <input id="modified-to" type="date"></label>
     </div>
     <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
@@ -163,6 +172,10 @@ public static class WebUi
     message("Recherche en cours…");
     const extensions = byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean);
     const maxResults = Number(byId("max-results").value);
+    const minSizeText = byId("min-size").value.trim();
+    const maxSizeText = byId("max-size").value.trim();
+    const modifiedFromText = byId("modified-from").value;
+    const modifiedToText = byId("modified-to").value;
     const payload = {
       text: byId("query").value, useRegex: byId("regex").checked,
       extensions, maxResults
@@ -170,6 +183,21 @@ public static class WebUi
     try {
       if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 1000)
         throw new Error("Le nombre de résultats doit être compris entre 1 et 1000.");
+      function parseSize(value, label) {
+        if (!/^\\d+$/.test(value)) throw new Error(label + " doit être un entier positif ou nul.");
+        const size = Number(value);
+        if (!Number.isSafeInteger(size)) throw new Error(label + " dépasse la précision maximale du navigateur.");
+        return size;
+      }
+      if (minSizeText) payload.minSize = parseSize(minSizeText, "La taille minimale");
+      if (maxSizeText) payload.maxSize = parseSize(maxSizeText, "La taille maximale");
+      if (payload.minSize !== undefined && payload.maxSize !== undefined && payload.minSize > payload.maxSize)
+        throw new Error("La taille minimale ne peut pas dépasser la taille maximale.");
+      // Catalog timestamps use UTC days; include every file on the selected final date.
+      if (modifiedFromText) payload.modifiedFrom = modifiedFromText + "T00:00:00.000Z";
+      if (modifiedToText) payload.modifiedTo = modifiedToText + "T23:59:59.999Z";
+      if (modifiedFromText && modifiedToText && modifiedFromText > modifiedToText)
+        throw new Error("La date de début ne peut pas dépasser la date de fin.");
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
