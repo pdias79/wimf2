@@ -62,4 +62,22 @@ public class LegacyCatalogReaderTests
         Assert.Contains(catalog.Diagnostics, x => x.Message.Contains("Invalid parent"));
         Assert.Throws<InvalidDataException>(() => catalog.GetFullPath(1));
     }
+    [Fact]
+    public void CompactSlotsPreserveIdsAndMaterializedEntries()
+    {
+        const string fixture = "[WIMF Catalog]\\nCompact\\nC:\\\\Data\\n0\\npdf txt\\nFolder;folder;0;0;100\\nbad;data\\nreport.pdf;pdf;10;1;101\\nnotes.txt;txt;20;1;102\\n";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture.Replace("\\n", "\n")));
+        var catalog = LegacyCatalogReader.Read(stream, false);
+        Assert.Equal(4, catalog.RecordCount);
+        Assert.False(catalog.TryGetEntryData(2, out _));
+        Assert.True(catalog.TryGetEntryData(3, out var data));
+        Assert.Equal("report.pdf", data.Name);
+        Assert.Equal(1, data.ParentId);
+        Assert.Equal(10UL, data.Size);
+        Assert.Equal(3, catalog.GetEntry(3)!.Id);
+        Assert.Equal(data.ModifiedAt, catalog.GetEntry(3)!.ModifiedAt);
+        Assert.Equal(@"C:\\Data\\Folder\\report.pdf", catalog.GetFullPath(3));
+        Assert.Equal(new[] { 1, 3, 4 }, catalog.EnumerateEntries().Select(x => x.Id));
+    }
+
 }
