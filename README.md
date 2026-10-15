@@ -202,3 +202,16 @@ dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 100000 --f
 ```
 
 Beyond the existing load, memory, GC, and search metrics, the benchmark prints `GetFullPath` timings and allocated bytes for representative file IDs at different depths. It verifies that repeated calls return the same path. For existing `--catalog` input it samples up to three valid file records. This is a deterministic structural stress test, not a faithful distribution of real-world folder sizes or filename lengths. Compare matching record counts and hardware; hierarchical runs contain fewer files and may therefore produce different search hit counts. No catalog files are written or uploaded.
+
+
+### Lower-allocation path reconstruction
+
+`Catalog.GetFullPath(id)` now measures the parent-chain length in one bounded traversal, then fills a single output string using `string.Create`. This removes the per-call `List<string>`, `HashSet<int>`, and intermediate joined string. Cycle detection is preserved by rejecting parent chains longer than the total record count; missing parents and non-directory parents still fail. Paths remain valid for Windows catalog roots on Linux, Unix roots, trailing separators, Unicode names, and malformed legacy entries.
+
+The benchmark measures `GetFullPath` using batches of 1,000 calls per iteration to avoid rounding sub-microsecond results to zero. It reports **microseconds per call** and **bytes allocated per call**. The synthetic second load in `--profile-refresh` now uses the same folder count and depth as the first; earlier hierarchy results accidentally compared a folder tree with a flat replacement, so do not use previous second-load comparisons as strict like-for-like baselines.
+
+```powershell
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --folders 10000 --depth 8 --iterations 7 --profile-refresh
+```
+
+Use a previous commit on `main` for an apples-to-apples before/after path comparison; existing times reported in milliseconds from single calls are too coarse for reliable microsecond comparisons.

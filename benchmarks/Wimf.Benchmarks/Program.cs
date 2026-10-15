@@ -164,21 +164,25 @@ if (catalog.RecordCount > 0)
         var path = catalog.GetFullPath(id);
         var times = new double[iterations];
         var allocations = new double[iterations];
+        const int pathRepeats = 1000;
         for (var iteration = 0; iteration < iterations; iteration++)
         {
             var beforeAlloc = Allocated();
             var sw = Stopwatch.StartNew();
-            var result = catalog.GetFullPath(id);
+            string? last = null;
+            for (var repeat = 0; repeat < pathRepeats; repeat++)
+                last = catalog.GetFullPath(id);
             sw.Stop();
-            times[iteration] = sw.Elapsed.TotalMilliseconds;
-            allocations[iteration] = MiB(Allocated() - beforeAlloc);
-            if (result != path) throw new InvalidOperationException("Path reconstruction is nondeterministic.");
+            times[iteration] = sw.Elapsed.TotalMilliseconds * 1000 / pathRepeats;
+            allocations[iteration] = (double)(Allocated() - beforeAlloc) / pathRepeats;
+            if (last != path) throw new InvalidOperationException("Path reconstruction is nondeterministic.");
+            GC.KeepAlive(last);
         }
         Array.Sort(times);
         Array.Sort(allocations);
         var depthOfPath = path.Count(ch => ch == '\\' || ch == '/');
-        Console.WriteLine($"  Path ID {id} (separators={depthOfPath}): median {Duration(times[iterations / 2])} ms, " +
-            $"allocated {allocations[iterations / 2]:F4} MiB/call");
+        Console.WriteLine($"  Path ID {id} (separators={depthOfPath}): median {times[iterations / 2]:F2} us, " +
+            $"allocated {allocations[iterations / 2]:F0} bytes/call ({pathRepeats} calls/sample)");
     }
 }
 if (profileRefresh)
@@ -195,7 +199,7 @@ if (profileRefresh)
         replacement = LegacyCatalogReader.ReadFile(existingCatalog);
     else
     {
-        using var stream = new SyntheticCatalogStream(count);
+        using var stream = new SyntheticCatalogStream(count, folders, depth);
         replacement = LegacyCatalogReader.Read(stream, compressed: false);
     }
     refreshWatch.Stop();
