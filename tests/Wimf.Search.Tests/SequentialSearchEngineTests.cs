@@ -126,11 +126,11 @@ public class SequentialSearchEngineTests
     public void SearchIgnoresCorruptPathsUntilResultIsSelected()
     {
         var catalog = Read(
-            "loop-one;folder;0;2;1\\n" +
-            "loop-two;folder;0;1;1\\n" +
-            "broken.txt;txt;1;1;1\\n" +
-            "good.txt;txt;1;0;1\\n" +
-            "not-folder.txt;txt;1;4;1\\n");
+            "loop-one;folder;0;2;1\n" +
+            "loop-two;folder;0;1;1\n" +
+            "broken.txt;txt;1;1;1\n" +
+            "good.txt;txt;1;0;1\n" +
+            "not-folder.txt;txt;1;4;1\n");
 
         var safe = _engine.Search([catalog], new() { Text = "good" });
         Assert.EndsWith("good.txt", Assert.Single(safe).FullPath);
