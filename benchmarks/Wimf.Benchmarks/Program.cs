@@ -238,8 +238,17 @@ internal sealed class SyntheticCatalogStream : Stream
         }
         if (_next > _count) return [];
         var id = _next++;
-        var name = id % 100_000 == 0 ? $"needle_rare_{id:D8}.pdf" : $"file_{id:D8}.{(id % 3 == 0 ? "pdf" : "txt")}";
-        return Encoding.UTF8.GetBytes($"{name};{(id % 3 == 0 ? "pdf" : "txt")};{id * 17L};0;20000\n");
+        if (id <= _folders)
+        {
+            // Depth-limited spine with branching children; parents precede children.
+            var parent = id <= _depth ? id - 1 : 1 + ((id - _depth - 1) % _depth);
+            return Encoding.UTF8.GetBytes($"folder_{id:D8};folder;0;{parent};20000\n");
+        }
+        var fileIndex = id - _folders;
+        var parentId = _folders == 0 ? 0 : 1 + ((fileIndex - 1) % _folders);
+        var extension = fileIndex % 3 == 0 ? "pdf" : "txt";
+        var name = fileIndex % 100_000 == 0 ? $"needle_rare_{fileIndex:D8}.pdf" : $"file_{fileIndex:D8}.{extension}";
+        return Encoding.UTF8.GetBytes($"{name};{extension};{fileIndex * 17L};{parentId};20000\n");
     }
 
     public override int Read(byte[] buffer, int offset, int count) =>
