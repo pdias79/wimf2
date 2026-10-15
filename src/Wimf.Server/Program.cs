@@ -139,7 +139,7 @@ app.MapPost("/api/file-action", (HttpContext context, FileActionRequest request)
     if (!string.Equals(origin, "http://127.0.0.1:5080", StringComparison.Ordinal) ||
         !string.Equals(context.Request.Host.Value, "127.0.0.1:5080", StringComparison.OrdinalIgnoreCase) ||
         (site.Length > 0 && site != "same-origin") ||
-        !context.Request.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
+        context.Request.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) != true)
         return Error("File action requests must originate from the local Wimf page.", 403);
 
     if (request.Action is not ("open" or "reveal" or "copy"))
