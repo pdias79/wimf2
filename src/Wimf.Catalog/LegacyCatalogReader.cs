@@ -50,13 +50,23 @@ public static class LegacyCatalogReader
         while ((line = reader.ReadLine()) is not null)
         {
             lineNumber++;
-            var id = entries.Count;
-            // Preserve the ordinal even if parsing fails: parent references depend on it.
-            var parts = line.Split(';');
-            if (parts.Length != 5 || string.IsNullOrWhiteSpace(parts[0]) ||
-                !ulong.TryParse(parts.ElementAtOrDefault(2), NumberStyles.Integer, CultureInfo.InvariantCulture, out var size) ||
-                !int.TryParse(parts.ElementAtOrDefault(3), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parentId) ||
-                !long.TryParse(parts.ElementAtOrDefault(4), NumberStyles.Integer, CultureInfo.InvariantCulture, out var days) ||
+            // Preserve the ordinal even for malformed lines: parent IDs reference line positions.
+            // Slice the line instead of Split(';'): only retained name and new extensions allocate.
+            var remaining = line.AsSpan();
+            var first = remaining.IndexOf(';');
+            var second = first >= 0 ? remaining[(first + 1)..].IndexOf(';') : -1;
+            if (second >= 0) second += first + 1;
+            var third = second >= 0 ? remaining[(second + 1)..].IndexOf(';') : -1;
+            if (third >= 0) third += second + 1;
+            var fourth = third >= 0 ? remaining[(third + 1)..].IndexOf(';') : -1;
+            if (fourth >= 0) fourth += third + 1;
+
+            if (first < 0 || second < 0 || third < 0 || fourth < 0 ||
+                remaining[(fourth + 1)..].Contains(';') ||
+                remaining[..first].IsWhiteSpace() ||
+                !ulong.TryParse(remaining[(second + 1)..third], NumberStyles.Integer, CultureInfo.InvariantCulture, out var size) ||
+                !int.TryParse(remaining[(third + 1)..fourth], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parentId) ||
+                !long.TryParse(remaining[(fourth + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var days) ||
                 parentId < 0)
             {
                 diagnostics.Add(new CatalogDiagnostic(lineNumber, "Invalid entry format or numeric field."));
@@ -66,10 +76,15 @@ public static class LegacyCatalogReader
             try
             {
                 _ = DateTimeOffset.FromUnixTimeSeconds(checked(days * 86400));
-                // Canonicalize extensions so repeated values share the same string.
-                if (!extensionPool.TryGetValue(parts[1], out var extension))
-                    extensionPool[parts[1]] = extension = parts[1];
-                entries.Add(new CatalogEntryData(parts[0], extension, size, parentId, days));
+                var extensionSpan = remaining[(first + 1)..second];
+                // Alternate dictionary lookup lets repeated extensions avoid allocating a key.
+                var lookup = extensionPool.GetAlternateLookup<ReadOnlySpan<char>>();
+                if (!lookup.TryGetValue(extensionSpan, out var extension))
+                {
+                    extension = extensionSpan.ToString();
+                    extensionPool.Add(extension, extension);
+                }
+                entries.Add(new CatalogEntryData(remaining[..first].ToString(), extension, size, parentId, days));
             }
             catch (Exception ex) when (ex is OverflowException or ArgumentOutOfRangeException)
             {
