@@ -82,10 +82,10 @@ public sealed class Catalog
         {
             // An acyclic chain contains at most RecordCount distinct records.
             // A longer chain must contain a cycle, even if IDs jump backwards.
-            if (++segments > RecordCount)
-                throw new InvalidDataException($"Cycle in catalog at record {current}.");
             if (!TryGetEntryData(current, out var entry))
                 throw new InvalidDataException($"Record {id} references missing parent {current}.");
+            if (++segments > RecordCount)
+                throw new InvalidDataException($"Cycle in catalog at record {current}.");
             if (current != id && !entry.IsDirectory)
                 throw new InvalidDataException($"Record {current} is not a directory.");
             namesLength = checked(namesLength + entry.Name.Length);
