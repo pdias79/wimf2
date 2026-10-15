@@ -4,28 +4,57 @@ using Wimf.Search;
 using Wimf.Server;
 
 var paths = new List<string>();
+var sources = new List<string>();
+string? cacheDirectory = null;
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] != "--catalog" || ++i >= args.Length)
+    switch (args[i])
     {
-        Console.Error.WriteLine("Usage: wimfd [--catalog path.txt.gz]...");
-        return 2;
+        case "--catalog" when i + 1 < args.Length:
+            paths.Add(args[++i]);
+            break;
+        case "--source" when i + 1 < args.Length:
+            sources.Add(args[++i]);
+            break;
+        case "--cache-dir" when i + 1 < args.Length:
+            cacheDirectory = args[++i];
+            break;
+        default:
+            Console.Error.WriteLine("Usage: wimfd [--catalog local.gz]... [--source network.gz]... [--cache-dir directory]");
+            return 2;
     }
-    paths.Add(args[i]);
+}
+
+if (sources.Count > 0 && string.IsNullOrWhiteSpace(cacheDirectory))
+{
+    Console.Error.WriteLine("--cache-dir is required when --source is provided.");
+    return 2;
 }
 
 var catalogs = new List<Wimf.Catalog.Catalog>();
 foreach (var path in paths)
 {
-    try
-    {
-        catalogs.Add(LegacyCatalogReader.ReadFile(path));
-    }
+    try { catalogs.Add(LegacyCatalogReader.ReadFile(path)); }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
                                or System.Text.DecoderFallbackException or ArgumentException)
     {
         Console.Error.WriteLine($"Unable to load catalog '{path}': {ex.Message}");
         return 2;
+    }
+}
+
+foreach (var source in sources)
+{
+    try
+    {
+        var (catalog, _) = CatalogCache.Load(source, cacheDirectory!, Console.WriteLine);
+        catalogs.Add(catalog);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                               or System.Text.DecoderFallbackException or ArgumentException)
+    {
+        // Keep serving the catalog sources that are available.
+        Console.Error.WriteLine($"Skipping unavailable source '{source}': {ex.Message}");
     }
 }
 
