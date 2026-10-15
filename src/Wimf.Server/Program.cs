@@ -7,10 +7,14 @@ var paths = new List<string>();
 var sources = new List<string>();
 string? cacheDirectory = null;
 var refreshSeconds = 300;
+var enableFileActions = false;
 for (var i = 0; i < args.Length; i++)
 {
     switch (args[i])
     {
+        case "--enable-file-actions":
+            enableFileActions = true;
+            break;
         case "--catalog" when i + 1 < args.Length:
             paths.Add(args[++i]);
             break;
@@ -26,7 +30,7 @@ for (var i = 0; i < args.Length; i++)
             i++;
             break;
         default:
-            Console.Error.WriteLine("Usage: wimfd [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N]");
+            Console.Error.WriteLine("Usage: wimfd [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--enable-file-actions]");
             return 2;
     }
 }
@@ -95,9 +99,10 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
             ModifiedTo = request.ModifiedTo,
             MaxResults = request.MaxResults
         };
-        var results = engine.Search(store.Snapshot, query, cancellationToken);
+        var snapshot = store.Snapshot;
+        var results = engine.Search(snapshot, query, cancellationToken);
         var hits = results.Select(r => new SearchHit(
-            r.Catalog.Header.Name, r.Entry.Id, r.Entry.Name, r.FullPath,
+            r.Catalog.Header.Name, Array.IndexOf(snapshot, r.Catalog), r.Entry.Id, r.Entry.Name, r.FullPath,
             r.Entry.Extension, r.Entry.Size, r.Entry.ModifiedAt)).ToArray();
         return Results.Json(new SearchResponse(hits.Length, hits),
             WimfJsonContext.Default.SearchResponse);
@@ -116,6 +121,43 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
     {
         return Results.Json(new ErrorResponse("A matching catalog entry has an invalid path."),
             WimfJsonContext.Default.ErrorResponse, statusCode: 422);
+    }
+});
+
+// File actions are explicitly opt-in: a website must not be allowed to activate
+// local file operations merely because the daemon listens on 127.0.0.1.
+app.MapPost("/api/file-action", (HttpContext context, FileActionRequest request) =>
+{
+    IResult Error(string message, int status) =>
+        Results.Json(new ErrorResponse(message), WimfJsonContext.Default.ErrorResponse, statusCode: status);
+
+    if (!enableFileActions)
+        return Error("File actions are disabled. Restart with --enable-file-actions.", 403);
+
+    var origin = context.Request.Headers.Origin.ToString();
+    var site = context.Request.Headers["Sec-Fetch-Site"].ToString();
+    if (!string.Equals(origin, "http://127.0.0.1:5080", StringComparison.Ordinal) ||
+        !string.Equals(context.Request.Host.Value, "127.0.0.1:5080", StringComparison.OrdinalIgnoreCase) ||
+        (site.Length > 0 && site != "same-origin") ||
+        !context.Request.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
+        return Error("File action requests must originate from the local Wimf page.", 403);
+
+    if (request.Action is not ("open" or "reveal" or "copy"))
+        return Error("Unknown file action.", 400);
+
+    try
+    {
+        var path = LocalFileActions.Resolve(store.Snapshot, request.CatalogIndex, request.Id, request.FullPath);
+        LocalFileActions.Execute(request.Action, path);
+        return Results.Json(new FileActionResponse(true), WimfJsonContext.Default.FileActionResponse);
+    }
+    catch (FileNotFoundException) { return Error("The indexed file is no longer accessible.", 404); }
+    catch (InvalidOperationException) { return Error("Search results are stale or opening this file is prohibited.", 409); }
+    catch (PlatformNotSupportedException) { return Error("This action is unavailable in the current desktop session.", 501); }
+    catch (Exception ex) when (ex is ArgumentException or InvalidDataException or UnauthorizedAccessException
+                               or IOException or System.ComponentModel.Win32Exception)
+    {
+        return Error("Unable to perform this action on the indexed file.", 422);
     }
 });
 
@@ -149,5 +191,6 @@ if (sources.Count > 0 && refreshSeconds > 0)
 }
 
 Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");
+if (enableFileActions) Console.WriteLine("Local file actions enabled (requires an interactive desktop session).");
 await app.RunAsync();
 return 0;
