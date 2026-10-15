@@ -288,3 +288,10 @@ After a manual source refresh, the UI reloads catalog metadata and retains the s
 The results table intentionally omits the often very long **Chemin** column. Hover over a filename to display the complete indexed path as a native browser tooltip; keyboard users can also focus the filename control to inspect its accessible label. Clicking a filename requests **Ouvrir** directly, using the same opt-in local daemon action and catalog-backed path validation as the former Open button. There is no second confirmation dialog for this deliberate click. Native opening remains disabled unless the daemon was started with `--enable-file-actions`; unsupported executable/script types remain blocked.
 
 The **Copier le chemin** action still copies the full path as text, while **Copier le fichier** remains a separate native Windows clipboard action. Neither CSV export nor the search JSON payload loses the full path.
+
+
+### Search history and favorites
+
+Expand **Historique et favoris de recherche** in the Web UI to find the most recent successful searches and a separate list of favorite search criteria. **Ajouter la recherche aux favoris** saves the filters currently visible in the form; **Restaurer** loads saved filters without automatically running a search. **Supprimer** removes one entry; **Effacer l’historique** clears only the history (not favorites), after confirmation.
+
+Both lists are kept only in the browser's `localStorage`, with separate keys (`wimf2.history.v1` and `wimf2.favorites.v1`), a limit of 20 entries each, and duplicate history searches promoted to the top. This includes search text, regex, extensions, result limit, size/date bounds and selected catalogs (stored by catalog name and root path, not transient indices). The history is written only after an API search succeeds; failed or cancelled searches are not recorded. If a saved catalog is no longer loaded, restoring the search selects only catalogs that still match. Data is not sent to a new service or synchronized across devices. Clearing browser site data also removes saved searches. Browsers that block local storage can use the session UI, but cannot persist changes.
