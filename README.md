@@ -116,3 +116,22 @@ dotnet run --project src/Wimf.Server -- --source "\\\\server\\share\\catalog.gz"
 ```
 
 Failed sources retain their last usable in-memory version. A source can reappear on a later refresh. Direct `--catalog` files remain static; only `--source` files are polled. Polling can still perform expensive file-system operations and parser work and does not yet support progress reporting or configuration through the browser.
+
+### Performance baseline: synthetic benchmark
+
+Use the standalone .NET 10 benchmark tool in **Release** mode. It generates WIMF UTF-8 catalog records in a streaming source, loads them with the production legacy reader, then measures median sequential-search latency and process working set. The benchmark is not an index format or a replacement for the application.
+
+```powershell
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 100000 --iterations 5
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --count 1000000 --iterations 7
+```
+
+Optional: benchmark an existing *local* catalog, without committing or uploading it:
+
+```powershell
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --catalog "C:\\local\\catalog.gz" --iterations 7
+```
+
+The tool reports catalog-load time, process working-set size, and search medians for absent, rare, common, filtered and regex queries. Common searches are limited to 100 results by default, so they do **not** necessarily scan the entire catalog. The absent query exercises full scanning; rare matches depend on the synthetic distribution. Source generation happens during load timing and makes load figures less directly comparable to real disk/UNC reads. Do not compare results across architectures, SDK configurations or memory-pressure conditions without documenting them.
+
+Benchmarking millions of entries can consume substantial memory and CPU. Start with 100,000 records. No real filenames or private paths are recorded in this repo, and the tool makes no network requests.
