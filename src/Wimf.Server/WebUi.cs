@@ -569,6 +569,7 @@ public static class WebUi
       if (modifiedToText) payload.modifiedTo = modifiedToText + "T23:59:59.999Z";
       if (modifiedFromText && modifiedToText && modifiedFromText > modifiedToText)
         throw new Error("La date de début ne peut pas dépasser la date de fin.");
+      const submittedSearch = captureSearch();
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -582,7 +583,7 @@ public static class WebUi
       currentPage = 0;
       displayResults();
       message(data.count + " résultat(s) affiché(s).");
-      addToHistory(captureSearch());
+      addToHistory(submittedSearch);
     } catch (error) {
       if (activeController === controller && error.name !== "AbortError") {
         currentHits = [];
