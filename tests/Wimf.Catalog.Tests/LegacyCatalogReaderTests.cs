@@ -65,7 +65,7 @@ public class LegacyCatalogReaderTests
     [Fact]
     public void CompactSlotsPreserveIdsAndMaterializedEntries()
     {
-        const string fixture = "[WIMF Catalog]\\nCompact\\nC:\\\\Data\\n0\\npdf txt\\nFolder;folder;0;0;100\\nbad;data\\nreport.pdf;pdf;10;1;101\\nnotes.txt;txt;20;1;102\\n";
+        const string fixture = "[WIMF Catalog]\\nCompact\\nC:\\Data\\n0\\npdf txt\\nFolder;folder;0;0;100\\nbad;data\\nreport.pdf;pdf;10;1;101\\nnotes.txt;txt;20;1;102\\n";
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture.Replace("\\n", "\n")));
         var catalog = LegacyCatalogReader.Read(stream, false);
         Assert.Equal(4, catalog.RecordCount);
