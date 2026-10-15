@@ -184,7 +184,7 @@ public static class WebUi
       if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 1000)
         throw new Error("Le nombre de résultats doit être compris entre 1 et 1000.");
       function parseSize(value, label) {
-        if (!/^\\d+$/.test(value)) throw new Error(label + " doit être un entier positif ou nul.");
+        if (!/^\d+$/.test(value)) throw new Error(label + " doit être un entier positif ou nul.");
         const size = Number(value);
         if (!Number.isSafeInteger(size)) throw new Error(label + " dépasse la précision maximale du navigateur.");
         return size;
