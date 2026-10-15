@@ -44,7 +44,8 @@ public sealed class LiveCatalogStore
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var (catalog, fallback) = CatalogCache.Load(_sources[i], _cacheDirectory!);
+                    var (catalog, fallback) = CatalogCache.Load(_sources[i], _cacheDirectory!,
+                        previouslyLoaded: next[i]);
                     next[i] = catalog;
                     if (fallback) failures++;
                 }
@@ -60,7 +61,10 @@ public sealed class LiveCatalogStore
             var snapshot = _fixedCatalogs.Concat(next.OfType<FileCatalog>()).ToArray();
             cancellationToken.ThrowIfCancellationRequested();
             _sourceCatalogs = next;
-            Volatile.Write(ref _snapshot, snapshot);
+            // No need to publish a new array if all catalog instances are unchanged.
+            var previous = Volatile.Read(ref _snapshot);
+            if (!previous.AsSpan().SequenceEqual(snapshot))
+                Volatile.Write(ref _snapshot, snapshot);
             var summary = new RefreshSummary(snapshot.Length, _sources.Length, failures, DateTimeOffset.UtcNow);
             Volatile.Write(ref _lastSummary, summary);
             return summary;

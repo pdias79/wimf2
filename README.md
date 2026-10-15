@@ -150,3 +150,12 @@ dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --catalog "C:\\loc
 ```
 
 Measurements do not force collection inside timed regions. Allocated bytes are total-process counters (including threads other than the benchmark thread); numbers represent measurement overhead plus application allocations, not retained memory. The first load may include JIT and one-time runtime setup.
+
+
+### Refresh optimization: reuse unchanged catalogs
+
+After the first successful load, scheduled and manual refreshes compare the network source with its local cached copy using file length and UTC modification time. If those metadata match, the **already parsed in-memory catalog instance is reused** rather than parsed again. When every catalog instance is unchanged, the published search snapshot is also reused, avoiding churn and the temporary doubling of managed catalog memory. Changed sources still use staging, validation and atomic cache replacement, then publish a new search snapshot. Already-running searches keep their original snapshot.
+
+If a source becomes unavailable after a successful load, Wimf retains the previously validated in-memory instance, even if the on-disk cache later becomes unavailable. On cold startup the local cache still has to be parsed and validated. Failures continue to be reported as unavailable sources.
+
+**Limitation:** source-change detection relies on length plus modification timestamp, not a content hash; a replacement with identical values will be treated as unchanged. Do not mutate source catalogs in place without updating metadata; publish completed catalogs atomically.
