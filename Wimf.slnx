@@ -4,6 +4,9 @@
     <Project Path="src/Wimf.Search/Wimf.Search.csproj" />
     <Project Path="src/Wimf.Server/Wimf.Server.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Wimf.Benchmarks/Wimf.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Wimf.Catalog.Tests/Wimf.Catalog.Tests.csproj" />
     <Project Path="tests/Wimf.Search.Tests/Wimf.Search.Tests.csproj" />
