@@ -360,3 +360,16 @@ dotnet run --project src/Wimf.Server -- --config "C:\Users\Philou\Documents\repo
 - Settings are read at server startup; restart the daemon after editing the JSON. This PR does not introduce an API to edit configuration remotely.
 
 An example is committed as `wimf.example.json`.
+
+
+### Automatic reload of local catalogs (PR #27)
+
+Catalog files declared with `--catalog` or under `catalogs` in `wimf.json` are now checked for changes at the same interval as network sources. No restart is required after replacing or updating a local catalog:
+
+```powershell
+dotnet run --project src/Wimf.Server -- --config "wimf.json" --refresh-seconds 30 --enable-file-actions
+```
+
+When a local file's modification timestamp or length changes, Wimf reloads it and atomically publishes the refreshed snapshot. Active searches continue using their existing immutable catalog instance. If a changed catalog is missing, malformed, or temporarily unreadable, Wimf logs an error and **retains the last valid in-memory version** until a subsequent refresh succeeds. Local catalog order and search catalog indices remain stable. Existing `POST /api/refresh` also checks local files immediately; `refreshSeconds: 0` disables the automatic timer but not manual refresh.
+
+The periodic scan checks file metadata, **not the underlying filesystem**. Run `--build-root ... --update-existing` separately to regenerate the catalog after files change. A catalog replaced without changing either file length or modification timestamp may not be detected. The refresh API includes `failedLocalCatalogs` in its response to distinguish these failures from network source failures.
