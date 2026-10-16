@@ -43,43 +43,24 @@ if (args.Length > 0 && args[0] == "--build-root")
     }
 }
 
-var paths = new List<string>();
-var sources = new List<string>();
-string? cacheDirectory = null;
-var refreshSeconds = 300;
-var enableFileActions = false;
-for (var i = 0; i < args.Length; i++)
+DaemonOptions options;
+try
 {
-    switch (args[i])
-    {
-        case "--enable-file-actions":
-            enableFileActions = true;
-            break;
-        case "--catalog" when i + 1 < args.Length:
-            paths.Add(args[++i]);
-            break;
-        case "--source" when i + 1 < args.Length:
-            sources.Add(args[++i]);
-            break;
-        case "--cache-dir" when i + 1 < args.Length:
-            cacheDirectory = args[++i];
-            break;
-        case "--refresh-seconds" when i + 1 < args.Length &&
-            int.TryParse(args[i + 1], out var seconds) && seconds >= 0:
-            refreshSeconds = seconds;
-            i++;
-            break;
-        default:
-            Console.Error.WriteLine("Usage: wimfd [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--enable-file-actions]");
-            return 2;
-    }
+    options = DaemonOptions.Parse(args);
 }
-
-if (sources.Count > 0 && string.IsNullOrWhiteSpace(cacheDirectory))
+catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException
+                           or System.Text.Json.JsonException or InvalidDataException)
 {
-    Console.Error.WriteLine("--cache-dir is required when --source is provided.");
+    Console.Error.WriteLine($"Invalid server configuration: {ex.Message}");
+    Console.Error.WriteLine("Usage: wimfd [--config config.json] [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--enable-file-actions]");
     return 2;
 }
+
+var paths = options.Catalogs;
+var sources = options.Sources;
+var cacheDirectory = options.CacheDirectory;
+var refreshSeconds = options.RefreshSeconds;
+var enableFileActions = options.EnableFileActions;
 
 var catalogs = new List<Wimf.Catalog.Catalog>();
 foreach (var path in paths)
