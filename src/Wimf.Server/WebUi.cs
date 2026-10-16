@@ -65,6 +65,11 @@ public static class WebUi
     .catalog-item input { margin-top: 4px; flex-shrink: 0; }
     .catalog-details { font-size: .84rem; color: GrayText; }
     .catalog-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .saved-searches { display: grid; gap: 8px; margin: 10px 0 14px; }
+    .saved-search { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .saved-search .saved-label { flex: 1; min-width: 170px; overflow-wrap: anywhere; }
+    .saved-search button { font-size: .8rem; }
+    .saved-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .muted { color: GrayText; font-weight: 400; }
     @media (max-width: 640px) {
       main { padding: 20px 12px; }
@@ -89,8 +94,7 @@ public static class WebUi
       <label for="regex"><input id="regex" type="checkbox"> Expression régulière</label>
     </div>
     <div class="options advanced" aria-label="Filtres supplémentaires">
-      <label for="min-size">Taille min. (octets) <input id="min-size" type="number" min="0" step="1" placeholder="0"></label>
-      <label for="max-size">Taille max. (octets) <input id="max-size" type="number" min="0" step="1" placeholder="Illimitée"></label>
+      <label for="min-size">Taille min. (Ko) <input id="min-size" type="number" min="0" step="1" placeholder="0"></label>
       <label for="modified-from">Modifié depuis <input id="modified-from" type="date"></label>
       <label for="modified-to">Modifié jusqu’au <input id="modified-to" type="date"></label>
     </div>
@@ -102,6 +106,19 @@ public static class WebUi
         <span id="catalog-selection-count" class="status" role="status"></span>
       </div>
       <div id="catalog-list" class="catalog-list" aria-label="Catalogues disponibles"></div>
+    </details>
+    <details id="saved-search-panel" class="advanced">
+      <summary>Historique et favoris de recherche</summary>
+      <p class="status">Enregistrés uniquement dans ce navigateur, sur cet appareil.</p>
+      <div class="saved-controls">
+        <button id="save-favorite" type="button" class="copy">Ajouter la recherche aux favoris</button>
+        <button id="clear-history" type="button" class="copy">Effacer l’historique</button>
+        <span id="saved-status" class="status" role="status"></span>
+      </div>
+      <h3>Favoris</h3>
+      <div id="favorites-list" class="saved-searches"></div>
+      <h3>Recherches récentes</h3>
+      <div id="history-list" class="saved-searches"></div>
     </details>
     <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
@@ -221,6 +238,131 @@ public static class WebUi
       checkbox.checked = catalogSelection.has(loadedCatalogs[position].index);
     updateCatalogSelectionCount();
   }
+
+  const historyKey = "wimf2.history.v2";
+  const favoritesKey = "wimf2.favorites.v2";
+  const maxSaved = 20;
+  function readSaved(key) {
+    try {
+      const stored = JSON.parse(localStorage.getItem(key) || "[]");
+      return Array.isArray(stored) ? stored.filter(entry =>
+        entry && typeof entry === "object" &&
+        typeof entry.text === "string" && entry.text.length <= 1024 &&
+        Array.isArray(entry.catalogKeys) && Array.isArray(entry.extensions)
+      ).slice(0, maxSaved) : [];
+    } catch { return []; }
+  }
+  let history = readSaved(historyKey);
+  let favorites = readSaved(favoritesKey);
+  function persistSaved(key, entries) {
+    try {
+      localStorage.setItem(key, JSON.stringify(entries));
+      return true;
+    } catch {
+      byId("saved-status").textContent = "Stockage local indisponible : modifications non conservées.";
+      return false;
+    }
+  }
+  function captureSearch() {
+    return {
+      text: byId("query").value,
+      regex: byId("regex").checked,
+      extensions: byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean),
+      maxResults: byId("max-results").value,
+      minSizeKo: byId("min-size").value,
+      modifiedFrom: byId("modified-from").value,
+      modifiedTo: byId("modified-to").value,
+      catalogKeys: loadedCatalogs.filter(c => catalogSelection.has(c.index)).map(catalogKey)
+    };
+  }
+  function searchIdentity(entry) {
+    return JSON.stringify(entry);
+  }
+  function searchTitle(entry) {
+    const description = entry.text.trim() || "(tous les fichiers)";
+    return description + (entry.extensions.length ? " · " + entry.extensions.join(", ") : "") +
+      (entry.regex ? " · regex" : "");
+  }
+  function restoreSearch(entry) {
+    byId("query").value = entry.text;
+    byId("regex").checked = Boolean(entry.regex);
+    byId("extensions").value = entry.extensions.join(", ");
+    byId("max-results").value = entry.maxResults;
+    byId("min-size").value = entry.minSizeKo || "";
+    byId("modified-from").value = entry.modifiedFrom || "";
+    byId("modified-to").value = entry.modifiedTo || "";
+    const keys = new Set(entry.catalogKeys);
+    catalogSelection = new Set(loadedCatalogs.filter(c => keys.has(catalogKey(c))).map(c => c.index));
+    renderSelectionCheckboxes();
+    byId("saved-status").textContent = "Critères restaurés. Lancez la recherche pour les appliquer.";
+    byId("query").focus();
+  }
+  function renderSavedList(containerId, entries, isFavorite) {
+    const container = byId(containerId);
+    container.replaceChildren();
+    if (!entries.length) {
+      const placeholder = document.createElement("span");
+      placeholder.className = "status";
+      placeholder.textContent = isFavorite ? "Aucun favori." : "Aucune recherche récente.";
+      container.appendChild(placeholder);
+      return;
+    }
+    for (const entry of entries) {
+      const row = document.createElement("div");
+      row.className = "saved-search";
+      const label = document.createElement("span");
+      label.className = "saved-label";
+      label.textContent = searchTitle(entry);
+      label.title = searchTitle(entry);
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "copy";
+      restore.textContent = "Restaurer";
+      restore.addEventListener("click", () => restoreSearch(entry));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "copy";
+      remove.textContent = "Supprimer";
+      remove.setAttribute("aria-label", "Supprimer " + searchTitle(entry));
+      remove.addEventListener("click", () => {
+        const list = isFavorite ? favorites : history;
+        const updated = list.filter(item => searchIdentity(item) !== searchIdentity(entry));
+        if (isFavorite) { favorites = updated; persistSaved(favoritesKey, favorites); }
+        else { history = updated; persistSaved(historyKey, history); }
+        renderSavedSearches();
+      });
+      row.append(label, restore, remove);
+      container.appendChild(row);
+    }
+  }
+  function renderSavedSearches() {
+    renderSavedList("favorites-list", favorites, true);
+    renderSavedList("history-list", history, false);
+  }
+  function addToHistory(entry) {
+    history = [entry, ...history.filter(item => searchIdentity(item) !== searchIdentity(entry))].slice(0, maxSaved);
+    persistSaved(historyKey, history);
+    renderSavedSearches();
+  }
+  byId("save-favorite").addEventListener("click", () => {
+    const entry = captureSearch();
+    if (favorites.some(item => searchIdentity(item) === searchIdentity(entry))) {
+      byId("saved-status").textContent = "Cette recherche figure déjà dans les favoris.";
+      return;
+    }
+    favorites = [entry, ...favorites].slice(0, maxSaved);
+    if (persistSaved(favoritesKey, favorites))
+      byId("saved-status").textContent = "Recherche ajoutée aux favoris.";
+    renderSavedSearches();
+  });
+  byId("clear-history").addEventListener("click", () => {
+    if (!history.length || !confirm("Effacer tout l’historique de recherche local ?")) return;
+    history = [];
+    persistSaved(historyKey, history);
+    renderSavedSearches();
+  });
+  renderSavedSearches();
+
   refreshButton.addEventListener("click", async () => {
     refreshButton.disabled = true;
     message("Actualisation des catalogues en cours…");
@@ -398,7 +540,6 @@ public static class WebUi
     const extensions = byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean);
     const maxResults = Number(byId("max-results").value);
     const minSizeText = byId("min-size").value.trim();
-    const maxSizeText = byId("max-size").value.trim();
     const modifiedFromText = byId("modified-from").value;
     const modifiedToText = byId("modified-to").value;
     const payload = {
@@ -409,21 +550,21 @@ public static class WebUi
     try {
       if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 1000)
         throw new Error("Le nombre de résultats doit être compris entre 1 et 1000.");
-      function parseSize(value, label) {
-        if (!/^\d+$/.test(value)) throw new Error(label + " doit être un entier positif ou nul.");
-        const size = Number(value);
-        if (!Number.isSafeInteger(size)) throw new Error(label + " dépasse la précision maximale du navigateur.");
-        return size;
+      function parseMinSizeKo(value) {
+        if (!/^\d+$/.test(value)) throw new Error("La taille minimale doit être un entier positif ou nul en Ko.");
+        const kilobytes = Number(value);
+        const bytes = kilobytes * 1024;
+        if (!Number.isSafeInteger(bytes))
+          throw new Error("La taille minimale dépasse la précision maximale du navigateur.");
+        return bytes;
       }
-      if (minSizeText) payload.minSize = parseSize(minSizeText, "La taille minimale");
-      if (maxSizeText) payload.maxSize = parseSize(maxSizeText, "La taille maximale");
-      if (payload.minSize !== undefined && payload.maxSize !== undefined && payload.minSize > payload.maxSize)
-        throw new Error("La taille minimale ne peut pas dépasser la taille maximale.");
+      if (minSizeText) payload.minSize = parseMinSizeKo(minSizeText);
       // Catalog timestamps use UTC days; include every file on the selected final date.
       if (modifiedFromText) payload.modifiedFrom = modifiedFromText + "T00:00:00.000Z";
       if (modifiedToText) payload.modifiedTo = modifiedToText + "T23:59:59.999Z";
       if (modifiedFromText && modifiedToText && modifiedFromText > modifiedToText)
         throw new Error("La date de début ne peut pas dépasser la date de fin.");
+      const submittedSearch = captureSearch();
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -437,6 +578,7 @@ public static class WebUi
       currentPage = 0;
       displayResults();
       message(data.count + " résultat(s) affiché(s).");
+      addToHistory(submittedSearch);
     } catch (error) {
       if (activeController === controller && error.name !== "AbortError") {
         currentHits = [];

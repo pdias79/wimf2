@@ -31,14 +31,16 @@ public class WebUiTests
         Assert.DoesNotContain("<link rel=\"stylesheet\"", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
     [Fact]
-    public void ExposesSizeAndUtcDateFiltersWithValidation()
+    public void ExposesMinimumSizeInKoAndUtcDateFilters()
     {
-        foreach (var id in new[] { "min-size", "max-size", "modified-from", "modified-to" })
+        foreach (var id in new[] { "min-size", "modified-from", "modified-to" })
             Assert.Contains("id=" + (char)34 + id + (char)34, WebUi.Html);
-        Assert.Contains("payload.minSize = parseSize", WebUi.Html);
-        Assert.Contains("payload.maxSize = parseSize", WebUi.Html);
-        Assert.Contains("Number.isSafeInteger(size)", WebUi.Html);
-        Assert.Contains("payload.minSize > payload.maxSize", WebUi.Html);
+        Assert.Contains("Taille min. (Ko)", WebUi.Html);
+        Assert.DoesNotContain("id=" + (char)34 + "max-size" + (char)34, WebUi.Html);
+        Assert.Contains("const bytes = kilobytes * 1024", WebUi.Html);
+        Assert.Contains("Number.isSafeInteger(bytes)", WebUi.Html);
+        Assert.Contains("payload.minSize = parseMinSizeKo(minSizeText)", WebUi.Html);
+        Assert.DoesNotContain("payload.maxSize", WebUi.Html);
         Assert.Contains("payload.modifiedFrom = modifiedFromText", WebUi.Html);
         Assert.Contains("T00:00:00.000Z", WebUi.Html);
         Assert.Contains("T23:59:59.999Z", WebUi.Html);
@@ -138,6 +140,27 @@ public class WebUiTests
         Assert.Contains("makeCell(row, formatSize(hit.size))", WebUi.Html);
         Assert.Contains("sizeCell.title = exactByteFormatter.format(hit.size) + \" octets\"", WebUi.Html);
         Assert.DoesNotContain("new Intl.NumberFormat(\"fr-FR\").format(hit.size) + \" o\"", WebUi.Html);
+    }
+
+    [Fact]
+    public void SearchHistoryAndFavoritesStayLocalAndRestoreAllFilters()
+    {
+        foreach (var id in new[] { "saved-search-panel", "save-favorite", "clear-history",
+            "history-list", "favorites-list", "saved-status" })
+            Assert.Contains("id=" + (char)34 + id + (char)34, WebUi.Html);
+        Assert.Contains("wimf2.history.v2", WebUi.Html);
+        Assert.Contains("wimf2.favorites.v2", WebUi.Html);
+        Assert.Contains("localStorage.getItem", WebUi.Html);
+        Assert.Contains("localStorage.setItem", WebUi.Html);
+        Assert.Contains("const maxSaved = 20", WebUi.Html);
+        Assert.Contains("function restoreSearch(entry)", WebUi.Html);
+        Assert.Contains("byId(\"min-size\").value = entry.minSizeKo", WebUi.Html);
+        Assert.Contains("byId(\"modified-from\").value = entry.modifiedFrom", WebUi.Html);
+        Assert.Contains("catalogSelection = new Set(loadedCatalogs.filter", WebUi.Html);
+        Assert.Contains("const submittedSearch = captureSearch()", WebUi.Html);
+        Assert.Contains("addToHistory(submittedSearch)", WebUi.Html);
+        Assert.Contains("container.replaceChildren()", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
 }
