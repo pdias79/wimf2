@@ -229,6 +229,19 @@ if ((sources.Count > 0 || paths.Count > 0) && refreshSeconds > 0)
     }, shutdown);
 }
 
+if (options.Indexing is { Length: > 0 })
+{
+    var shutdown = app.Lifetime.ApplicationStopping;
+    var scheduler = new CatalogIndexScheduler(options.Indexing);
+    _ = Task.Run(async () =>
+    {
+        try { await scheduler.RunAsync(shutdown); }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+        catch (Exception ex) { Console.Error.WriteLine($"Indexing scheduler stopped: {ex.Message}"); }
+    }, shutdown);
+    Console.WriteLine($"Scheduled indexing configured for {options.Indexing.Length} catalog(s).");
+}
+
 Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");
 if (enableFileActions) Console.WriteLine("Local file actions enabled (requires an interactive desktop session).");
 await app.RunAsync();
