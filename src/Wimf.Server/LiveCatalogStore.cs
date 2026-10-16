@@ -34,9 +34,10 @@ public sealed class LiveCatalogStore
 
     /// <summary>Read local catalogs on startup, then reload changed files on refresh.</summary>
     public LiveCatalogStore(IEnumerable<string> localPaths, IEnumerable<string> sources,
-        string? cacheDirectory)
+        string? cacheDirectory, bool loadLocalFiles)
         : this(Array.Empty<FileCatalog>(), sources, cacheDirectory)
     {
+        if (!loadLocalFiles) throw new ArgumentException("Use the existing snapshot constructor for preloaded catalogs.", nameof(loadLocalFiles));
         _localPaths = localPaths.ToArray();
         _localCatalogs = new FileCatalog[_localPaths.Length];
         _localStamps = new (long, long)[_localPaths.Length];
