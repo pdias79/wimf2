@@ -62,21 +62,16 @@ var cacheDirectory = options.CacheDirectory;
 var refreshSeconds = options.RefreshSeconds;
 var enableFileActions = options.EnableFileActions;
 
-var catalogs = new List<Wimf.Catalog.Catalog>();
-foreach (var path in paths)
+LiveCatalogStore store;
+try { store = new LiveCatalogStore(paths, sources, cacheDirectory); }
+catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
+                           or System.Text.DecoderFallbackException or ArgumentException)
 {
-    try { catalogs.Add(LegacyCatalogReader.ReadFile(path)); }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
-                               or System.Text.DecoderFallbackException or ArgumentException)
-    {
-        Console.Error.WriteLine($"Unable to load catalog '{path}': {ex.Message}");
-        return 2;
-    }
+    Console.Error.WriteLine($"Unable to load local catalogs: {ex.Message}");
+    return 2;
 }
-
-var store = new LiveCatalogStore(catalogs, sources, cacheDirectory);
 var initialRefresh = await store.RefreshAsync();
-Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s); {initialRefresh.FailedSources} source(s) unavailable.");
+Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s); {initialRefresh.FailedSources} source(s) unavailable, {initialRefresh.FailedLocalCatalogs} local catalog(s) unavailable.");
 
 var builder = WebApplication.CreateSlimBuilder(Array.Empty<string>());
 builder.WebHost.UseUrls("http://127.0.0.1:5080");
@@ -195,7 +190,7 @@ app.MapPost("/api/refresh", async (CancellationToken cancellationToken) =>
     return Results.Json(summary, WimfJsonContext.Default.RefreshSummary);
 });
 
-if (sources.Count > 0 && refreshSeconds > 0)
+if ((sources.Count > 0 || paths.Count > 0) && refreshSeconds > 0)
 {
     var shutdown = app.Lifetime.ApplicationStopping;
     _ = Task.Run(async () =>
