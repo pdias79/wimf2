@@ -85,4 +85,25 @@ public sealed class DaemonOptionsTests
         }
         finally { Directory.Delete(directory, true); }
     }
+    [Fact]
+    public void RelativeConfigSearchesParentDirectoriesButPrefersNearestFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-config-" + Guid.NewGuid().ToString("N"));
+        var nested = Path.Combine(root, "src", "Wimf.Server");
+        Directory.CreateDirectory(nested);
+        try
+        {
+            var rootConfig = Path.Combine(root, "wimf.json");
+            File.WriteAllText(rootConfig, "{}");
+            Assert.Equal(rootConfig, DaemonOptions.ResolveConfigurationFilePath("wimf.json", nested));
+            var nestedConfig = Path.Combine(nested, "wimf.json");
+            File.WriteAllText(nestedConfig, "{}");
+            Assert.Equal(nestedConfig, DaemonOptions.ResolveConfigurationFilePath("wimf.json", nested));
+            Assert.Equal(rootConfig, DaemonOptions.ResolveConfigurationFilePath(rootConfig, nested));
+            Assert.Equal(Path.Combine(nested, "missing.json"),
+                DaemonOptions.ResolveConfigurationFilePath("missing.json", nested));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }
