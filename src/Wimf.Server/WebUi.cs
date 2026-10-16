@@ -94,8 +94,7 @@ public static class WebUi
       <label for="regex"><input id="regex" type="checkbox"> Expression régulière</label>
     </div>
     <div class="options advanced" aria-label="Filtres supplémentaires">
-      <label for="min-size">Taille min. (octets) <input id="min-size" type="number" min="0" step="1" placeholder="0"></label>
-      <label for="max-size">Taille max. (octets) <input id="max-size" type="number" min="0" step="1" placeholder="Illimitée"></label>
+      <label for="min-size">Taille min. (Ko) <input id="min-size" type="number" min="0" step="1" placeholder="0"></label>
       <label for="modified-from">Modifié depuis <input id="modified-from" type="date"></label>
       <label for="modified-to">Modifié jusqu’au <input id="modified-to" type="date"></label>
     </div>
@@ -240,8 +239,8 @@ public static class WebUi
     updateCatalogSelectionCount();
   }
 
-  const historyKey = "wimf2.history.v1";
-  const favoritesKey = "wimf2.favorites.v1";
+  const historyKey = "wimf2.history.v2";
+  const favoritesKey = "wimf2.favorites.v2";
   const maxSaved = 20;
   function readSaved(key) {
     try {
@@ -270,8 +269,7 @@ public static class WebUi
       regex: byId("regex").checked,
       extensions: byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean),
       maxResults: byId("max-results").value,
-      minSize: byId("min-size").value,
-      maxSize: byId("max-size").value,
+      minSizeKo: byId("min-size").value,
       modifiedFrom: byId("modified-from").value,
       modifiedTo: byId("modified-to").value,
       catalogKeys: loadedCatalogs.filter(c => catalogSelection.has(c.index)).map(catalogKey)
@@ -290,8 +288,7 @@ public static class WebUi
     byId("regex").checked = Boolean(entry.regex);
     byId("extensions").value = entry.extensions.join(", ");
     byId("max-results").value = entry.maxResults;
-    byId("min-size").value = entry.minSize || "";
-    byId("max-size").value = entry.maxSize || "";
+    byId("min-size").value = entry.minSizeKo || "";
     byId("modified-from").value = entry.modifiedFrom || "";
     byId("modified-to").value = entry.modifiedTo || "";
     const keys = new Set(entry.catalogKeys);
@@ -543,7 +540,6 @@ public static class WebUi
     const extensions = byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean);
     const maxResults = Number(byId("max-results").value);
     const minSizeText = byId("min-size").value.trim();
-    const maxSizeText = byId("max-size").value.trim();
     const modifiedFromText = byId("modified-from").value;
     const modifiedToText = byId("modified-to").value;
     const payload = {
@@ -554,16 +550,15 @@ public static class WebUi
     try {
       if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 1000)
         throw new Error("Le nombre de résultats doit être compris entre 1 et 1000.");
-      function parseSize(value, label) {
-        if (!/^\d+$/.test(value)) throw new Error(label + " doit être un entier positif ou nul.");
-        const size = Number(value);
-        if (!Number.isSafeInteger(size)) throw new Error(label + " dépasse la précision maximale du navigateur.");
-        return size;
+      function parseMinSizeKo(value) {
+        if (!/^\d+$/.test(value)) throw new Error("La taille minimale doit être un entier positif ou nul en Ko.");
+        const kilobytes = Number(value);
+        const bytes = kilobytes * 1024;
+        if (!Number.isSafeInteger(bytes))
+          throw new Error("La taille minimale dépasse la précision maximale du navigateur.");
+        return bytes;
       }
-      if (minSizeText) payload.minSize = parseSize(minSizeText, "La taille minimale");
-      if (maxSizeText) payload.maxSize = parseSize(maxSizeText, "La taille maximale");
-      if (payload.minSize !== undefined && payload.maxSize !== undefined && payload.minSize > payload.maxSize)
-        throw new Error("La taille minimale ne peut pas dépasser la taille maximale.");
+      if (minSizeText) payload.minSize = parseMinSizeKo(minSizeText);
       // Catalog timestamps use UTC days; include every file on the selected final date.
       if (modifiedFromText) payload.modifiedFrom = modifiedFromText + "T00:00:00.000Z";
       if (modifiedToText) payload.modifiedTo = modifiedToText + "T23:59:59.999Z";
