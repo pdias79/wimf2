@@ -20,8 +20,6 @@ public static class LegacyCatalogWriter
             relativeOutput != ".." &&
             !relativeOutput.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
             throw new ArgumentException("The output catalog must be outside the indexed tree.", nameof(outputPath));
-        if (string.Equals(root, Path.GetPathRoot(root), StringComparison.Ordinal))
-            throw new ArgumentException("Index a directory rather than a volume root.", nameof(rootPath));
         if (root.Contains('\n') || root.Contains('\r'))
             throw new ArgumentException("The source root contains a line break.", nameof(rootPath));
 
@@ -37,7 +35,7 @@ public static class LegacyCatalogWriter
             using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             using (var gzip = output.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
                 ? new GZipStream(file, CompressionLevel.Fastest, leaveOpen: true) : null)
-            using (var writer = new StreamWriter(gzip ?? file, new UTF8Encoding(false), leaveOpen: true))
+            using (var writer = new StreamWriter(gzip ?? file, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true))
             {
                 writer.WriteLine("[WIMF Catalog]");
                 writer.WriteLine(name);
