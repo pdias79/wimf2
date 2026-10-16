@@ -124,6 +124,7 @@ public static class WebUi
   </section>
   <section class="panel" aria-label="Résultats">
     <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span></div></div>
+    <p id="refresh-report" class="status" role="status" aria-live="polite"></p>
     <div class="result-tools">
       <label for="result-sort">Trier les résultats affichés :</label>
       <select id="result-sort" aria-label="Tri des résultats">
@@ -184,6 +185,17 @@ public static class WebUi
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" });
   const refreshButton = byId("refresh");
   const refreshTime = byId("refresh-time");
+  const refreshReport = byId("refresh-report");
+  let observedRefresh = null;
+  function showRefreshReport(failedLocalCatalogs, failedSources) {
+    const local = Number(failedLocalCatalogs) || 0;
+    const network = Number(failedSources) || 0;
+    refreshReport.classList.toggle("error", local + network > 0);
+    refreshReport.textContent = local || network
+      ? "Dernière actualisation : " + local + " catalogue(s) local(aux) non rechargé(s), " +
+        network + " source(s) réseau indisponible(s). Dernières versions valides conservées si disponibles."
+      : "Dernière actualisation réussie : aucune erreur signalée.";
+  }
   const showTime = value => { refreshTime.textContent = value ? " · Dernière actualisation : " + new Date(value).toLocaleString("fr-FR") : ""; };
   function catalogKey(catalog) {
     return catalog.name + "\\u0000" + catalog.rootPath;
@@ -374,7 +386,11 @@ public static class WebUi
       if (!catalogsResponse.ok) throw new Error("Impossible de charger les catalogues actualisés.");
       renderCatalogs(await catalogsResponse.json());
       showTime(data.completedAt);
-      message(data.failedSources ? data.failedSources + " source(s) indisponible(s), cache conservé." : "Catalogues actualisés.", Boolean(data.failedSources));
+      observedRefresh = data.completedAt;
+      showRefreshReport(data.failedLocalCatalogs, data.failedSources);
+      message(data.failedLocalCatalogs || data.failedSources
+        ? "Actualisation partielle : certains catalogues n’ont pas pu être rechargés."
+        : "Catalogues actualisés.", Boolean(data.failedLocalCatalogs || data.failedSources));
     } catch (error) { message(error.message || "Erreur réseau.", true); }
     finally { refreshButton.disabled = false; }
   });
@@ -599,11 +615,34 @@ public static class WebUi
     byId("health").textContent = "Connecté";
     renderCatalogs(catalogs);
     showTime(refreshStatus.lastRefresh);
+    observedRefresh = refreshStatus.lastRefresh;
+    if (refreshStatus.lastRefresh) showRefreshReport(refreshStatus.failedLocalCatalogs, refreshStatus.failedSources);
     if (catalogs.length === 0) message("Aucun catalogue chargé : démarrer wimfd avec --catalog.");
   }).catch(() => {
     byId("health").textContent = "Déconnecté";
     message("Impossible de contacter le daemon.", true);
   });
+  // Automatic server refreshes happen without a button click. Poll only the
+  // lightweight status endpoint; reload the catalog list when a new refresh finishes.
+  let checkingRefresh = false;
+  async function checkRefreshStatus() {
+    if (checkingRefresh || refreshButton.disabled) return;
+    checkingRefresh = true;
+    try {
+      const response = await fetch("/api/refresh-status");
+      if (!response.ok) return;
+      const state = await response.json();
+      if (!state.lastRefresh || state.lastRefresh === observedRefresh) return;
+      const catalogsResponse = await fetch("/api/catalogs");
+      if (!catalogsResponse.ok) return;
+      renderCatalogs(await catalogsResponse.json());
+      showTime(state.lastRefresh);
+      showRefreshReport(state.failedLocalCatalogs, state.failedSources);
+      observedRefresh = state.lastRefresh;
+    } catch { /* A temporary disconnect should not interrupt a search. */ }
+    finally { checkingRefresh = false; }
+  }
+  setInterval(checkRefreshStatus, 15000);
 })();
 </script>
 </body>
