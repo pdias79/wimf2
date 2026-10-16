@@ -35,7 +35,7 @@ public static class LegacyCatalogWriter
             using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             using (var gzip = output.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
                 ? new GZipStream(file, CompressionLevel.Fastest, leaveOpen: true) : null)
-            using (var writer = new StreamWriter(gzip ?? file, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true))
+            using (var writer = new StreamWriter((Stream?)gzip ?? file, new UTF8Encoding(false), bufferSize: 4096, leaveOpen: true))
             {
                 writer.WriteLine("[WIMF Catalog]");
                 writer.WriteLine(name);
