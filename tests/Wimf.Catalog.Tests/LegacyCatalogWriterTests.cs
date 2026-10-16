@@ -119,4 +119,49 @@ public sealed class LegacyCatalogWriterTests
         }
     }
 
+    [Theory]
+    [InlineData(".txt")]
+    [InlineData(".txt.gz")]
+    public void ExcludesNamedFilesAndFoldersWithoutTouchingSimilarPrefix(string suffix)
+    {
+        var work = Path.Combine(Path.GetTempPath(), "wimf-exclude-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(work, "source");
+        Directory.CreateDirectory(Path.Combine(root, "Private"));
+        Directory.CreateDirectory(Path.Combine(root, "PrivateAgain"));
+        File.WriteAllText(Path.Combine(root, "Private", "secret.txt"), "secret");
+        File.WriteAllText(Path.Combine(root, "PrivateAgain", "public.txt"), "public");
+        File.WriteAllText(Path.Combine(root, "ignore.txt"), "ignored");
+        File.WriteAllText(Path.Combine(root, "keep.txt"), "kept");
+        var output = Path.Combine(work, "catalog" + suffix);
+        try
+        {
+            var count = LegacyCatalogWriter.Build(root, output, excludePaths: ["Private", "ignore.txt"]);
+            Assert.Equal(3, count);
+            var catalog = LegacyCatalogReader.ReadFile(output);
+            Assert.Empty(catalog.Diagnostics);
+            Assert.Equal(["PrivateAgain", "keep.txt", "public.txt"],
+                catalog.EnumerateEntries().Select(x => x.Name).OrderBy(x => x, StringComparer.Ordinal));
+            Assert.Equal(Path.Combine(root, "PrivateAgain", "public.txt"),
+                catalog.GetFullPath(catalog.EnumerateEntries().Single(x => x.Name == "public.txt").Id));
+        }
+        finally { Directory.Delete(work, true); }
+    }
+
+    [Fact]
+    public void RejectsExclusionOfRootOrPathOutsideRoot()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "wimf-exclude-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(work);
+        var output = Path.Combine(work, "catalog.txt");
+        try
+        {
+            Assert.Throws<ArgumentException>(() => LegacyCatalogWriter.Build(work, output, excludePaths: ["."]));
+            Assert.Throws<ArgumentException>(() => LegacyCatalogWriter.Build(work, output, excludePaths: [".."]));
+            Assert.Throws<ArgumentException>(() => LegacyCatalogWriter.Build(work, output,
+                excludePaths: [Path.Combine(work, "..", "outside")]));
+            Assert.False(File.Exists(output));
+        }
+        finally { Directory.Delete(work, true); }
+    }
+
 }

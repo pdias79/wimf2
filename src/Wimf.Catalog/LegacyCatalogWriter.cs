@@ -8,13 +8,15 @@ namespace Wimf.Catalog;
 public static class LegacyCatalogWriter
 {
     public static int Build(string rootPath, string outputPath, string? catalogName = null,
-        CancellationToken cancellationToken = default, Action<string>? onSkipped = null)
+        CancellationToken cancellationToken = default, Action<string>? onSkipped = null,
+        IEnumerable<string>? excludePaths = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         var root = Path.GetFullPath(rootPath);
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException($"Source directory not found: {root}");
         var output = Path.GetFullPath(outputPath);
+        var exclusions = new CatalogPathExclusions(root, excludePaths);
         // The destination may be within the indexed tree (including a disk root).
         // Omit both the existing output and the file being written to prevent self-indexing.
         var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -68,6 +70,7 @@ public static class LegacyCatalogWriter
                     foreach (var child in children)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
+                        if (exclusions.Contains(child.FullName)) continue;
                         if (string.Equals(child.FullName, output, pathComparison) ||
                             string.Equals(child.FullName, temporary, pathComparison)) continue;
                         // The legacy semicolon-separated format cannot encode these names.
