@@ -54,16 +54,26 @@ public sealed class LegacyCatalogWriterTests
     }
 
     [Fact]
-    public void FailsSafelyForUnsupportedSemicolonNames()
+    public void SkipsUnsupportedSemicolonFileAndDirectoryNames()
     {
         var work = Path.Combine(Path.GetTempPath(), "wimf-build-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         File.WriteAllText(Path.Combine(work, "unsafe;file.txt"), "content");
+        File.WriteAllText(Path.Combine(work, "safe.txt"), "ok");
+        var skippedFolder = Path.Combine(work, "unsafe;folder");
+        Directory.CreateDirectory(skippedFolder);
+        File.WriteAllText(Path.Combine(skippedFolder, "hidden.txt"), "hidden");
         var output = work + ".txt.gz";
         try
         {
-            Assert.Throws<InvalidDataException>(() => LegacyCatalogWriter.Build(work, output));
-            Assert.False(File.Exists(output));
+            var skipped = new List<string>();
+            Assert.Equal(1, LegacyCatalogWriter.Build(work, output, onSkipped: skipped.Add));
+            var catalog = LegacyCatalogReader.ReadFile(output);
+            Assert.Empty(catalog.Diagnostics);
+            Assert.Equal("safe.txt", Assert.Single(catalog.EnumerateEntries()).Name);
+            Assert.Equal(2, skipped.Count);
+            Assert.Contains(skipped, warning => warning.Contains("unsafe;file.txt", StringComparison.Ordinal));
+            Assert.Contains(skipped, warning => warning.Contains("unsafe;folder", StringComparison.Ordinal));
         }
         finally
         {
@@ -72,6 +82,7 @@ public sealed class LegacyCatalogWriterTests
         }
     }
     [Fact]
+
     public void SkipsUnreadableSubdirectoryAndContinuesWithReadableSiblings()
     {
         if (!OperatingSystem.IsLinux()) return;
