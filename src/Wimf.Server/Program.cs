@@ -6,22 +6,40 @@ using Wimf.Server;
 // Standalone catalog-creation command: no web daemon is started.
 if (args.Length > 0 && args[0] == "--build-root")
 {
-    if (args.Length is not (4 or 5 or 6 or 7) || args[2] != "--output" ||
-        (args.Length >= 6 && args[4] != "--name") ||
-        (args.Length == 5 && args[4] != "--update-existing") ||
-        (args.Length == 7 && args[6] != "--update-existing"))
+    const string usage = "Usage: wimfd --build-root DIRECTORY --output CATALOG.txt[.gz] [--name NAME] [--update-existing] [--exclude PATH]...";
+    if (args.Length < 4 || args[2] != "--output")
     {
-        Console.Error.WriteLine("Usage: wimfd --build-root DIRECTORY --output CATALOG.txt[.gz] [--name NAME] [--update-existing]");
+        Console.Error.WriteLine(usage);
         return 2;
     }
     try
     {
-        var name = args.Length >= 6 ? args[5] : null;
-        var update = args[^1] == "--update-existing";
+        string? name = null;
+        var update = false;
+        var exclusions = new List<string>();
+        for (var i = 4; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--name" when name is null && i + 1 < args.Length &&
+                    !args[i + 1].StartsWith("--", StringComparison.Ordinal):
+                    name = args[++i];
+                    break;
+                case "--update-existing" when !update:
+                    update = true;
+                    break;
+                case "--exclude" when i + 1 < args.Length &&
+                    !args[i + 1].StartsWith("--", StringComparison.Ordinal):
+                    exclusions.Add(args[++i]);
+                    break;
+                default:
+                    throw new ArgumentException("Unknown, duplicated or incomplete option: " + args[i]);
+            }
+        }
         if (update)
         {
             var summary = LegacyCatalogUpdater.Update(args[1], args[3], name,
-                onSkipped: Console.Error.WriteLine);
+                onSkipped: Console.Error.WriteLine, excludePaths: exclusions);
             Console.WriteLine($"Updated {args[3]}: {summary.Total} entries; " +
                 $"{summary.Added} added, {summary.Modified} modified, {summary.Removed} removed, " +
                 $"{summary.Unchanged} unchanged; {summary.Skipped} paths skipped.");
@@ -30,7 +48,8 @@ if (args.Length > 0 && args[0] == "--build-root")
         {
             var skipped = 0;
             var count = LegacyCatalogWriter.Build(args[1], args[3], name,
-                onSkipped: warning => { skipped++; Console.Error.WriteLine(warning); });
+                onSkipped: warning => { skipped++; Console.Error.WriteLine(warning); },
+                excludePaths: exclusions);
             Console.WriteLine($"Created {args[3]} with {count} entries; {skipped} paths skipped.");
         }
         return 0;
