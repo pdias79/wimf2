@@ -23,13 +23,16 @@ public static class LegacyCatalogWriter
         if (root.Contains('\n') || root.Contains('\r'))
             throw new ArgumentException("The source root contains a line break.", nameof(rootPath));
 
-        var name = string.IsNullOrWhiteSpace(catalogName) ? Path.GetFileName(Path.TrimEndingDirectorySeparator(root)) : catalogName;
+        var defaultName = Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
+        var name = string.IsNullOrWhiteSpace(catalogName) ?
+            (string.IsNullOrWhiteSpace(defaultName) ? root : defaultName) : catalogName;
         if (name.Contains('\n') || name.Contains('\r'))
             throw new ArgumentException("The catalog name contains a line break.", nameof(catalogName));
 
         var outputDirectory = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(outputDirectory);
         var temporary = Path.Combine(outputDirectory, "." + Path.GetFileName(output) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        var nextId = 0;
         try
         {
             using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -43,7 +46,6 @@ public static class LegacyCatalogWriter
                 writer.WriteLine(DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
                 writer.WriteLine(); // Legacy extension-header field; reader accepts an empty list.
 
-                var nextId = 0;
                 var stack = new Stack<(DirectoryInfo Folder, int Parent)>();
                 stack.Push((new DirectoryInfo(root), 0));
                 while (stack.Count > 0)
@@ -90,7 +92,7 @@ public static class LegacyCatalogWriter
                 // Number of records is derived later via the reader.
             }
             File.Move(temporary, output, overwrite: true);
-            return LegacyCatalogReader.ReadFile(output).RecordCount;
+            return nextId;
         }
         finally
         {
