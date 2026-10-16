@@ -56,8 +56,8 @@ catch (Exception ex) when (ex is ArgumentException or IOException or Unauthorize
     return 2;
 }
 
-var paths = options.Catalogs;
-var sources = options.Sources;
+var paths = options.Catalogs.ToList();
+var sources = options.Sources.ToList();
 var cacheDirectory = options.CacheDirectory;
 var refreshSeconds = options.RefreshSeconds;
 var enableFileActions = options.EnableFileActions;
