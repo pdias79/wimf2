@@ -133,7 +133,7 @@ public class LiveCatalogStoreTests
         {
             var path = Path.Combine(root, "local.txt.gz");
             WriteGzipCatalog(path, Fixture("First"));
-            var store = new LiveCatalogStore([path], Array.Empty<string>(), null);
+            var store = new LiveCatalogStore([path], Array.Empty<string>(), null, loadLocalFiles: true);
             var original = store.Snapshot;
             Assert.Equal("First", original[0].Header.Name);
 
@@ -190,7 +190,7 @@ public class LiveCatalogStoreTests
             var network = Path.Combine(root, "network.txt");
             File.WriteAllText(path, Fixture("Local"));
             File.WriteAllText(network, Fixture("Network"));
-            var store = new LiveCatalogStore([path], [network], Path.Combine(root, "cache"));
+            var store = new LiveCatalogStore([path], [network], Path.Combine(root, "cache"), loadLocalFiles: true);
             await store.RefreshAsync();
             Assert.Equal(["Local", "Network"], store.Snapshot.Select(x => x.Header.Name));
             File.WriteAllText(path, Fixture("UpdatedLocal"));
