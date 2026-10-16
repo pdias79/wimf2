@@ -1,0 +1,8 @@
+{
+  "catalogs": [
+    "WIMF_DATABASE_DisqueC.txt.gz"
+  ],
+  "sources": [],
+  "cacheDirectory": null,
+  "refreshSeconds": 300
+}
