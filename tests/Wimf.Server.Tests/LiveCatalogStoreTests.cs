@@ -161,7 +161,7 @@ public class LiveCatalogStoreTests
         {
             var path = Path.Combine(root, "local.txt");
             File.WriteAllText(path, Fixture("Original"));
-            var store = new LiveCatalogStore([path], Array.Empty<string>(), null);
+            var store = new LiveCatalogStore([path], Array.Empty<string>(), null, loadLocalFiles: true);
             var previous = store.Snapshot;
             File.WriteAllText(path, "not a WIMF catalog");
             var invalid = await store.RefreshAsync();
