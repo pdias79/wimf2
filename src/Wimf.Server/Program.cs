@@ -14,8 +14,10 @@ if (args.Length > 0 && args[0] == "--build-root")
     }
     try
     {
-        var count = LegacyCatalogWriter.Build(args[1], args[3], args.Length == 6 ? args[5] : null);
-        Console.WriteLine($"Created {args[3]} with {count} entries.");
+        var skipped = 0;
+        var count = LegacyCatalogWriter.Build(args[1], args[3], args.Length == 6 ? args[5] : null,
+            onSkipped: warning => { skipped++; Console.Error.WriteLine(warning); });
+        Console.WriteLine($"Created {args[3]} with {count} entries; {skipped} inaccessible paths skipped.");
         return 0;
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
