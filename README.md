@@ -300,3 +300,22 @@ Both lists are kept only in the browser's `localStorage`, with separate keys (`w
 ### Minimum size filter in the Web UI
 
 The Web UI offers **Taille min. (Ko)** but no maximum-size field. Enter a nonnegative whole number of kilobytes (1 Ko = 1,024 bytes); the browser converts it to bytes before submitting `minSize` to `POST /api/search`. The server-side API continues to accept byte-based `minSize` and `maxSize` properties for existing clients; only the Web form omits the maximum-size filter. Search history and favorites created with this version store the entered Ko value (storage keys ending in `.v2`); data stored under earlier keys is not automatically imported to avoid interpreting old byte values as Ko.
+
+
+### Creating a WIMF catalog from a directory (PR #23)
+
+The daemon executable now has a separate command-line mode for **building** a legacy-compatible catalog without starting the HTTP server:
+
+```powershell
+dotnet run --project src/Wimf.Server -- --build-root "C:\\Documents" --output "C:\\WimfCatalogs\\Documents.txt.gz" --name "Mes documents"
+```
+
+`--name` is optional (defaults to the directory name). Output ending in `.gz` uses gzip; otherwise it is plain UTF-8. The destination may be inside the indexed directory: the writer excludes both the existing output catalog and its temporary file to prevent self-indexing. Existing output is replaced only after writing a complete temporary catalog. A successful run prints the number of indexed entries.
+
+The writer produces the existing five-line header and legacy `name;extension;size;parent;date` records, including folders and 1-based parent IDs. Record order is deterministic within each directory (ordinal filename sorting). It ignores reparse points / symbolic links to avoid recursive loops, uses modification dates as Unix UTC days, and does not read file contents. File or directory names containing semicolons or line breaks are skipped with a warning (including entire subtrees under incompatible directory names), because the historical format cannot encode those names losslessly. Inaccessible subdirectories and individual file entries are skipped with a warning on stderr, and the scan continues with readable siblings. The summary reports how many paths were skipped; these paths are absent from the catalog (some inaccessible directory entries may remain as empty folder records). If the root itself cannot be enumerated, or the output cannot be written, catalog generation fails. This first version performs a **full** scan; incremental catalog updates are a separate future change.
+
+Load the generated catalog normally:
+
+```powershell
+dotnet run --project src/Wimf.Server -- --catalog "C:\\WimfCatalogs\\Documents.txt.gz" --enable-file-actions
+```
