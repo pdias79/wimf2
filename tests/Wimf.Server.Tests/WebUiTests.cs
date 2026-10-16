@@ -163,4 +163,20 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void RefreshShowsLocalAndNetworkFailuresAndPollsAutomaticUpdates()
+    {
+        Assert.Contains("id=\"refresh-errors\"", WebUi.Html);
+        Assert.Contains("data.failedLocalCatalogs", WebUi.Html);
+        Assert.Contains("data.failedSources", WebUi.Html);
+        Assert.Contains("showRefreshStatus(refreshStatus)", WebUi.Html);
+        Assert.Contains("showRefreshStatus(data)", WebUi.Html);
+        Assert.Contains("async function pollRefreshStatus()", WebUi.Html);
+        Assert.Contains("setInterval(pollRefreshStatus, 15000)", WebUi.Html);
+        Assert.Contains("latest.lastRefresh !== lastObservedRefresh", WebUi.Html);
+        Assert.Contains("renderCatalogs(await catalogsResponse.json())", WebUi.Html);
+        Assert.Contains("refreshCheckInProgress || refreshRequestInProgress", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }

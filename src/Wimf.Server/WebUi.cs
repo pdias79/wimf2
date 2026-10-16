@@ -123,7 +123,7 @@ public static class WebUi
     <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
   <section class="panel" aria-label="Résultats">
-    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span></div></div>
+    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span><span id="refresh-errors" class="status" role="status"></span></div></div>
     <div class="result-tools">
       <label for="result-sort">Trier les résultats affichés :</label>
       <select id="result-sort" aria-label="Tri des résultats">
@@ -184,6 +184,20 @@ public static class WebUi
   const dateFormatter = new Intl.DateTimeFormat("fr-FR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" });
   const refreshButton = byId("refresh");
   const refreshTime = byId("refresh-time");
+  const refreshErrors = byId("refresh-errors");
+  let lastObservedRefresh = null;
+  let refreshCheckInProgress = false;
+  let refreshRequestInProgress = false;
+  function showRefreshStatus(data) {
+    showTime(data.lastRefresh || data.completedAt);
+    const failedLocal = Number(data.failedLocalCatalogs) || 0;
+    const failedSources = Number(data.failedSources) || 0;
+    const errors = [];
+    if (failedLocal) errors.push(failedLocal + " catalogue(s) local(aux) non rechargé(s)");
+    if (failedSources) errors.push(failedSources + " source(s) réseau indisponible(s)");
+    refreshErrors.textContent = errors.length ? " · " + errors.join(" · ") : "";
+    refreshErrors.classList.toggle("error", errors.length > 0);
+  }
   const showTime = value => { refreshTime.textContent = value ? " · Dernière actualisation : " + new Date(value).toLocaleString("fr-FR") : ""; };
   function catalogKey(catalog) {
     return catalog.name + "\\u0000" + catalog.rootPath;
@@ -365,6 +379,7 @@ public static class WebUi
 
   refreshButton.addEventListener("click", async () => {
     refreshButton.disabled = true;
+    refreshRequestInProgress = true;
     message("Actualisation des catalogues en cours…");
     try {
       const response = await fetch("/api/refresh", { method: "POST" });
@@ -373,10 +388,12 @@ public static class WebUi
       const catalogsResponse = await fetch("/api/catalogs");
       if (!catalogsResponse.ok) throw new Error("Impossible de charger les catalogues actualisés.");
       renderCatalogs(await catalogsResponse.json());
-      showTime(data.completedAt);
-      message(data.failedSources ? data.failedSources + " source(s) indisponible(s), cache conservé." : "Catalogues actualisés.", Boolean(data.failedSources));
+      showRefreshStatus(data);
+      lastObservedRefresh = data.completedAt;
+      const failures = (data.failedLocalCatalogs || 0) + (data.failedSources || 0);
+      message(failures ? "Actualisation partielle : certains catalogues précédents ont été conservés." : "Catalogues actualisés.", Boolean(failures));
     } catch (error) { message(error.message || "Erreur réseau.", true); }
-    finally { refreshButton.disabled = false; }
+    finally { refreshRequestInProgress = false; refreshButton.disabled = false; }
   });
 
   function message(text, isError = false) {
@@ -591,6 +608,30 @@ public static class WebUi
     }
   });
 
+  // Observe automatic refreshes without interrupting an active search.
+  async function pollRefreshStatus() {
+    if (refreshCheckInProgress || refreshRequestInProgress || document.hidden) return;
+    refreshCheckInProgress = true;
+    try {
+      const response = await fetch("/api/refresh-status", { cache: "no-store" });
+      if (!response.ok) throw new Error("État du rafraîchissement indisponible.");
+      const latest = await response.json();
+      if (latest.lastRefresh !== lastObservedRefresh) {
+        const catalogsResponse = await fetch("/api/catalogs", { cache: "no-store" });
+        if (!catalogsResponse.ok) throw new Error("Liste des catalogues indisponible.");
+        renderCatalogs(await catalogsResponse.json());
+        lastObservedRefresh = latest.lastRefresh;
+      }
+      showRefreshStatus(latest);
+    } catch {
+      refreshErrors.textContent = " · État du rafraîchissement indisponible";
+      refreshErrors.classList.add("error");
+    } finally {
+      refreshCheckInProgress = false;
+    }
+  }
+  setInterval(pollRefreshStatus, 15000);
+
   Promise.all([
     fetch("/api/health").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
     fetch("/api/catalogs").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
@@ -598,7 +639,8 @@ public static class WebUi
   ]).then(([health, catalogs, refreshStatus]) => {
     byId("health").textContent = "Connecté";
     renderCatalogs(catalogs);
-    showTime(refreshStatus.lastRefresh);
+    showRefreshStatus(refreshStatus);
+    lastObservedRefresh = refreshStatus.lastRefresh;
     if (catalogs.length === 0) message("Aucun catalogue chargé : démarrer wimfd avec --catalog.");
   }).catch(() => {
     byId("health").textContent = "Déconnecté";

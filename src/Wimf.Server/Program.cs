@@ -181,7 +181,8 @@ app.MapPost("/api/file-action", (HttpContext context, FileActionRequest request)
 });
 
 app.MapGet("/api/refresh-status", () =>
-    Results.Json(new RefreshStatus(store.Snapshot.Length, store.SourceCount, store.LastRefresh),
+    Results.Json(new RefreshStatus(store.Snapshot.Length, store.SourceCount, store.LastRefresh,
+        store.LastSummary?.FailedSources ?? 0, store.LastSummary?.FailedLocalCatalogs ?? 0),
         WimfJsonContext.Default.RefreshStatus));
 
 app.MapPost("/api/refresh", async (CancellationToken cancellationToken) =>

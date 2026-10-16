@@ -59,6 +59,7 @@ public sealed class LiveCatalogStore
 
     public FileCatalog[] Snapshot => Volatile.Read(ref _snapshot);
     public DateTimeOffset? LastRefresh => Volatile.Read(ref _lastSummary)?.CompletedAt;
+    public RefreshSummary? LastSummary => Volatile.Read(ref _lastSummary);
     public int SourceCount => _sources.Length;
     public int LocalCount => _localCatalogs.Length;
 

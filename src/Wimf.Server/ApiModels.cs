@@ -21,7 +21,8 @@ public sealed record SearchResponse(int Count, SearchHit[] Results);
 public sealed record ErrorResponse(string Error);
 public sealed record FileActionRequest(string Action, int CatalogIndex, int Id, string FullPath);
 public sealed record FileActionResponse(bool Success);
-public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOffset? LastRefresh);
+public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOffset? LastRefresh,
+    int FailedSources = 0, int FailedLocalCatalogs = 0);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(HealthResponse))]
