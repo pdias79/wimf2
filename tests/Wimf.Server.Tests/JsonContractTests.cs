@@ -47,4 +47,14 @@ public class JsonContractTests
             .EnumerateArray().Select(element => element.GetInt32()).ToArray());
     }
 
+    [Fact]
+    public void RefreshStatusSerializesLocalAndSourceFailures()
+    {
+        var payload = new RefreshStatus(3, 1, DateTimeOffset.UnixEpoch, 1, 2);
+        var json = JsonSerializer.Serialize(payload, WimfJsonContext.Default.RefreshStatus);
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(1, doc.RootElement.GetProperty("failedSources").GetInt32());
+        Assert.Equal(2, doc.RootElement.GetProperty("failedLocalCatalogs").GetInt32());
+    }
+
 }
