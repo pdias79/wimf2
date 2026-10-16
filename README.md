@@ -398,3 +398,39 @@ dotnet run --project src/Wimf.Server -- `
 The same exclusions work in update mode by appending `--update-existing`. Exclusion paths can be absolute (but must remain within the indexed root) or relative to the indexed root. An excluded file is omitted; an excluded directory and all its descendants are omitted. Matches are case-insensitive on Windows and case-sensitive on Linux. Prefixes are not enough: excluding `Private` does **not** exclude `PrivateAgain`. The indexed root cannot be excluded.
 
 Intentional exclusions are not counted as inaccessible paths and are not stored in the catalog. Repeat the same flags on future updates to keep the same scope. Previously indexed entries that become excluded will be reported as removed.
+
+
+### Scheduled indexing from wimf.json (PR #31)
+
+An optional `indexing` array centralizes the roots, output catalog paths, exclusion rules and independent indexing intervals:
+
+```json
+{
+  "catalogs": ["WIMF_DATABASE_DisqueC.txt.gz", "Archives.txt.gz"],
+  "sources": [],
+  "cacheDirectory": null,
+  "refreshSeconds": 300,
+  "indexing": [
+    {
+      "root": "C:\\",
+      "output": "WIMF_DATABASE_DisqueC.txt.gz",
+      "name": "Disque C",
+      "exclude": ["$Recycle.Bin", "System Volume Information", "Windows\\Temp"],
+      "intervalDays": 7
+    },
+    {
+      "root": "D:\\Archives",
+      "output": "Archives.txt.gz",
+      "name": "Archives",
+      "exclude": ["Temp"],
+      "intervalHours": 12
+    }
+  ]
+}
+```
+
+Each job must specify **exactly one** positive `intervalHours` or `intervalDays` (maximum 3650 days). This allows schedules from hourly to multi-day intervals independently for each catalog. Paths in `root` and `output` are relative to the JSON file location unless absolute; entries in `exclude` are relative to the corresponding **indexing root**, unless absolute. The output must also appear in `catalogs` and only one indexing job may own an output. **Create the output catalog once** with `--build-root` before starting the daemon: local catalogs are still required at startup. Config without `indexing` behaves as before.
+
+When running, the scheduler checks due jobs about once a minute, using each output catalog's last modification time as the last successful indexing time. If an existing catalog is overdue, the first update begins in the background shortly after daemon startup. A failed scan keeps the previous catalog intact where possible and is retried no earlier than one hour later. Shutdown requests cancel indexing. Scans execute sequentially to avoid competing whole-disk workloads.
+
+**Important:** This is a scheduled **full filesystem rescan**, not a journal-based incremental index. `--update-existing` compares changes but reads all file metadata and rewrites the catalog; lengthy scans can consume CPU, I/O and memory. Do not configure very short intervals for large disks. The existing `refreshSeconds` option controls when the Web server reloads the generated catalog, **not** when the disk is rescanned. The background indexing schedule is active only while Wimf is running; missed updates run after the next startup when the catalog is overdue. A manual update using the same output while scheduled indexing is running should be avoided.
