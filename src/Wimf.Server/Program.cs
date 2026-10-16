@@ -6,18 +6,33 @@ using Wimf.Server;
 // Standalone catalog-creation command: no web daemon is started.
 if (args.Length > 0 && args[0] == "--build-root")
 {
-    if (args.Length is not (4 or 6) || args[2] != "--output" ||
-        (args.Length == 6 && args[4] != "--name"))
+    if (args.Length is not (4 or 5 or 6 or 7) || args[2] != "--output" ||
+        (args.Length >= 6 && args[4] != "--name") ||
+        (args.Length == 5 && args[4] != "--update-existing") ||
+        (args.Length == 7 && args[6] != "--update-existing"))
     {
-        Console.Error.WriteLine("Usage: wimfd --build-root DIRECTORY --output CATALOG.txt[.gz] [--name NAME]");
+        Console.Error.WriteLine("Usage: wimfd --build-root DIRECTORY --output CATALOG.txt[.gz] [--name NAME] [--update-existing]");
         return 2;
     }
     try
     {
-        var skipped = 0;
-        var count = LegacyCatalogWriter.Build(args[1], args[3], args.Length == 6 ? args[5] : null,
-            onSkipped: warning => { skipped++; Console.Error.WriteLine(warning); });
-        Console.WriteLine($"Created {args[3]} with {count} entries; {skipped} inaccessible paths skipped.");
+        var name = args.Length >= 6 ? args[5] : null;
+        var update = args[^1] == "--update-existing";
+        if (update)
+        {
+            var summary = LegacyCatalogUpdater.Update(args[1], args[3], name,
+                onSkipped: Console.Error.WriteLine);
+            Console.WriteLine($"Updated {args[3]}: {summary.Total} entries; " +
+                $"{summary.Added} added, {summary.Modified} modified, {summary.Removed} removed, " +
+                $"{summary.Unchanged} unchanged; {summary.Skipped} paths skipped.");
+        }
+        else
+        {
+            var skipped = 0;
+            var count = LegacyCatalogWriter.Build(args[1], args[3], name,
+                onSkipped: warning => { skipped++; Console.Error.WriteLine(warning); });
+            Console.WriteLine($"Created {args[3]} with {count} entries; {skipped} paths skipped.");
+        }
         return 0;
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
