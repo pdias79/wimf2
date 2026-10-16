@@ -3,6 +3,29 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Standalone catalog-creation command: no web daemon is started.
+if (args.Length > 0 && args[0] == "--build-root")
+{
+    if (args.Length is not (3 or 5) || args[2] != "--output" ||
+        (args.Length == 5 && args[4] != "--name"))
+    {
+        Console.Error.WriteLine("Usage: wimfd --build-root DIRECTORY --output CATALOG.txt[.gz] [--name NAME]");
+        return 2;
+    }
+    try
+    {
+        var count = LegacyCatalogWriter.Build(args[1], args[3], args.Length == 5 ? args[4] : null);
+        Console.WriteLine($"Created {args[3]} with {count} entries.");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException or OverflowException)
+    {
+        Console.Error.WriteLine($"Catalog creation failed: {ex.Message}");
+        return 2;
+    }
+}
+
 var paths = new List<string>();
 var sources = new List<string>();
 string? cacheDirectory = null;
