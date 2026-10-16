@@ -34,16 +34,21 @@ public sealed class LegacyCatalogWriterTests
     }
 
     [Fact]
-    public void RejectsOutputInsideSourceAndDoesNotOverwriteIt()
+    public void AllowsOutputInsideSourceWithoutIndexingOutputOrTemporaryFile()
     {
         var work = Path.Combine(Path.GetTempPath(), "wimf-build-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
         var output = Path.Combine(work, "catalog.txt");
-        File.WriteAllText(output, "keep");
+        File.WriteAllText(output, "previous catalog");
+        File.WriteAllText(Path.Combine(work, "document.txt"), "document");
         try
         {
-            Assert.Throws<ArgumentException>(() => LegacyCatalogWriter.Build(work, output));
-            Assert.Equal("keep", File.ReadAllText(output));
+            Assert.Equal(1, LegacyCatalogWriter.Build(work, output));
+            var catalog = LegacyCatalogReader.ReadFile(output);
+            Assert.Single(catalog.EnumerateEntries());
+            Assert.Equal("document.txt", catalog.GetEntry(1)!.Name);
+            Assert.DoesNotContain(catalog.EnumerateEntries(), e => e.Name == "catalog.txt");
+            Assert.DoesNotContain(Directory.EnumerateFiles(work), p => Path.GetFileName(p).EndsWith(".tmp", StringComparison.Ordinal));
         }
         finally { Directory.Delete(work, true); }
     }
