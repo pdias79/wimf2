@@ -71,4 +71,41 @@ public sealed class LegacyCatalogWriterTests
             if (File.Exists(output)) File.Delete(output);
         }
     }
+    [Fact]
+    public void SkipsUnreadableSubdirectoryAndContinuesWithReadableSiblings()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var work = Path.Combine(Path.GetTempPath(), "wimf-build-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(work, "source");
+        var blocked = Path.Combine(root, "Blocked");
+        Directory.CreateDirectory(blocked);
+        File.WriteAllText(Path.Combine(blocked, "secret.txt"), "hidden");
+        File.WriteAllText(Path.Combine(root, "readable.txt"), "visible");
+        var output = Path.Combine(work, "catalog.txt.gz");
+        try
+        {
+            File.SetUnixFileMode(blocked, UnixFileMode.None);
+            // Root/privileged CI users may retain access regardless of Unix mode.
+            var trulyBlocked = false;
+            try { _ = Directory.EnumerateFileSystemEntries(blocked).ToArray(); }
+            catch (UnauthorizedAccessException) { trulyBlocked = true; }
+            if (!trulyBlocked) return;
+
+            var warnings = new List<string>();
+            var count = LegacyCatalogWriter.Build(root, output, onSkipped: warnings.Add);
+            var catalog = LegacyCatalogReader.ReadFile(output);
+            Assert.Equal(count, catalog.RecordCount);
+            Assert.Contains(warnings, message => message.Contains(blocked, StringComparison.Ordinal));
+            Assert.Contains(catalog.EnumerateEntries(), entry => entry.Name == "readable.txt");
+            Assert.DoesNotContain(catalog.EnumerateEntries(), entry => entry.Name == "secret.txt");
+            Assert.Empty(catalog.Diagnostics);
+        }
+        finally
+        {
+            if (Directory.Exists(blocked)) File.SetUnixFileMode(blocked,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Directory.Delete(work, true);
+        }
+    }
+
 }
