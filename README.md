@@ -380,3 +380,21 @@ The periodic scan checks file metadata, **not the underlying filesystem**. Run `
 The embedded UI already provides an **Actualiser les catalogues** button. It now distinguishes failures when refreshing **local catalogs** versus **network sources**. The GET `/api/refresh-status` response includes the latest `failedLocalCatalogs` and `failedSources` counts in addition to the last completion time. A background check every 15 seconds updates the timestamp, warnings and catalog selection list after the daemon's automatic refresh, without resetting an active search. The status check does not regenerate catalogs or trigger refresh itself.
 
 When a source is unavailable, Wimf retains its last valid in-memory catalog; the UI warns that it was not reloaded. To test, temporarily make a local catalog unreadable or replace it with invalid data and click the refresh button, then restore it and refresh again. Existing file-search results remain visible until a new search is submitted.
+
+
+### Explicit path exclusions during catalog creation (PR #30)
+
+To omit known system directories during a whole-disk scan, repeat `--exclude`:
+
+```powershell
+dotnet run --project src/Wimf.Server -- `
+  --build-root "C:\" `
+  --output "C:\Wimf\DisqueC.txt.gz" `
+  --name "Disque C" `
+  --exclude '$Recycle.Bin' `
+  --exclude 'System Volume Information'
+```
+
+The same exclusions work in update mode by appending `--update-existing`. Exclusion paths can be absolute (but must remain within the indexed root) or relative to the indexed root. An excluded file is omitted; an excluded directory and all its descendants are omitted. Matches are case-insensitive on Windows and case-sensitive on Linux. Prefixes are not enough: excluding `Private` does **not** exclude `PrivateAgain`. The indexed root cannot be excluded.
+
+Intentional exclusions are not counted as inaccessible paths and are not stored in the catalog. Repeat the same flags on future updates to keep the same scope. Previously indexed entries that become excluded will be reported as removed.
