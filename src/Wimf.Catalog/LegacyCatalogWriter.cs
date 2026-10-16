@@ -70,6 +70,14 @@ public static class LegacyCatalogWriter
                         cancellationToken.ThrowIfCancellationRequested();
                         if (string.Equals(child.FullName, output, pathComparison) ||
                             string.Equals(child.FullName, temporary, pathComparison)) continue;
+                        // The legacy semicolon-separated format cannot encode these names.
+                        // Skip the entry (and its descendants if it is a directory) rather
+                        // than abandoning an entire disk scan.
+                        if (child.Name.IndexOfAny([';', '\r', '\n']) >= 0)
+                        {
+                            onSkipped?.Invoke($"Skipped unsupported file name: {child.FullName}");
+                            continue;
+                        }
                         bool isDirectory;
                         string extension;
                         ulong size;
@@ -78,8 +86,6 @@ public static class LegacyCatalogWriter
                         {
                             var attributes = child.Attributes;
                             if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
-                            if (child.Name.IndexOfAny([';', '\r', '\n']) >= 0)
-                                throw new InvalidDataException($"Unsupported file name for legacy format: {child.Name}");
                             isDirectory = (attributes & FileAttributes.Directory) != 0;
                             extension = isDirectory ? "folder" : Path.GetExtension(child.Name).TrimStart('.');
                             size = isDirectory ? 0UL : checked((ulong)((FileInfo)child).Length);
