@@ -124,4 +124,90 @@ public class LiveCatalogStoreTests
         finally { Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task ReplacesChangedLocalCatalogWithoutRestart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-local-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "local.txt.gz");
+            WriteGzipCatalog(path, Fixture("First"));
+            var store = new LiveCatalogStore([path], Array.Empty<string>(), null);
+            var original = store.Snapshot;
+            Assert.Equal("First", original[0].Header.Name);
+
+            WriteGzipCatalog(path, Fixture("Second"));
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(3));
+            var result = await store.RefreshAsync();
+            Assert.Equal(0, result.FailedLocalCatalogs);
+            Assert.Equal("Second", store.Snapshot[0].Header.Name);
+            Assert.Equal("First", original[0].Header.Name);
+            Assert.NotSame(original, store.Snapshot);
+
+            var unchanged = store.Snapshot;
+            await store.RefreshAsync();
+            Assert.Same(unchanged, store.Snapshot);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task BrokenOrMissingLocalFileKeepsLastGoodCatalogUntilRecovery()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-local-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "local.txt");
+            File.WriteAllText(path, Fixture("Original"));
+            var store = new LiveCatalogStore([path], Array.Empty<string>(), null);
+            var previous = store.Snapshot;
+            File.WriteAllText(path, "not a WIMF catalog");
+            var invalid = await store.RefreshAsync();
+            Assert.Equal(1, invalid.FailedLocalCatalogs);
+            Assert.Same(previous, store.Snapshot);
+            File.Delete(path);
+            var missing = await store.RefreshAsync();
+            Assert.Equal(1, missing.FailedLocalCatalogs);
+            Assert.Same(previous, store.Snapshot);
+            File.WriteAllText(path, Fixture("Recovered"));
+            var repaired = await store.RefreshAsync();
+            Assert.Equal(0, repaired.FailedLocalCatalogs);
+            Assert.Equal("Recovered", store.Snapshot[0].Header.Name);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task ChangedLocalCatalogRetainsPositionBeforeNetworkCatalogs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-local-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "local.txt");
+            var network = Path.Combine(root, "network.txt");
+            File.WriteAllText(path, Fixture("Local"));
+            File.WriteAllText(network, Fixture("Network"));
+            var store = new LiveCatalogStore([path], [network], Path.Combine(root, "cache"));
+            await store.RefreshAsync();
+            Assert.Equal(["Local", "Network"], store.Snapshot.Select(x => x.Header.Name));
+            File.WriteAllText(path, Fixture("UpdatedLocal"));
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(3));
+            await store.RefreshAsync();
+            Assert.Equal(["UpdatedLocal", "Network"], store.Snapshot.Select(x => x.Header.Name));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    private static void WriteGzipCatalog(string path, string text)
+    {
+        using var file = File.Create(path);
+        using var gzip = new System.IO.Compression.GZipStream(file,
+            System.IO.Compression.CompressionLevel.Fastest);
+        using var writer = new StreamWriter(gzip, Encoding.UTF8);
+        writer.Write(text);
+    }
+
 }
