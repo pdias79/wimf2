@@ -141,4 +141,42 @@ public class SequentialSearchEngineTests
         Assert.Empty(_engine.Search([catalog], new() { Text = "broken", MaxResults = 0 }));
     }
 
+    [Fact]
+    public void QuotedPhraseMatchesContiguousWordsInsteadOfSeparatedKeywords()
+    {
+        var catalog = Read("Annual Report.PDF;pdf;1;0;1\nAnnual 2026 Report.PDF;pdf;1;0;1\nReport Annual.PDF;pdf;1;0;1\n");
+        var results = _engine.Search([catalog], new() { Text = "\"Annual Report\"" });
+        Assert.Equal(["Annual Report.PDF"], results.Select(result => result.Entry.Name));
+        Assert.Equal(3, _engine.Search([catalog], new() { Text = "Annual Report" }).Count);
+    }
+
+    [Fact]
+    public void QuotesPreserveWhitespaceAndCombineWithUnquotedTermsInAnyOrder()
+    {
+        var catalog = Read("draft Annual Report final.pdf;pdf;1;0;1\nAnnual Report draft.pdf;pdf;1;0;1\nAnnual  Report draft.pdf;pdf;1;0;1\nReport Annual draft.pdf;pdf;1;0;1\n");
+        var results = _engine.Search([catalog], new() { Text = "draft \"Annual Report\"" });
+        Assert.Equal(["draft Annual Report final.pdf", "Annual Report draft.pdf"],
+            results.Select(result => result.Entry.Name));
+        var doubleSpaces = _engine.Search([catalog], new() { Text = "\"Annual  Report\"" });
+        Assert.Equal("Annual  Report draft.pdf", Assert.Single(doubleSpaces).Entry.Name);
+    }
+
+    [Fact]
+    public void QuotedTermParsingSupportsTabsEmptyQuotesAndCaseInsensitivity()
+    {
+        Assert.Equal(["first", "two three", "four"],
+            SearchTerms.Parse("  first\t\"two three\"  \"\" four "));
+        Assert.Equal(["foobar"], SearchTerms.Parse("foo\"bar\""));
+        var catalog = Read("Annual Report.PDF;pdf;1;0;1\n");
+        Assert.Single(_engine.Search([catalog], new() { Text = "\"annual report\"" }));
+    }
+
+    [Fact]
+    public void UnclosedQuotesFailClearlyButRegexKeepsItsExistingSemantics()
+    {
+        Assert.Throws<ArgumentException>(() => _engine.Search([], new() { Text = "\"unfinished" }));
+        var catalog = Read("Annual Report.PDF;pdf;1;0;1\n");
+        Assert.Single(_engine.Search([catalog], new() { Text = "Annual.*Report", UseRegex = true }));
+    }
+
 }
