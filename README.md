@@ -310,7 +310,7 @@ The daemon executable now has a separate command-line mode for **building** a le
 dotnet run --project src/Wimf.Server -- --build-root "C:\\Documents" --output "C:\\WimfCatalogs\\Documents.txt.gz" --name "Mes documents"
 ```
 
-`--name` is optional (defaults to the directory name). Output ending in `.gz` uses gzip; otherwise it is plain UTF-8. The destination must be **outside the indexed directory**. Existing output is replaced only after writing a complete temporary catalog. A successful run prints the number of indexed entries.
+`--name` is optional (defaults to the directory name). Output ending in `.gz` uses gzip; otherwise it is plain UTF-8. The destination may be inside the indexed directory: the writer excludes both the existing output catalog and its temporary file to prevent self-indexing. Existing output is replaced only after writing a complete temporary catalog. A successful run prints the number of indexed entries.
 
 The writer produces the existing five-line header and legacy `name;extension;size;parent;date` records, including folders and 1-based parent IDs. Record order is deterministic within each directory (ordinal filename sorting). It ignores reparse points / symbolic links to avoid recursive loops, uses modification dates as Unix UTC days, and does not read file contents. File names containing semicolons or line breaks are rejected because that historical format cannot encode them losslessly. Enumeration failures abort instead of silently producing an incomplete catalog. This first version performs a **full** scan; incremental catalog updates are a separate future change.
 
