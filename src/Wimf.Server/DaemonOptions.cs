@@ -11,7 +11,22 @@ public sealed class DaemonConfiguration
     public string[] Sources { get; init; } = [];
     public string? CacheDirectory { get; init; }
     public int RefreshSeconds { get; init; } = 300;
+    public IndexingJobConfiguration[] Indexing { get; init; } = [];
 }
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class IndexingJobConfiguration
+{
+    public string Root { get; init; } = "";
+    public string Output { get; init; } = "";
+    public string? Name { get; init; }
+    public string[] Exclude { get; init; } = [];
+    public int? IntervalHours { get; init; }
+    public int? IntervalDays { get; init; }
+}
+
+public sealed record IndexingJob(string Root, string Output, string? Name,
+    string[] Exclude, TimeSpan Interval);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DaemonConfiguration))]
@@ -19,7 +34,7 @@ internal partial class DaemonConfigurationJsonContext : JsonSerializerContext;
 
 public sealed record DaemonOptions(
     string[] Catalogs, string[] Sources, string? CacheDirectory,
-    int RefreshSeconds, bool EnableFileActions)
+    int RefreshSeconds, bool EnableFileActions, IndexingJob[]? Indexing = null)
 {
     /// <summary>Find a relative config in the daemon's working directory or its ancestors.</summary>
     public static string ResolveConfigurationFilePath(string path, string workingDirectory)
@@ -57,6 +72,7 @@ public sealed record DaemonOptions(
         var sources = new List<string>();
         string? cache = null;
         var refresh = 300;
+        var indexing = new List<IndexingJob>();
         if (configurationFile is not null)
         {
             var fullPath = ResolveConfigurationFilePath(configurationFile, Environment.CurrentDirectory);
@@ -78,6 +94,22 @@ public sealed record DaemonOptions(
             sources.AddRange(document.Sources.Select(path => Resolve(baseDirectory, path)));
             cache = document.CacheDirectory is null ? null : Resolve(baseDirectory, document.CacheDirectory);
             refresh = document.RefreshSeconds;
+            if (document.Indexing is null) throw new ArgumentException("indexing must be an array.");
+            foreach (var job in document.Indexing)
+            {
+                if (job is null) throw new ArgumentException("indexing entries must be objects.");
+                if (job.IntervalHours.HasValue == job.IntervalDays.HasValue)
+                    throw new ArgumentException("Specify exactly one of intervalHours or intervalDays for each indexing job.");
+                var hours = job.IntervalHours ?? checked((long)job.IntervalDays!.Value * 24);
+                if (hours < 1 || hours > 87600)
+                    throw new ArgumentException("Indexing intervals must be between one hour and ten years.");
+                var root = Resolve(baseDirectory, job.Root);
+                var output = Resolve(baseDirectory, job.Output);
+                if (job.Exclude is null) throw new ArgumentException("indexing.exclude must be an array.");
+                _ = new Wimf.Catalog.CatalogPathExclusions(root, job.Exclude);
+                indexing.Add(new IndexingJob(root, output, job.Name, job.Exclude,
+                    TimeSpan.FromHours(hours)));
+            }
         }
 
         var fileActions = false;
@@ -124,6 +156,16 @@ public sealed record DaemonOptions(
             throw new ArgumentException("Catalog and source paths cannot be empty.");
         if (sources.Count > 0 && string.IsNullOrWhiteSpace(cache))
             throw new ArgumentException("--cache-dir or cacheDirectory is required when sources are provided.");
-        return new DaemonOptions(catalogs.ToArray(), sources.ToArray(), cache, refresh, fileActions);
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var localPaths = new HashSet<string>(catalogs.Select(Path.GetFullPath), comparer);
+        var indexedOutputs = new HashSet<string>(comparer);
+        foreach (var job in indexing)
+        {
+            if (!localPaths.Contains(job.Output))
+                throw new ArgumentException("Every indexing output must also appear in catalogs.");
+            if (!indexedOutputs.Add(job.Output))
+                throw new ArgumentException("Each indexing output must be configured only once.");
+        }
+        return new DaemonOptions(catalogs.ToArray(), sources.ToArray(), cache, refresh, fileActions, indexing.ToArray());
     }
 }
