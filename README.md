@@ -319,3 +319,16 @@ Load the generated catalog normally:
 ```powershell
 dotnet run --project src/Wimf.Server -- --catalog "C:\\WimfCatalogs\\Documents.txt.gz" --enable-file-actions
 ```
+
+
+### Updating an existing catalog and reporting changes (PR #24)
+
+After generating a catalog with `--build-root`, run the command again with `--update-existing` to **compare the refreshed snapshot** with its previous content:
+
+```powershell
+dotnet run --project src/Wimf.Server -- --build-root "C:\" --output "C:\Wimf\DisqueC.txt.gz" --update-existing
+```
+
+You can also append `--update-existing` after `--name "Disque C"`. The existing file must be a valid legacy WIMF catalog for the same root path; mismatches and invalid entries are rejected before writing. If `--name` is omitted, the prior catalog name is preserved. This mode compares reconstructed paths and the original format's extension, size and UTC-day modification timestamp, then reports **added**, **modified**, **removed**, **unchanged** and **skipped** counts. The catalog itself is still rewritten atomically to the same legacy gzip/plaintext format, keeping it readable by the existing daemon and UI.
+
+**Scope:** this is a change-aware *full rescan*, not yet a filesystem-journal-based or directory-skipping incremental scan. Every accessible directory is enumerated and file metadata checked; unchanged files are not opened or hashed. Consequently, files changed without a difference in length or whole UTC modification day can be counted as unchanged. Unavailable folders and incompatible names are skipped as in the initial build; their previously indexed files may be reported as removed and will not appear in the updated catalog. Check skipped-path warnings when comparing results. A future phase can introduce reliable true incremental traversal and persistent state.
