@@ -353,7 +353,7 @@ Start the local daemon with:
 dotnet run --project src/Wimf.Server -- --config "C:\Users\Philou\Documents\repos\wimf2\wimf.json" --enable-file-actions
 ```
 
-- Paths in the JSON file can be **relative to the JSON file's directory** or absolute. For sources on a network share, use JSON-escaped Windows UNC paths, e.g. `"\\\\server\\share\\catalog.gz"`, and set a cache directory.
+- The `--config` filename is searched in the daemon's working directory and then its parent directories, so `--config wimf.json` works for a file at the repository root when using `dotnet run --project src/Wimf.Server`. The nearest matching configuration file wins. Paths within the JSON file can be **relative to that JSON file's directory** or absolute. For sources on a network share, use JSON-escaped Windows UNC paths, e.g. `"\\\\server\\share\\catalog.gz"`, and set a cache directory.
 - `catalogs` points to directly loaded files; `sources` lists periodically refreshed source catalogs. `cacheDirectory` is required when there are sources. Set `refreshSeconds` to `0` to disable periodic refresh; otherwise it must be nonnegative. Omitted fields use defaults.
 - Existing CLI arguments work as before. If `--catalog` or `--source` is supplied explicitly, it **replaces** the corresponding JSON array. `--cache-dir` and `--refresh-seconds` override their JSON values.
 - **Security:** native file actions are never enabled by the config file. Explicitly pass `--enable-file-actions` on the command line. Unexpected JSON properties, including `enableFileActions`, are rejected rather than silently accepted.
