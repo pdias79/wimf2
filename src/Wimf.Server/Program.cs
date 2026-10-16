@@ -6,15 +6,15 @@ using Wimf.Server;
 // Standalone catalog-creation command: no web daemon is started.
 if (args.Length > 0 && args[0] == "--build-root")
 {
-    if (args.Length is not (3 or 5) || args[2] != "--output" ||
-        (args.Length == 5 && args[4] != "--name"))
+    if (args.Length is not (4 or 6) || args[2] != "--output" ||
+        (args.Length == 6 && args[4] != "--name"))
     {
         Console.Error.WriteLine("Usage: wimfd --build-root DIRECTORY --output CATALOG.txt[.gz] [--name NAME]");
         return 2;
     }
     try
     {
-        var count = LegacyCatalogWriter.Build(args[1], args[3], args.Length == 5 ? args[4] : null);
+        var count = LegacyCatalogWriter.Build(args[1], args[3], args.Length == 6 ? args[5] : null);
         Console.WriteLine($"Created {args[3]} with {count} entries.");
         return 0;
     }
