@@ -35,7 +35,7 @@ public sealed class SequentialSearchEngine
             regex = new Regex(query.Text, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, query.RegexTimeout);
         }
         var words = query.UseRegex ? Array.Empty<string>() :
-            query.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            SearchTerms.Parse(query.Text);
         var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var extension in query.Extensions)
         {
