@@ -15,11 +15,9 @@ public static class LegacyCatalogWriter
         var root = Path.GetFullPath(rootPath);
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException($"Source directory not found: {root}");
         var output = Path.GetFullPath(outputPath);
-        var relativeOutput = Path.GetRelativePath(root, output);
-        if (relativeOutput == "." || (!Path.IsPathRooted(relativeOutput) &&
-            relativeOutput != ".." &&
-            !relativeOutput.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
-            throw new ArgumentException("The output catalog must be outside the indexed tree.", nameof(outputPath));
+        // The destination may be within the indexed tree (including a disk root).
+        // Omit both the existing output and the file being written to prevent self-indexing.
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (root.Contains('\n') || root.Contains('\r'))
             throw new ArgumentException("The source root contains a line break.", nameof(rootPath));
 
@@ -60,6 +58,8 @@ public static class LegacyCatalogWriter
                     foreach (var child in children)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
+                        if (string.Equals(child.FullName, output, pathComparison) ||
+                            string.Equals(child.FullName, temporary, pathComparison)) continue;
                         if ((child.Attributes & FileAttributes.ReparsePoint) != 0) continue;
                         if (child.Name.IndexOfAny([';', '\r', '\n']) >= 0)
                             throw new InvalidDataException($"Unsupported file name for legacy format: {child.Name}");
