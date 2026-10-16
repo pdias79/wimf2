@@ -63,7 +63,7 @@ var refreshSeconds = options.RefreshSeconds;
 var enableFileActions = options.EnableFileActions;
 
 LiveCatalogStore store;
-try { store = new LiveCatalogStore(paths, sources, cacheDirectory); }
+try { store = new LiveCatalogStore(paths, sources, cacheDirectory, loadLocalFiles: true); }
 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
                            or System.Text.DecoderFallbackException or ArgumentException)
 {
