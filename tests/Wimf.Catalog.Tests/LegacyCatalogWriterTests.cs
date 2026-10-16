@@ -139,7 +139,7 @@ public sealed class LegacyCatalogWriterTests
             Assert.Equal(3, count);
             var catalog = LegacyCatalogReader.ReadFile(output);
             Assert.Empty(catalog.Diagnostics);
-            Assert.Equal(["PrivateAgain", "public.txt", "keep.txt"],
+            Assert.Equal(["PrivateAgain", "keep.txt", "public.txt"],
                 catalog.EnumerateEntries().Select(x => x.Name).OrderBy(x => x, StringComparer.Ordinal));
             Assert.Equal(Path.Combine(root, "PrivateAgain", "public.txt"),
                 catalog.GetFullPath(catalog.EnumerateEntries().Single(x => x.Name == "public.txt").Id));
