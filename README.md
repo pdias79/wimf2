@@ -332,3 +332,31 @@ dotnet run --project src/Wimf.Server -- --build-root "C:\" --output "C:\Wimf\Dis
 You can also append `--update-existing` after `--name "Disque C"`. The existing file must be a valid legacy WIMF catalog for the same root path; mismatches and invalid entries are rejected before writing. If `--name` is omitted, the prior catalog name is preserved. This mode compares reconstructed paths and the original format's extension, size and UTC-day modification timestamp, then reports **added**, **modified**, **removed**, **unchanged** and **skipped** counts. The catalog itself is still rewritten atomically to the same legacy gzip/plaintext format, keeping it readable by the existing daemon and UI.
 
 **Scope:** this is a change-aware *full rescan*, not yet a filesystem-journal-based or directory-skipping incremental scan. Every accessible directory is enumerated and file metadata checked; unchanged files are not opened or hashed. Consequently, files changed without a difference in length or whole UTC modification day can be counted as unchanged. Unavailable folders and incompatible names are skipped as in the initial build; their previously indexed files may be reported as removed and will not appear in the updated catalog. Check skipped-path warnings when comparing results. A future phase can introduce reliable true incremental traversal and persistent state.
+
+
+### Persistent daemon settings (PR #25)
+
+Instead of typing all catalog paths every time, place a `wimf.json` file alongside your catalogs:
+
+```json
+{
+  "catalogs": ["WIMF_DATABASE_DisqueC.txt.gz", "WIMF_DATABASE_DisqueD.txt.gz"],
+  "sources": [],
+  "cacheDirectory": null,
+  "refreshSeconds": 300
+}
+```
+
+Start the local daemon with:
+
+```powershell
+dotnet run --project src/Wimf.Server -- --config "C:\Users\Philou\Documents\repos\wimf2\wimf.json" --enable-file-actions
+```
+
+- Paths in the JSON file can be **relative to the JSON file's directory** or absolute. For sources on a network share, use JSON-escaped Windows UNC paths, e.g. `"\\\\server\\share\\catalog.gz"`, and set a cache directory.
+- `catalogs` points to directly loaded files; `sources` lists periodically refreshed source catalogs. `cacheDirectory` is required when there are sources. Set `refreshSeconds` to `0` to disable periodic refresh; otherwise it must be nonnegative. Omitted fields use defaults.
+- Existing CLI arguments work as before. If `--catalog` or `--source` is supplied explicitly, it **replaces** the corresponding JSON array. `--cache-dir` and `--refresh-seconds` override their JSON values.
+- **Security:** native file actions are never enabled by the config file. Explicitly pass `--enable-file-actions` on the command line. Unexpected JSON properties, including `enableFileActions`, are rejected rather than silently accepted.
+- Settings are read at server startup; restart the daemon after editing the JSON. This PR does not introduce an API to edit configuration remotely.
+
+An example is committed as `wimf.example.json`.
