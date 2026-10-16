@@ -608,6 +608,30 @@ public static class WebUi
     }
   });
 
+  // Observe automatic refreshes without interrupting an active search.
+  async function pollRefreshStatus() {
+    if (refreshCheckInProgress || refreshRequestInProgress || document.hidden) return;
+    refreshCheckInProgress = true;
+    try {
+      const response = await fetch("/api/refresh-status", { cache: "no-store" });
+      if (!response.ok) throw new Error("État du rafraîchissement indisponible.");
+      const latest = await response.json();
+      if (latest.lastRefresh !== lastObservedRefresh) {
+        const catalogsResponse = await fetch("/api/catalogs", { cache: "no-store" });
+        if (!catalogsResponse.ok) throw new Error("Liste des catalogues indisponible.");
+        renderCatalogs(await catalogsResponse.json());
+        lastObservedRefresh = latest.lastRefresh;
+      }
+      showRefreshStatus(latest);
+    } catch {
+      refreshErrors.textContent = " · État du rafraîchissement indisponible";
+      refreshErrors.classList.add("error");
+    } finally {
+      refreshCheckInProgress = false;
+    }
+  }
+  setInterval(pollRefreshStatus, 15000);
+
   Promise.all([
     fetch("/api/health").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
     fetch("/api/catalogs").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
