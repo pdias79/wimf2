@@ -8,7 +8,7 @@ namespace Wimf.Catalog;
 public static class LegacyCatalogWriter
 {
     public static int Build(string rootPath, string outputPath, string? catalogName = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, Action<string>? onSkipped = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -52,26 +52,46 @@ public static class LegacyCatalogWriter
                     var (folder, parent) = stack.Pop();
                     // File-system enumeration order is not stable. Sort by ordinal name to
                     // make generated record order reproducible on one filesystem.
-                    var children = folder.EnumerateFileSystemInfos()
-                        .OrderBy(info => info.Name, StringComparer.Ordinal).ToArray();
+                    FileSystemInfo[] children;
+                    try
+                    {
+                        children = folder.EnumerateFileSystemInfos()
+                            .OrderBy(info => info.Name, StringComparer.Ordinal).ToArray();
+                    }
+                    catch (Exception ex) when (parent != 0 &&
+                        ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
+                    {
+                        onSkipped?.Invoke($"Skipped inaccessible directory: {folder.FullName} ({ex.Message})");
+                        continue;
+                    }
                     var descend = new List<(DirectoryInfo Folder, int Parent)>();
                     foreach (var child in children)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         if (string.Equals(child.FullName, output, pathComparison) ||
                             string.Equals(child.FullName, temporary, pathComparison)) continue;
-                        if ((child.Attributes & FileAttributes.ReparsePoint) != 0) continue;
-                        if (child.Name.IndexOfAny([';', '\r', '\n']) >= 0)
-                            throw new InvalidDataException($"Unsupported file name for legacy format: {child.Name}");
-                        var isDirectory = (child.Attributes & FileAttributes.Directory) != 0;
-                        var extension = isDirectory ? "folder" : Path.GetExtension(child.Name).TrimStart('.');
-                        var size = isDirectory ? 0UL : checked((ulong)((FileInfo)child).Length);
-                        var days = new DateTimeOffset(child.LastWriteTimeUtc, TimeSpan.Zero)
-                            .ToUnixTimeSeconds() / 86400;
-                        // Unix-day storage is truncated to whole UTC days.
-                        if (child.LastWriteTimeUtc < DateTime.UnixEpoch &&
-                            new DateTimeOffset(child.LastWriteTimeUtc, TimeSpan.Zero).ToUnixTimeSeconds() % 86400 != 0)
-                            days--;
+                        bool isDirectory;
+                        string extension;
+                        ulong size;
+                        long days;
+                        try
+                        {
+                            var attributes = child.Attributes;
+                            if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+                            if (child.Name.IndexOfAny([';', '\r', '\n']) >= 0)
+                                throw new InvalidDataException($"Unsupported file name for legacy format: {child.Name}");
+                            isDirectory = (attributes & FileAttributes.Directory) != 0;
+                            extension = isDirectory ? "folder" : Path.GetExtension(child.Name).TrimStart('.');
+                            size = isDirectory ? 0UL : checked((ulong)((FileInfo)child).Length);
+                            var modified = new DateTimeOffset(child.LastWriteTimeUtc, TimeSpan.Zero).ToUnixTimeSeconds();
+                            days = Math.DivRem(modified, 86400, out var remainder);
+                            if (modified < 0 && remainder != 0) days--;
+                        }
+                        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
+                        {
+                            onSkipped?.Invoke($"Skipped inaccessible entry: {child.FullName} ({ex.Message})");
+                            continue;
+                        }
                         writer.Write(child.Name);
                         writer.Write(';');
                         writer.Write(extension);
