@@ -88,14 +88,11 @@ public sealed record DaemonOptions(
                     throw new ArgumentException("Configuration paths cannot be empty.");
                 return Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(baseDirectory, path));
             }
-            if (document.Catalogs is null || document.Sources is null)
-                throw new ArgumentException("catalogs and sources must be arrays.");
-            catalogs.AddRange(document.Catalogs.Select(path => Resolve(baseDirectory, path)));
-            sources.AddRange(document.Sources.Select(path => Resolve(baseDirectory, path)));
+            catalogs.AddRange((document.Catalogs ?? []).Select(path => Resolve(baseDirectory, path)));
+            sources.AddRange((document.Sources ?? []).Select(path => Resolve(baseDirectory, path)));
             cache = document.CacheDirectory is null ? null : Resolve(baseDirectory, document.CacheDirectory);
             refresh = document.RefreshSeconds;
-            if (document.Indexing is null) throw new ArgumentException("indexing must be an array.");
-            foreach (var job in document.Indexing)
+            foreach (var job in document.Indexing ?? [])
             {
                 if (job is null) throw new ArgumentException("indexing entries must be objects.");
                 if (job.IntervalHours.HasValue == job.IntervalDays.HasValue)
