@@ -373,3 +373,10 @@ dotnet run --project src/Wimf.Server -- --config "wimf.json" --refresh-seconds 3
 When a local file's modification timestamp or length changes, Wimf reloads it and atomically publishes the refreshed snapshot. Active searches continue using their existing immutable catalog instance. If a changed catalog is missing, malformed, or temporarily unreadable, Wimf logs an error and **retains the last valid in-memory version** until a subsequent refresh succeeds. Local catalog order and search catalog indices remain stable. Existing `POST /api/refresh` also checks local files immediately; `refreshSeconds: 0` disables the automatic timer but not manual refresh.
 
 The periodic scan checks file metadata, **not the underlying filesystem**. Run `--build-root ... --update-existing` separately to regenerate the catalog after files change. A catalog replaced without changing either file length or modification timestamp may not be detected. The refresh API includes `failedLocalCatalogs` in its response to distinguish these failures from network source failures.
+
+
+### Refresh status in the Web UI (PR #28)
+
+The embedded UI already provides an **Actualiser les catalogues** button. It now distinguishes failures when refreshing **local catalogs** versus **network sources**. The GET `/api/refresh-status` response includes the latest `failedLocalCatalogs` and `failedSources` counts in addition to the last completion time. A background check every 15 seconds updates the timestamp, warnings and catalog selection list after the daemon's automatic refresh, without resetting an active search. The status check does not regenerate catalogs or trigger refresh itself.
+
+When a source is unavailable, Wimf retains its last valid in-memory catalog; the UI warns that it was not reloaded. To test, temporarily make a local catalog unreadable or replace it with invalid data and click the refresh button, then restore it and refresh again. Existing file-search results remain visible until a new search is submitted.
