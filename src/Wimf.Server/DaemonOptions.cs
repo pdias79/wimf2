@@ -21,6 +21,25 @@ public sealed record DaemonOptions(
     string[] Catalogs, string[] Sources, string? CacheDirectory,
     int RefreshSeconds, bool EnableFileActions)
 {
+    /// <summary>Find a relative config in the daemon's working directory or its ancestors.</summary>
+    public static string ResolveConfigurationFilePath(string path, string workingDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
+        if (Path.IsPathFullyQualified(path))
+            return Path.GetFullPath(path);
+
+        var directory = new DirectoryInfo(Path.GetFullPath(workingDirectory));
+        var original = Path.GetFullPath(path, directory.FullName);
+        for (var current = directory; current is not null; current = current.Parent)
+        {
+            var candidate = Path.GetFullPath(path, current.FullName);
+            if (File.Exists(candidate)) return candidate;
+        }
+        // Keep the original candidate in the exception when no file is found.
+        return original;
+    }
+
     public static DaemonOptions Parse(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -40,7 +59,7 @@ public sealed record DaemonOptions(
         var refresh = 300;
         if (configurationFile is not null)
         {
-            var fullPath = Path.GetFullPath(configurationFile);
+            var fullPath = ResolveConfigurationFilePath(configurationFile, Environment.CurrentDirectory);
             var document = JsonSerializer.Deserialize(
                 File.ReadAllText(fullPath), DaemonConfigurationJsonContext.Default.DaemonConfiguration)
                 ?? throw new InvalidDataException("The configuration must be a JSON object.");
