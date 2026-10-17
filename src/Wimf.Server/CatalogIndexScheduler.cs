@@ -10,7 +10,7 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
     int SkippedEntries = 0, string[]? SkippedDetails = null,
     string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null,
-    CatalogScanMetrics? ScanMetrics = null);
+    CatalogScanMetrics? ScanMetrics = null, int EnumeratedDirectories = 0);
 
 public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error);
@@ -70,6 +70,12 @@ public sealed class CatalogIndexScheduler
             report.WriteLine("Catalogue : " + (job.Name ?? job.Root));
             report.WriteLine("Source : " + job.Root);
             report.WriteLine();
+            Action<int> enumerated = count =>
+            {
+                if (jobIndex >= 0)
+                    Volatile.Write(ref _statuses[jobIndex],
+                        Volatile.Read(ref _statuses[jobIndex]) with { EnumeratedDirectories = count });
+            };
             Action<int> progress = count =>
             {
                 if (jobIndex >= 0)
@@ -106,7 +112,7 @@ public sealed class CatalogIndexScheduler
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch);
+                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
 
             }
             else
