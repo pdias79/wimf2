@@ -186,7 +186,7 @@ public class WebUiTests
         Assert.Contains("id=\"indexing-toggle\"", WebUi.Html);
         Assert.Contains("aria-controls=\"indexing-panel\"", WebUi.Html);
         Assert.Contains("indexingToggle.setAttribute(\"aria-expanded\"", WebUi.Html);
-        Assert.Contains("if (!indexingPanel.hidden) pollIndexingStatus()", WebUi.Html);
+        Assert.Contains("if (!indexingPanel.hidden) { pollIndexingStatus(); pollIndexingHistory(); }", WebUi.Html);
         Assert.Contains("Catalogues et actualisation", WebUi.Html);
         Assert.Contains("id=\"refresh\" type=\"button\"", WebUi.Html);
         Assert.Contains("Actualiser les catalogues", WebUi.Html);
