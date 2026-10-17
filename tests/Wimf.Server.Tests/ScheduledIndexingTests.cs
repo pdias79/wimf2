@@ -212,6 +212,43 @@ public sealed class ScheduledIndexingTests
     }
 
     [Fact]
+    public async Task ManualScanShowsQueuedWhileAnotherScanHoldsTheLock()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "wimf-queue-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var first = Path.Combine(folder, "first.txt");
+            var second = Path.Combine(folder, "second.txt");
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(folder, first, "First", [], TimeSpan.FromDays(1)),
+                 new IndexingJob(folder, second, "Second", [], TimeSpan.FromDays(1))],
+                async (job, token) =>
+                {
+                    if (job.Output == first)
+                    {
+                        started.TrySetResult();
+                        await release.Task.WaitAsync(token);
+                    }
+                    File.WriteAllText(job.Output, "done");
+                });
+            var scheduled = scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(scheduler.TryQueueManual(1, CancellationToken.None));
+            Assert.Equal("queued", scheduler.Status[1].State);
+            Assert.False(scheduler.Status[1].CanStart);
+            release.TrySetResult();
+            await scheduled.WaitAsync(TimeSpan.FromSeconds(5));
+            for (var attempt = 0; attempt < 100 && scheduler.Status[1].State != "completed"; attempt++)
+                await Task.Delay(20);
+            Assert.Equal("completed", scheduler.Status[1].State);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
     public async Task SuccessfulScheduledScanImmediatelyReloadsCatalog()
     {
         var root = Path.Combine(Path.GetTempPath(), "wimf-refresh-sched-" + Guid.NewGuid().ToString("N"));
