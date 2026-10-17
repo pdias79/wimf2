@@ -12,7 +12,8 @@ public static class LegacyCatalogWriter
     public static int Build(string rootPath, string outputPath, string? catalogName = null,
         CancellationToken cancellationToken = default, Action<string>? onSkipped = null,
         IEnumerable<string>? excludePaths = null, Action<int>? onProgress = null,
-        Action<CatalogScanMetrics>? onMetrics = null, int directoryPrefetch = 1)
+        Action<CatalogScanMetrics>? onMetrics = null, int directoryPrefetch = 1,
+        Action<int>? onDirectoriesEnumerated = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -63,6 +64,7 @@ public static class LegacyCatalogWriter
                 // Bounded BFS lookahead keeps network requests in flight while the main
                 // thread emits entries deterministically in discovery order.
                 var prefetched = new Dictionary<string, Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)>>();
+                var enumeratedDirectories = 0;
                 Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)> Fetch(DirectoryInfo folder) =>
                     Task.Run(() =>
                     {
@@ -72,7 +74,9 @@ public static class LegacyCatalogWriter
                         var enumerated = System.Diagnostics.Stopwatch.GetTimestamp() - start;
                         start = System.Diagnostics.Stopwatch.GetTimestamp();
                         Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
-                        return (children, enumerated, System.Diagnostics.Stopwatch.GetTimestamp() - start);
+                        var sorted = System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                        onDirectoriesEnumerated?.Invoke(Interlocked.Increment(ref enumeratedDirectories));
+                        return (children, enumerated, sorted);
                     }, cancellationToken);
                 void Prefetch()
                 {
@@ -102,6 +106,7 @@ public static class LegacyCatalogWriter
                             start = System.Diagnostics.Stopwatch.GetTimestamp();
                             Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
                             sortTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                            onDirectoriesEnumerated?.Invoke(++enumeratedDirectories);
                         }
                         else
                         {
