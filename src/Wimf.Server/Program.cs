@@ -83,7 +83,8 @@ var enableFileActions = options.EnableFileActions;
 
 LiveCatalogStore store;
 try { store = new LiveCatalogStore(paths, sources, cacheDirectory, loadLocalFiles: true,
-    allowMissingCatalogs: options.Indexing?.Select(job => job.Output)); }
+    allowMissingCatalogs: options.Indexing?.Select(job => job.Output),
+    tolerateUnavailableCatalogs: true); }
 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
                            or System.Text.DecoderFallbackException or ArgumentException)
 {
