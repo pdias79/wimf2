@@ -35,7 +35,8 @@ public sealed class LiveCatalogStore
     /// <summary>Read local catalogs on startup, then reload changed files on refresh.</summary>
     public LiveCatalogStore(IEnumerable<string> localPaths, IEnumerable<string> sources,
         string? cacheDirectory, bool loadLocalFiles,
-        IEnumerable<string>? allowMissingCatalogs = null)
+        IEnumerable<string>? allowMissingCatalogs = null,
+        bool tolerateUnavailableCatalogs = false)
         : this(Array.Empty<FileCatalog>(), sources, cacheDirectory)
     {
         if (!loadLocalFiles) throw new ArgumentException("Use the existing snapshot constructor for preloaded catalogs.", nameof(loadLocalFiles));
@@ -46,13 +47,24 @@ public sealed class LiveCatalogStore
         _localStamps = new (long, long)[_localPaths.Length];
         for (var i = 0; i < _localPaths.Length; i++)
         {
-            if (!File.Exists(_localPaths[i]) && allowedMissing.Contains(Path.GetFullPath(_localPaths[i])))
+            try
             {
-                Console.WriteLine($"Scheduled catalog not yet created: '{_localPaths[i]}'.");
-                continue;
+                if (!File.Exists(_localPaths[i]) &&
+                    (tolerateUnavailableCatalogs || allowedMissing.Contains(Path.GetFullPath(_localPaths[i]))))
+                {
+                    Console.Error.WriteLine($"Catalog unavailable at startup; will retry: '{_localPaths[i]}'.");
+                    continue;
+                }
+                _localCatalogs[i] = LegacyCatalogReader.ReadFile(_localPaths[i]);
+                _localStamps[i] = GetStamp(_localPaths[i]);
             }
-            _localCatalogs[i] = LegacyCatalogReader.ReadFile(_localPaths[i]);
-            _localStamps[i] = GetStamp(_localPaths[i]);
+            catch (Exception ex) when (tolerateUnavailableCatalogs &&
+                (ex is UnauthorizedAccessException ||
+                 (ex is IOException && ex is not InvalidDataException)))
+            {
+                // An offline share must not block searches in other catalogs.
+                Console.Error.WriteLine($"Catalog unavailable at startup; will retry '{_localPaths[i]}': {ex.Message}");
+            }
         }
         _snapshot = _localCatalogs.OfType<FileCatalog>().ToArray();
     }
