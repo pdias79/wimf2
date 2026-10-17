@@ -220,4 +220,16 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void IndexingPanelDisplaysLiveCountAndElapsedTimeWithoutPercentages()
+    {
+        Assert.Contains("catalog.scannedEntries", WebUi.Html);
+        Assert.Contains("catalog.startedAt", WebUi.Html);
+        Assert.Contains("Progression :", WebUi.Html);
+        Assert.Contains("éléments parcourus", WebUi.Html);
+        Assert.Contains("Date.now()", WebUi.Html);
+        Assert.DoesNotContain("progress.value", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
