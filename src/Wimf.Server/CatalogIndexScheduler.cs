@@ -8,7 +8,7 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     DateTimeOffset? LastUpdate = null, DateTimeOffset? NextUpdate = null,
     int? FileCount = null, bool CanStart = true,
     int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
-    int SkippedEntries = 0);
+    int SkippedEntries = 0, string[]? SkippedDetails = null);
 
 public sealed class CatalogIndexScheduler
 {
@@ -43,9 +43,16 @@ public sealed class CatalogIndexScheduler
             {
                 Console.Error.WriteLine(message);
                 if (jobIndex >= 0)
-                    Volatile.Write(ref _statuses[jobIndex],
-                        Volatile.Read(ref _statuses[jobIndex]) with
-                        { SkippedEntries = Volatile.Read(ref _statuses[jobIndex]).SkippedEntries + 1 });
+                {
+                    // Keep a bounded sample to avoid unbounded memory use on large scans.
+                    var status = Volatile.Read(ref _statuses[jobIndex]);
+                    var details = status.SkippedDetails ?? [];
+                    Volatile.Write(ref _statuses[jobIndex], status with
+                    {
+                        SkippedEntries = status.SkippedEntries + 1,
+                        SkippedDetails = details.Length < 20 ? [.. details, message] : details
+                    });
+                }
             };
             if (File.Exists(job.Output))
             {
@@ -120,7 +127,7 @@ public sealed class CatalogIndexScheduler
             Console.WriteLine($"Indexing started: '{job.Root}' -> '{job.Output}'.");
             Volatile.Write(ref _statuses[i], _statuses[i] with
             {
-                State = "running", LastError = null, ScannedEntries = 0, SkippedEntries = 0,
+                State = "running", LastError = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
                 StartedAt = DateTimeOffset.UtcNow
             });
             await _execute(job, token);
