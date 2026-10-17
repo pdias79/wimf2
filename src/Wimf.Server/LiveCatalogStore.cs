@@ -7,7 +7,7 @@ namespace Wimf.Server;
 /// <summary>A search sees one stable snapshot while refresh builds a replacement.</summary>
 public sealed class LiveCatalogStore
 {
-    private FileCatalog[] _localCatalogs;
+    private FileCatalog?[] _localCatalogs;
     private readonly string[] _localPaths;
     private (long Ticks, long Length)[] _localStamps;
     private readonly string[] _sources;
@@ -20,7 +20,7 @@ public sealed class LiveCatalogStore
     public LiveCatalogStore(IEnumerable<FileCatalog> fixedCatalogs, IEnumerable<string> sources,
         string? cacheDirectory)
     {
-        _localCatalogs = fixedCatalogs.ToArray();
+        _localCatalogs = fixedCatalogs.Cast<FileCatalog?>().ToArray();
         _localPaths = [];
         _localStamps = [];
         _sources = sources.ToArray();
@@ -28,21 +28,29 @@ public sealed class LiveCatalogStore
         if (_sources.Length > 0 && string.IsNullOrWhiteSpace(cacheDirectory))
             throw new ArgumentException("A cache directory is required for sources.", nameof(cacheDirectory));
         _sourceCatalogs = new FileCatalog?[_sources.Length];
-        _snapshot = _localCatalogs.ToArray();
+        _snapshot = _localCatalogs.OfType<FileCatalog>().ToArray();
     }
 
 
     /// <summary>Read local catalogs on startup, then reload changed files on refresh.</summary>
     public LiveCatalogStore(IEnumerable<string> localPaths, IEnumerable<string> sources,
-        string? cacheDirectory, bool loadLocalFiles)
+        string? cacheDirectory, bool loadLocalFiles,
+        IEnumerable<string>? allowMissingCatalogs = null)
         : this(Array.Empty<FileCatalog>(), sources, cacheDirectory)
     {
         if (!loadLocalFiles) throw new ArgumentException("Use the existing snapshot constructor for preloaded catalogs.", nameof(loadLocalFiles));
         _localPaths = localPaths.ToArray();
-        _localCatalogs = new FileCatalog[_localPaths.Length];
+        _localCatalogs = new FileCatalog?[_localPaths.Length];
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var allowedMissing = new HashSet<string>(allowMissingCatalogs ?? [], comparer);
         _localStamps = new (long, long)[_localPaths.Length];
         for (var i = 0; i < _localPaths.Length; i++)
         {
+            if (!File.Exists(_localPaths[i]) && allowedMissing.Contains(Path.GetFullPath(_localPaths[i])))
+            {
+                Console.WriteLine($"Scheduled catalog not yet created: '{_localPaths[i]}'.");
+                continue;
+            }
             _localCatalogs[i] = LegacyCatalogReader.ReadFile(_localPaths[i]);
             _localStamps[i] = GetStamp(_localPaths[i]);
         }
@@ -69,7 +77,7 @@ public sealed class LiveCatalogStore
         await _refreshLock.WaitAsync(cancellationToken);
         try
         {
-            var nextLocal = (FileCatalog[])_localCatalogs.Clone();
+            var nextLocal = (FileCatalog?[])_localCatalogs.Clone();
             var nextStamps = ((long Ticks, long Length)[])_localStamps.Clone();
             var localFailures = 0;
             for (var i = 0; i < _localPaths.Length; i++)
@@ -78,7 +86,7 @@ public sealed class LiveCatalogStore
                 try
                 {
                     var stamp = GetStamp(_localPaths[i]);
-                    if (stamp == nextStamps[i]) continue;
+                    if (nextLocal[i] is not null && stamp == nextStamps[i]) continue;
                     var loaded = LegacyCatalogReader.ReadFile(_localPaths[i]);
                     // A writer replacing the file during read must not publish a partial view.
                     if (GetStamp(_localPaths[i]) != stamp)
@@ -115,7 +123,7 @@ public sealed class LiveCatalogStore
                 }
             }
 
-            var snapshot = nextLocal.Concat(next.OfType<FileCatalog>()).ToArray();
+            var snapshot = nextLocal.OfType<FileCatalog>().Concat(next.OfType<FileCatalog>()).ToArray();
             cancellationToken.ThrowIfCancellationRequested();
             _localCatalogs = nextLocal;
             _localStamps = nextStamps;
