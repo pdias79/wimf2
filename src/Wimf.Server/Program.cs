@@ -290,6 +290,19 @@ app.MapPost("/api/indexing/{index:int}/start", (HttpContext context, int index) 
         ? Results.StatusCode(202) : Results.StatusCode(409);
 });
 
+app.MapPost("/api/indexing/{index:int}/cancel", (HttpContext context, int index) =>
+{
+    if (indexingScheduler is null || index < 0 || index >= indexingScheduler.Status.Length)
+        return Results.NotFound();
+    var origin = context.Request.Headers.Origin.ToString();
+    var site = context.Request.Headers["Sec-Fetch-Site"].ToString();
+    if (!string.Equals(origin, "http://127.0.0.1:5080", StringComparison.Ordinal) ||
+        !string.Equals(context.Request.Host.Value, "127.0.0.1:5080", StringComparison.OrdinalIgnoreCase) ||
+        (site.Length > 0 && site != "same-origin"))
+        return Results.StatusCode(403);
+    return indexingScheduler.TryCancel(index) ? Results.StatusCode(202) : Results.StatusCode(409);
+});
+
 if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
