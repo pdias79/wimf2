@@ -12,7 +12,8 @@ public static class LegacyCatalogUpdater
     public static CatalogUpdateSummary Update(string rootPath, string outputPath,
         string? catalogName = null, CancellationToken cancellationToken = default,
         Action<string>? onSkipped = null, IEnumerable<string>? excludePaths = null,
-        Action<int>? onProgress = null, Action<CatalogScanMetrics>? onMetrics = null)
+        Action<int>? onProgress = null, Action<CatalogScanMetrics>? onMetrics = null,
+        int directoryPrefetch = 1)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -34,7 +35,7 @@ public static class LegacyCatalogUpdater
         // The writer commits the replacement only after a successful scan.
         LegacyCatalogWriter.Build(root, output, catalogName ?? previous.Header.Name,
             cancellationToken, message => { skipped++; onSkipped?.Invoke(message); }, excludePaths,
-            onProgress, onMetrics);
+            onProgress, onMetrics, directoryPrefetch);
         var updated = LegacyCatalogReader.ReadFile(output);
         // Compare against one mutable index instead of retaining a second full
         // dictionary of paths. Entries left in "before" were removed.
