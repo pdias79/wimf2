@@ -15,17 +15,19 @@ public sealed class ScheduledIndexingTests
         {
             var file = Path.Combine(folder, "wimf.json");
             File.WriteAllText(file, """
-                {"catalogs":["c.txt.gz","d.txt.gz"],
+                {"catalogs":["c.txt.gz","d.txt.gz","m.txt.gz"],
                 "indexing":[
                   {"root":"Cdrive","output":"c.txt.gz","name":"C", "intervalHours":6,"exclude":["Temp"]},
-                  {"root":"Archive","output":"d.txt.gz","intervalDays":7,"exclude":["Private","Old"]}
+                  {"root":"Archive","output":"d.txt.gz","intervalDays":7,"exclude":["Private","Old"]},
+                  {"root":"Quick","output":"m.txt.gz","intervalMinutes":5,"exclude":[]}
                 ]}
                 """);
             var options = DaemonOptions.Parse(["--config", file]);
             Assert.NotNull(options.Indexing);
-            Assert.Equal(2, options.Indexing!.Length);
+            Assert.Equal(3, options.Indexing!.Length);
             Assert.Equal(TimeSpan.FromHours(6), options.Indexing[0].Interval);
             Assert.Equal(TimeSpan.FromDays(7), options.Indexing[1].Interval);
+            Assert.Equal(TimeSpan.FromMinutes(5), options.Indexing[2].Interval);
             Assert.Equal(Path.Combine(folder, "Cdrive"), options.Indexing[0].Root);
             Assert.Equal(Path.Combine(folder, "d.txt.gz"), options.Indexing[1].Output);
             Assert.Equal(["Private", "Old"], options.Indexing[1].Exclude);
@@ -35,6 +37,11 @@ public sealed class ScheduledIndexingTests
 
     [Theory]
     [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz"}]}""")]
+    [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalMinutes":0}]}""")]
+    [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalMinutes":-5}]}""")]
+    [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalMinutes":5256001}]}""")]
+    [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalMinutes":5,"intervalHours":1}]}""")]
+    [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalMinutes":5,"intervalDays":1}]}""")]
     [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalHours":0}]}""")]
     [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalDays":-1}]}""")]
     [InlineData("""{"catalogs":["c.gz"],"indexing":[{"root":"a","output":"c.gz","intervalHours":1,"intervalDays":2}]}""")]
@@ -105,4 +112,33 @@ public sealed class ScheduledIndexingTests
         }
         finally { Directory.Delete(folder, true); }
     }
+    [Fact]
+    public async Task SchedulerRespectsMinuteInterval()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "wimf-minute-sched-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var path = Path.Combine(folder, "catalog.txt");
+            File.WriteAllText(path, "initial");
+            var now = DateTimeOffset.UtcNow;
+            File.SetLastWriteTimeUtc(path, now.AddMinutes(-4).UtcDateTime);
+            var executions = 0;
+            var job = new IndexingJob(folder, path, null, [], TimeSpan.FromMinutes(5));
+            var scheduler = new CatalogIndexScheduler([job], (j, ct) =>
+            {
+                executions++;
+                File.SetLastWriteTimeUtc(j.Output, now.UtcDateTime);
+                return Task.CompletedTask;
+            });
+            await scheduler.CheckOnceAsync(now);
+            Assert.Equal(0, executions);
+            await scheduler.CheckOnceAsync(now.AddMinutes(2));
+            Assert.Equal(1, executions);
+            await scheduler.CheckOnceAsync(now.AddMinutes(3));
+            Assert.Equal(1, executions);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
 }
