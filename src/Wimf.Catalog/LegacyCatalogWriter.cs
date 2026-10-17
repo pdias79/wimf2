@@ -5,7 +5,7 @@ using System.Text;
 namespace Wimf.Catalog;
 
 /// <summary>Builds a legacy-compatible UTF-8 or gzip catalog from an existing directory tree.</summary>
-public sealed record CatalogScanMetrics(long DirectoryEnumerationMilliseconds, long MetadataMilliseconds, long OutputMilliseconds, int DirectoryCount, long DirectorySortMilliseconds = 0);
+public sealed record CatalogScanMetrics(long DirectoryEnumerationMilliseconds, long MetadataMilliseconds, long? OutputMilliseconds, int DirectoryCount, long DirectorySortMilliseconds = 0);
 
 public static class LegacyCatalogWriter
 {
@@ -185,7 +185,9 @@ public static class LegacyCatalogWriter
                 var metadataMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(0, metadataTicks).TotalMilliseconds;
                 var sortMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(0, sortTicks).TotalMilliseconds;
                 onMetrics(new CatalogScanMetrics(enumerationMs, metadataMs,
-                    Math.Max(0, (long)overallTimer.Elapsed.TotalMilliseconds - enumerationMs - metadataMs - sortMs), directoryCount, sortMs));
+                    directoryPrefetch == 1
+                        ? Math.Max(0, (long)overallTimer.Elapsed.TotalMilliseconds - enumerationMs - metadataMs - sortMs)
+                        : null, directoryCount, sortMs));
             }
             return nextId;
         }
