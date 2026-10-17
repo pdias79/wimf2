@@ -122,7 +122,7 @@ public sealed class CatalogIndexScheduler
                 Console.WriteLine($"[BENCH] {job.Root} | prefetch={prefetch} | total={bench.ElapsedMilliseconds} ms | " +
                     $"dossiers={scanResult.DirectoryCount} | enumeration={scanResult.DirectoryEnumerationMilliseconds} ms | " +
                     $"tri={scanResult.DirectorySortMilliseconds} ms | metadonnees={scanResult.MetadataMilliseconds} ms | " +
-                    $"autres/ecriture={(scanResult.OutputMilliseconds?.ToString() ?? "n/a")} ms | ignores=" +
+                    $"autres/ecriture={(scanResult.OutputMilliseconds is long outputMs ? $"{outputMs} ms" : "n/a")} | ignores=" +
                     (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
             report.WriteLine();
             report.WriteLine("Total ignore : " + (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
