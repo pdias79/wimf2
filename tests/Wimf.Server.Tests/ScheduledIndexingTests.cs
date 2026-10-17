@@ -7,6 +7,34 @@ namespace Wimf.Server.Tests;
 public sealed class ScheduledIndexingTests
 {
     [Fact]
+    public async Task RunningScanCanBeCancelledAndRecorded()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-cancel-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var output = Path.Combine(root, "index.txt");
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(root, output, "Cancel test", [], TimeSpan.FromDays(1))],
+                async (_, token) =>
+                {
+                    started.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                });
+            var running = scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(scheduler.TryCancel(0));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
+            Assert.Equal("cancelled", scheduler.Status[0].State);
+            Assert.Single(scheduler.History);
+            Assert.Equal("cancelled", scheduler.History[0].State);
+            Assert.False(scheduler.TryCancel(0));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void ParsesIndependentHourlyAndMultiDayJobs()
     {
         var folder = Path.Combine(Path.GetTempPath(), "wimf-index-config-" + Guid.NewGuid().ToString("N"));
