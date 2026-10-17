@@ -58,6 +58,8 @@ public sealed class CatalogIndexScheduler
                     ? new DateTimeOffset(File.GetLastWriteTimeUtc(job.Output), TimeSpan.Zero)
                     : DateTimeOffset.MinValue;
                 if (!IsDue(job, indexedAt, now)) continue;
+                if (!Directory.Exists(job.Root))
+                    throw new DirectoryNotFoundException($"Indexing root unavailable: {job.Root}");
                 Console.WriteLine($"Scheduled indexing started: '{job.Root}' -> '{job.Output}'.");
                 _statuses[i] = _statuses[i] with { State = "running", LastError = null };
                 await _execute(job, token);
