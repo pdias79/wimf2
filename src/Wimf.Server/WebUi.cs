@@ -346,7 +346,8 @@ public static class WebUi
           ? Math.max(0, Math.floor((Date.now() - new Date(catalog.startedAt).getTime()) / 1000))
           : 0;
         progress.textContent = "Progression : " + Number(catalog.scannedEntries || 0).toLocaleString("fr-FR") +
-          " éléments parcourus · " + Math.floor(elapsed / 60) + " min " + (elapsed % 60) + " s";
+          " éléments parcourus · " + Number(catalog.enumeratedDirectories || 0).toLocaleString("fr-FR") +
+          " dossiers interrogés · " + Math.floor(elapsed / 60) + " min " + (elapsed % 60) + " s";
         item.appendChild(progress);
       }
       if ((catalog.state === "running" || catalog.state === "completed") && Number(catalog.skippedEntries) > 0) {
