@@ -213,48 +213,77 @@ public static class WebUi
     pending: "En attente", running: "En cours",
     completed: "Terminée", failed: "Échec"
   };
-  function renderIndexingStatus(jobs) {
+  function renderIndexingStatus(catalogs) {
     indexingList.replaceChildren();
     indexingError.textContent = "";
-    indexingSummary.textContent = "";
-    if (jobs.length === 0) {
+    const active = catalogs.filter(c => c.state === "running").length;
+    const errors = catalogs.filter(c => c.state === "failed").length;
+    indexingSummary.textContent = catalogs.length + " catalogue(s)" +
+      (active ? " · " + active + " en cours" : "") +
+      (errors ? " · " + errors + " en échec" : "");
+    if (catalogs.length === 0) {
       const note = document.createElement("p");
       note.className = "status";
-      note.textContent = "Aucune tâche d’indexation configurée. Vérifiez la section indexing dans wimf.json et redémarrez Wimf.";
+      note.textContent = "Aucun catalogue configuré dans wimf.json.";
       indexingList.appendChild(note);
       return;
     }
-    const active = jobs.filter(job => job.state === "running").length;
-    const errors = jobs.filter(job => job.state === "failed").length;
-    indexingSummary.textContent = jobs.length + " tâche(s)" +
-      (active ? " · " + active + " en cours" : "") +
-      (errors ? " · " + errors + " en échec" : "");
     const fragment = document.createDocumentFragment();
-    for (const job of jobs) {
+    const formatDate = date => date ? new Date(date).toLocaleString("fr-FR") : "Jamais";
+    for (const catalog of catalogs) {
       const item = document.createElement("div");
       item.className = "indexing-item";
       const heading = document.createElement("div");
       const name = document.createElement("strong");
-      name.textContent = job.name || job.root || "Indexation";
+      name.textContent = catalog.name || catalog.path || "Catalogue";
       const state = document.createElement("span");
-      state.className = job.state === "failed" ? "status error" : "status";
-      state.textContent = indexingLabels[job.state] || "État inconnu";
+      state.className = catalog.state === "failed" ? "status error" : "status";
+      state.textContent = catalog.indexingJobIndex === null
+        ? (catalog.available ? "Chargé" : "Indisponible")
+        : (indexingLabels[catalog.state] || "En attente");
       heading.append(name, state);
       const path = document.createElement("div");
       path.className = "catalog-details";
-      path.textContent = (job.root || "") + " → " + (job.output || "");
-      item.append(heading, path);
-      if (job.lastSuccess) {
-        const success = document.createElement("div");
-        success.className = "catalog-details";
-        success.textContent = "Dernière indexation réussie : " +
-          new Date(job.lastSuccess).toLocaleString("fr-FR");
-        item.appendChild(success);
+      path.textContent = (catalog.root || "Racine inconnue") + " → " + catalog.path;
+      const metadata = document.createElement("div");
+      metadata.className = "catalog-details";
+      metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
+        " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
+      item.append(heading, path, metadata);
+      if (catalog.indexingJobIndex !== null) {
+        const schedule = document.createElement("div");
+        schedule.className = "catalog-details";
+        schedule.textContent = "Prochaine actualisation prévue : " +
+          (catalog.state === "running" ? "En cours" : formatDate(catalog.nextUpdate));
+        const start = document.createElement("button");
+        start.type = "button";
+        start.className = "copy";
+        start.textContent = "Lancer une indexation";
+        start.disabled = !catalog.canStart;
+        start.setAttribute("aria-label", "Indexer " + catalog.name);
+        start.addEventListener("click", async () => {
+          start.disabled = true;
+          indexingError.textContent = "";
+          try {
+            if (!confirm("Lancer maintenant l’indexation complète de " + catalog.name + " ?")) return;
+            const response = await fetch("/api/indexing/" + catalog.indexingJobIndex + "/start", {
+              method: "POST", headers: { "Content-Type": "application/json" }
+            });
+            if (!response.ok) throw new Error(response.status === 409
+              ? "Indexation déjà en cours ou en attente." : "Impossible de lancer l’indexation.");
+            indexingError.textContent = "Indexation demandée pour " + catalog.name + ".";
+            await pollIndexingStatus();
+          } catch (error) {
+            indexingError.textContent = error.message || "Erreur réseau.";
+            indexingError.classList.add("error");
+          } finally { start.disabled = false; }
+        });
+        item.append(schedule, start);
       }
-      if (job.lastError) {
+      if (catalog.lastError) {
         const failure = document.createElement("div");
         failure.className = "status error";
-        failure.textContent = "Erreur : " + job.lastError;
+        failure.textContent = "Erreur : " + catalog.lastError;
         item.appendChild(failure);
       }
       fragment.appendChild(item);
@@ -265,17 +294,15 @@ public static class WebUi
     if (indexingCheckInProgress || document.hidden) return;
     indexingCheckInProgress = true;
     try {
-      const response = await fetch("/api/indexing-status", { cache: "no-store" });
-      if (!response.ok) throw new Error("État des indexations indisponible.");
-      const jobs = await response.json();
-      if (!Array.isArray(jobs)) throw new Error("Réponse des indexations invalide.");
-      renderIndexingStatus(jobs);
+      const response = await fetch("/api/catalog-management", { cache: "no-store" });
+      if (!response.ok) throw new Error("État des catalogues indisponible.");
+      const catalogs = await response.json();
+      if (!Array.isArray(catalogs)) throw new Error("Réponse des catalogues invalide.");
+      renderIndexingStatus(catalogs);
     } catch {
-      indexingError.textContent = "État des indexations indisponible : vérifiez que le serveur utilise la dernière branche.";
+      indexingError.textContent = "État des catalogues indisponible : vérifiez la version du serveur.";
       indexingError.classList.add("error");
-    } finally {
-      indexingCheckInProgress = false;
-    }
+    } finally { indexingCheckInProgress = false; }
   }
   let lastObservedRefresh = null;
   let refreshCheckInProgress = false;
