@@ -96,7 +96,11 @@ public sealed class LegacyCatalogWriterTests
         try
         {
             LegacyCatalogWriter.Build(root, sequential);
-            LegacyCatalogWriter.Build(root, parallel, directoryPrefetch: concurrency);
+            CatalogScanMetrics? parallelMetrics = null;
+            LegacyCatalogWriter.Build(root, parallel, directoryPrefetch: concurrency,
+                onMetrics: value => parallelMetrics = value);
+            Assert.NotNull(parallelMetrics);
+            Assert.Null(parallelMetrics.OutputMilliseconds);
             var before = LegacyCatalogReader.ReadFile(sequential);
             var after = LegacyCatalogReader.ReadFile(parallel);
             Assert.Empty(after.Diagnostics);
