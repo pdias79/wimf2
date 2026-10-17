@@ -272,4 +272,34 @@ public sealed class ScheduledIndexingTests
         finally { Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task IndexingReportsScannedEntriesAndStartTime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-progress-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var files = Path.Combine(root, "files");
+            Directory.CreateDirectory(files);
+            for (var i = 0; i < 300; i++)
+                File.WriteAllText(Path.Combine(files, $"item-{i:000}.txt"), "x");
+            var catalog = Path.Combine(root, "catalog.txt.gz");
+            var reports = new List<int>();
+            var count = Wimf.Catalog.LegacyCatalogWriter.Build(
+                files, catalog, "Progress", onProgress: reports.Add);
+            Assert.Equal(300, count);
+            Assert.Equal([256, 300], reports);
+
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(files, catalog, "Progress", [], TimeSpan.FromMinutes(1))]);
+            File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddMinutes(-5));
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            var status = Assert.Single(scheduler.Status);
+            Assert.Equal("completed", status.State);
+            Assert.Equal(300, status.ScannedEntries);
+            Assert.NotNull(status.StartedAt);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }
