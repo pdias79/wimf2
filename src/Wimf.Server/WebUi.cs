@@ -210,7 +210,7 @@ public static class WebUi
   const indexingError = byId("indexing-error");
   let indexingCheckInProgress = false;
   const indexingLabels = {
-    pending: "En attente", running: "En cours",
+    pending: "Non démarrée", queued: "En file d’attente", running: "En cours",
     completed: "Terminée", failed: "Échec"
   };
   function renderIndexingStatus(catalogs) {
@@ -264,7 +264,7 @@ public static class WebUi
         const schedule = document.createElement("div");
         schedule.className = "catalog-details";
         schedule.textContent = "Prochaine actualisation prévue : " +
-          (catalog.state === "running" ? "En cours" : formatDate(catalog.nextUpdate));
+          (catalog.state === "running" ? "En cours" : catalog.state === "queued" ? "Indexation demandée, en attente du tour" : formatDate(catalog.nextUpdate));
         const start = document.createElement("button");
         start.type = "button";
         start.className = "copy";
