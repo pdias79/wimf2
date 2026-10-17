@@ -211,4 +211,65 @@ public sealed class ScheduledIndexingTests
         finally { Directory.Delete(folder, true); }
     }
 
+    [Fact]
+    public async Task SuccessfulScheduledScanImmediatelyReloadsCatalog()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-refresh-sched-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalogPath = Path.Combine(root, "catalog.txt");
+            var catalogRoot = Path.Combine(root, "files");
+            Directory.CreateDirectory(catalogRoot);
+            var reloadCount = 0;
+            var job = new IndexingJob(catalogRoot, catalogPath, "Files", [], TimeSpan.FromDays(1));
+            var store = new LiveCatalogStore([catalogPath], [], null,
+                loadLocalFiles: true, allowMissingCatalogs: [catalogPath]);
+            Assert.Empty(store.Snapshot);
+            var scheduler = new CatalogIndexScheduler([job],
+                (j, ct) => Task.Run(() => Wimf.Catalog.LegacyCatalogWriter.Build(
+                    j.Root, j.Output, j.Name, cancellationToken: ct), ct),
+                async (j, ct) =>
+                {
+                    reloadCount++;
+                    await store.RefreshAsync(ct);
+                });
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            Assert.Equal(1, reloadCount);
+            Assert.Single(store.Snapshot);
+            Assert.Equal("Files", store.Snapshot[0].Header.Name);
+            Assert.Equal("completed", scheduler.Status[0].State);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task FailedReloadDoesNotTurnSuccessfulScanIntoFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-refresh-failed-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var output = Path.Combine(root, "catalog.txt");
+            var invoked = 0;
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(root, output, "Test", [], TimeSpan.FromDays(1))],
+                (job, ct) =>
+                {
+                    File.WriteAllText(job.Output, "new catalog");
+                    return Task.CompletedTask;
+                },
+                (job, ct) =>
+                {
+                    invoked++;
+                    throw new IOException("Reload is unavailable");
+                });
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            Assert.Equal(1, invoked);
+            Assert.Equal("completed", scheduler.Status[0].State);
+            Assert.Null(scheduler.Status[0].LastError);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }
