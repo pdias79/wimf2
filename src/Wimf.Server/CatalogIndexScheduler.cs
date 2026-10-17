@@ -91,11 +91,16 @@ public sealed class CatalogIndexScheduler
                     });
                 }
             };
+            Action<CatalogScanMetrics> metrics = m => Console.WriteLine(
+                $"Indexing timings for '{job.Root}': {m.DirectoryCount} directories; " +
+                $"enumeration {m.DirectoryEnumerationMilliseconds} ms; " +
+                $"metadata {m.MetadataMilliseconds} ms; " +
+                $"other/write {m.OutputMilliseconds} ms.");
             if (File.Exists(job.Output))
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress);
+                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics);
                 Console.WriteLine($"Indexed '{job.Root}': {summary.Total} entries, " +
                     $"{summary.Added} added, {summary.Modified} changed, {summary.Removed} removed, " +
                     $"{summary.Skipped} skipped.");
