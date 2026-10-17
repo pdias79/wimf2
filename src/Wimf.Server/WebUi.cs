@@ -435,6 +435,8 @@ public static class WebUi
       const catalogs = await response.json();
       if (!Array.isArray(catalogs)) throw new Error("Réponse des catalogues invalide.");
       renderIndexingStatus(catalogs);
+      // Keep history aligned with the catalog status refresh when the panel is visible.
+      if (!indexingPanel.hidden) pollIndexingHistory();
     } catch {
       indexingError.textContent = "État des catalogues indisponible : vérifiez la version du serveur.";
       indexingError.classList.add("error");
@@ -887,7 +889,6 @@ public static class WebUi
   }
   setInterval(pollRefreshStatus, 15000);
   setInterval(pollIndexingStatus, 2000);
-  setInterval(pollIndexingHistory, 15000);
   pollIndexingStatus();
 
   Promise.all([
