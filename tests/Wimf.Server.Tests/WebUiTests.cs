@@ -206,6 +206,10 @@ public class WebUiTests
         Assert.Contains("details.dataset.catalogPath = catalog.path", WebUi.Html);
         Assert.Contains("Voir les éléments ignorés", WebUi.Html);
         Assert.Contains("Télécharger le rapport TXT complet", WebUi.Html);
+        Assert.Contains("skipped-report-actions", WebUi.Html);
+        Assert.Contains("justify-content: flex-end", WebUi.Html);
+        Assert.Contains("skipped-report-download", WebUi.Html);
+        Assert.Contains("actions.appendChild(download)", WebUi.Html);
         Assert.Contains("/skipped-report", WebUi.Html);
         Assert.Contains("download.download", WebUi.Html);
         Assert.Contains("Éléments ignorés", WebUi.Html);
