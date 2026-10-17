@@ -266,10 +266,9 @@ app.MapGet("/api/catalog-management", () =>
 app.MapGet("/api/indexing/{index:int}/skipped-report", (int index) =>
 {
     var stream = indexingScheduler?.OpenSkippedReport(index);
-    return stream is null
-        ? Results.NotFound()
-        : Results.File(stream, "text/plain; charset=utf-8",
-            $"wimf2-elements-ignores-{index}.txt");
+    if (stream is null) return Results.NotFound();
+    return Results.File(stream, "text/plain; charset=utf-8",
+        $"wimf2-elements-ignores-{index}.txt");
 });
 
 // Manual scans are restricted to requests originating from the local Wimf page.
