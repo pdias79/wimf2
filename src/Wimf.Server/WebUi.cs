@@ -219,6 +219,8 @@ public static class WebUi
   function renderIndexingStatus(catalogs) {
     const expandedPaths = new Set(Array.from(indexingList.querySelectorAll("details[data-catalog-path]"))
       .filter(details => details.open).map(details => details.dataset.catalogPath));
+    const expandedExclusions = new Set(Array.from(indexingList.querySelectorAll("details[data-exclusion-path]"))
+      .filter(details => details.open).map(details => details.dataset.exclusionPath));
     indexingList.replaceChildren();
     indexingError.textContent = "";
     const active = catalogs.filter(c => c.state === "running").length;
@@ -258,6 +260,8 @@ public static class WebUi
       if (Array.isArray(catalog.effectiveExclusions) && catalog.effectiveExclusions.length) {
         const exclusions = document.createElement("details");
         exclusions.className = "catalog-details";
+        exclusions.dataset.exclusionPath = catalog.path;
+        exclusions.open = expandedExclusions.has(catalog.path);
         const summary = document.createElement("summary");
         summary.textContent = "Répertoires et fichiers exclus (" + catalog.effectiveExclusions.length + ")";
         exclusions.appendChild(summary);
