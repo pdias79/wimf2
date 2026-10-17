@@ -250,7 +250,7 @@ public static class WebUi
   }
   const indexingLabels = {
     pending: "Non démarrée", queued: "En file d’attente", running: "En cours",
-    completed: "Terminée", failed: "Échec"
+    completed: "Terminée", failed: "Échec", cancelled: "Annulée"
   };
   function renderIndexingStatus(catalogs) {
     const expandedPaths = new Set(Array.from(indexingList.querySelectorAll("details[data-catalog-path]"))
@@ -415,6 +415,30 @@ public static class WebUi
           } finally { start.disabled = false; }
         });
         item.append(schedule, start);
+        if (catalog.state === "queued" || catalog.state === "running") {
+          const cancel = document.createElement("button");
+          cancel.type = "button";
+          cancel.className = "copy";
+          cancel.textContent = "Annuler l’indexation";
+          cancel.setAttribute("aria-label", "Annuler l’indexation de " + catalog.name);
+          cancel.addEventListener("click", async () => {
+            if (!confirm("Annuler l’indexation de " + catalog.name + " ?")) return;
+            cancel.disabled = true;
+            try {
+              const response = await fetch("/api/indexing/" + catalog.indexingJobIndex + "/cancel", {
+                method: "POST", headers: { "Content-Type": "application/json" }
+              });
+              if (!response.ok) throw new Error("Impossible d’annuler cette indexation.");
+              indexingError.textContent = "Annulation demandée pour " + catalog.name + ".";
+              await pollIndexingStatus();
+            } catch (error) {
+              indexingError.textContent = error.message || "Erreur réseau.";
+              indexingError.classList.add("error");
+              cancel.disabled = false;
+            }
+          });
+          item.appendChild(cancel);
+        }
       }
       if (catalog.lastError) {
         const failure = document.createElement("div");
