@@ -34,6 +34,28 @@ public sealed class LegacyCatalogWriterTests
     }
 
     [Fact]
+    public void PreservesFileMetadataAndNestedPathsAfterTraversalOptimization()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "wimf-metadata-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(work, "source");
+        Directory.CreateDirectory(Path.Combine(root, "Nested"));
+        var file = Path.Combine(root, "Nested", "report.data");
+        File.WriteAllText(file, "metadata sample");
+        var output = Path.Combine(work, "catalog.txt.gz");
+        try
+        {
+            LegacyCatalogWriter.Build(root, output);
+            var catalog = LegacyCatalogReader.ReadFile(output);
+            var entry = catalog.EnumerateEntries().Single(e => e.Name == "report.data");
+            Assert.Equal((ulong)new FileInfo(file).Length, entry.Size);
+            Assert.Equal("data", entry.Extension);
+            Assert.Equal(file, catalog.GetFullPath(entry.Id));
+            Assert.Empty(catalog.Diagnostics);
+        }
+        finally { Directory.Delete(work, true); }
+    }
+
+    [Fact]
     public void AllowsOutputInsideSourceWithoutIndexingOutputOrTemporaryFile()
     {
         var work = Path.Combine(Path.GetTempPath(), "wimf-build-" + Guid.NewGuid().ToString("N"));
