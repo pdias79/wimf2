@@ -235,6 +235,9 @@ CatalogIndexScheduler? indexingScheduler = null;
 app.MapGet("/api/indexing-status", () =>
     Results.Json(indexingScheduler?.Status ?? [], WimfJsonContext.Default.IndexingJobStatusArray));
 
+// Count entries only once per immutable catalog snapshot, not every UI poll.
+var fileCounts = new System.Runtime.CompilerServices.ConditionalWeakTable<
+    Wimf.Catalog.Catalog, System.Runtime.CompilerServices.StrongBox<int>>();
 // Catalog management includes configured local files that have not yet been generated.
 app.MapGet("/api/catalog-management", () =>
 {
@@ -248,7 +251,9 @@ app.MapGet("/api/catalog-management", () =>
         return new ManagedCatalogStatus(
             catalog?.Header.Name ?? job?.Name ?? Path.GetFileName(entry.Path),
             entry.Path, catalog?.Header.RootPath ?? job?.Root,
-            catalog is null ? null : catalog.EnumerateEntries().Count(e => e.Extension != "folder"),
+            catalog is null ? null : fileCounts.GetValue(catalog,
+                loaded => new System.Runtime.CompilerServices.StrongBox<int>(
+                    loaded.EnumerateEntries().Count(e => e.Extension != "folder"))).Value,
             catalog?.Header.CreatedAt, catalog is not null,
             index >= 0 ? index : null, job?.State, job?.NextUpdate, job?.LastError,
             job?.CanStart ?? false);
