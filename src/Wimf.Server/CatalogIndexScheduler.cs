@@ -54,10 +54,12 @@ public sealed class CatalogIndexScheduler
                     ? new DateTimeOffset(File.GetLastWriteTimeUtc(job.Output), TimeSpan.Zero)
                     : (DateTimeOffset?)null;
                 var status = Volatile.Read(ref _statuses[i]);
+                var scheduled = last?.Add(job.Interval) ?? DateTimeOffset.UtcNow;
+                var next = scheduled > _retryNotBefore[i] ? scheduled : _retryNotBefore[i];
                 return status with
                 {
                     LastUpdate = last,
-                    NextUpdate = last?.Add(job.Interval) ?? DateTimeOffset.UtcNow,
+                    NextUpdate = next,
                     CanStart = Volatile.Read(ref _manualQueued[i]) == 0 && status.State != "running"
                 };
             }).ToArray();
