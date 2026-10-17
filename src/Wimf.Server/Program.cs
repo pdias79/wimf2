@@ -55,11 +55,22 @@ if (args.Length > 0 && args[0] == "--benchmark-root")
                     File.Delete(temp);
                 }
             }
+            var medians = new Dictionary<int, long>();
             foreach (var (mode, durations) in measurements)
             {
                 var ordered = durations.OrderBy(value => value).ToArray();
-                Console.WriteLine($"[BENCH-SUMMARY] workers={mode} | min={ordered[0]} ms | mediane={ordered[(ordered.Length - 1) / 2]} ms | max={ordered[^1]} ms | moyenne={(long)durations.Average()} ms | essais={durations.Count}");
+                var median = ordered[(ordered.Length - 1) / 2];
+                medians[mode] = median;
+                Console.WriteLine($"[BENCH-SUMMARY] workers={mode} | min={ordered[0]} ms | mediane={median} ms | max={ordered[^1]} ms | moyenne={(long)durations.Average()} ms | essais={durations.Count}");
             }
+            // Prefer fewer workers when the median is within 5% of the fastest.
+            // This is guidance only: never change the production configuration.
+            var fastest = medians.Values.Min();
+            var recommended = medians
+                .Where(pair => pair.Value <= fastest * 1.05)
+                .OrderBy(pair => pair.Key)
+                .First();
+            Console.WriteLine($"[BENCH-RECOMMENDATION] workers={recommended.Key} | mediane={recommended.Value} ms | meilleure_mediane={fastest} ms | tolerance=5% | appliquer_manuellement_dans_wimf.json");
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
         return 0;
