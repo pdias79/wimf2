@@ -93,7 +93,7 @@ public sealed class CatalogIndexScheduler
             };
             // Opt-in experiment: 1 (default), 2 or 4 concurrent directory enumerations.
             var prefetch = int.TryParse(Environment.GetEnvironmentVariable("WIMF_INDEX_PREFETCH"),
-                out var requested) && requested is 2 or 4 ? requested : 1;
+                out var requested) && requested is 2 or 4 or 16 or 50 ? requested : 1;
             var bench = System.Diagnostics.Stopwatch.StartNew();
             CatalogScanMetrics? scanResult = null;
             Action<CatalogScanMetrics> metrics = m =>
