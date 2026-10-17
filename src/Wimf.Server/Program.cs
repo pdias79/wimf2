@@ -39,6 +39,7 @@ if (args.Length > 0 && args[0] == "--benchmark-root")
             throw new ArgumentException("Use 1-20 repeats and 1-10 worker modes between 1 and 50.");
         // Reverse the mode order every other round to reduce warm-cache bias.
         var measurements = modes.Distinct().ToDictionary(mode => mode, _ => new List<long>());
+        var entryCounts = new HashSet<int>();
         var temp = Path.Combine(Path.GetTempPath(), "wimf-benchmark-" + Guid.NewGuid().ToString("N") + ".txt.gz");
         try
         {
@@ -50,6 +51,7 @@ if (args.Length > 0 && args[0] == "--benchmark-root")
                     var count = LegacyCatalogWriter.Build(args[1], temp, excludePaths: exclusions,
                         directoryPrefetch: mode);
                     watch.Stop();
+                    entryCounts.Add(count);
                     measurements[mode].Add(watch.ElapsedMilliseconds);
                     Console.WriteLine($"[BENCH] workers={mode} | passage={round + 1}/{repeats} | total={watch.ElapsedMilliseconds} ms | elements={count}");
                     File.Delete(temp);
@@ -62,6 +64,11 @@ if (args.Length > 0 && args[0] == "--benchmark-root")
                 var median = ordered[(ordered.Length - 1) / 2];
                 medians[mode] = median;
                 Console.WriteLine($"[BENCH-SUMMARY] workers={mode} | min={ordered[0]} ms | mediane={median} ms | max={ordered[^1]} ms | moyenne={(long)durations.Average()} ms | essais={durations.Count}");
+            }
+            if (entryCounts.Count != 1)
+            {
+                Console.WriteLine("[BENCH-WARNING] Le nombre d’éléments varie entre les passages ; vérifier les modifications de l’arborescence avant de comparer les performances.");
+                return 1;
             }
             // Prefer fewer workers when the median is within 5% of the fastest.
             // This is guidance only: never change the production configuration.
