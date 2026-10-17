@@ -9,7 +9,7 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     int? FileCount = null, bool CanStart = true,
     int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
     int SkippedEntries = 0, string[]? SkippedDetails = null,
-    string[]? EffectiveExclusions = null);
+    string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null);
 
 public sealed class CatalogIndexScheduler
 {
@@ -126,7 +126,7 @@ public sealed class CatalogIndexScheduler
         if (Volatile.Read(ref _statuses[index]).State == "running" ||
             Interlocked.CompareExchange(ref _manualQueued[index], 1, 0) != 0)
             return false;
-        Volatile.Write(ref _statuses[index], _statuses[index] with { State = "queued", LastError = null });
+        Volatile.Write(ref _statuses[index], _statuses[index] with { State = "queued", LastError = null, QueuedAt = DateTimeOffset.UtcNow });
         _ = Task.Run(async () =>
         {
             try
@@ -151,7 +151,7 @@ public sealed class CatalogIndexScheduler
             Console.WriteLine($"Indexing started: '{job.Root}' -> '{job.Output}'.");
             Volatile.Write(ref _statuses[i], _statuses[i] with
             {
-                State = "running", LastError = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
+                State = "running", LastError = null, QueuedAt = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
                 StartedAt = DateTimeOffset.UtcNow
             });
             await _execute(job, token);

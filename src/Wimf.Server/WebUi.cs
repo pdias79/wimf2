@@ -258,6 +258,16 @@ public static class WebUi
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
       item.append(heading, path, metadata);
+      if (catalog.state === "queued" && catalog.queuedAt) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - new Date(catalog.queuedAt).getTime()) / 1000));
+        if (Number.isFinite(elapsed)) {
+          const wait = document.createElement("div");
+          wait.className = "catalog-details";
+          wait.textContent = "Temps en file d’attente : " + Math.floor(elapsed / 60) +
+            " min " + (elapsed % 60) + " s";
+          item.appendChild(wait);
+        }
+      }
       if (catalog.state === "queued" && runningCatalog && runningCatalog.path !== catalog.path) {
         const queueReason = document.createElement("div");
         queueReason.className = "catalog-details";
