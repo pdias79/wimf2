@@ -299,7 +299,8 @@ public static class WebUi
         const timing = document.createElement("div");
         timing.className = "catalog-details";
         timing.textContent = "Dernier scan : " + metrics.directoryCount.toLocaleString("fr-FR") +
-          " dossiers · Parcours/tri : " + metrics.directoryEnumerationMilliseconds + " ms" +
+          " dossiers · Énumération : " + metrics.directoryEnumerationMilliseconds + " ms" +
+          " · Tri : " + metrics.directorySortMilliseconds + " ms" +
           " · Métadonnées : " + metrics.metadataMilliseconds + " ms" +
           " · Autres/écriture : " + metrics.outputMilliseconds + " ms";
         item.appendChild(timing);
