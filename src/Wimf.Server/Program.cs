@@ -3,6 +3,75 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Isolated comparison: never overwrites a configured production catalog.
+if (args.Length > 0 && args[0] == "--benchmark-root")
+{
+    if (args.Length < 2 || string.IsNullOrWhiteSpace(args[1]))
+    {
+        Console.Error.WriteLine("Usage: --benchmark-root DIRECTORY [--workers 1,16,50] [--repeats 3] [--exclude PATH]...");
+        return 2;
+    }
+    try
+    {
+        var modes = new[] { 1, 16, 50 };
+        var repeats = 3;
+        var exclusions = new List<string>();
+        for (var i = 2; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--workers" when i + 1 < args.Length:
+                    modes = args[++i].Split(',', StringSplitOptions.TrimEntries)
+                        .Select(int.Parse).ToArray();
+                    break;
+                case "--repeats" when i + 1 < args.Length:
+                    repeats = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
+                    break;
+                case "--exclude" when i + 1 < args.Length:
+                    exclusions.Add(args[++i]);
+                    break;
+                default:
+                    throw new ArgumentException("Unknown benchmark argument: " + args[i]);
+            }
+        }
+        if (repeats is < 1 or > 20 || modes.Length is < 1 or > 10 ||
+            modes.Any(mode => mode is < 1 or > 50))
+            throw new ArgumentException("Use 1-20 repeats and 1-10 worker modes between 1 and 50.");
+        // Reverse the mode order every other round to reduce warm-cache bias.
+        var measurements = modes.Distinct().ToDictionary(mode => mode, _ => new List<long>());
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-benchmark-" + Guid.NewGuid().ToString("N") + ".txt.gz");
+        try
+        {
+            for (var round = 0; round < repeats; round++)
+            {
+                foreach (var mode in round % 2 == 0 ? modes : modes.Reverse())
+                {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    var count = LegacyCatalogWriter.Build(args[1], temp, excludePaths: exclusions,
+                        directoryPrefetch: mode);
+                    watch.Stop();
+                    measurements[mode].Add(watch.ElapsedMilliseconds);
+                    Console.WriteLine($"[BENCH] workers={mode} | passage={round + 1}/{repeats} | total={watch.ElapsedMilliseconds} ms | elements={count}");
+                    File.Delete(temp);
+                }
+            }
+            foreach (var (mode, durations) in measurements)
+            {
+                var ordered = durations.OrderBy(value => value).ToArray();
+                Console.WriteLine($"[BENCH-SUMMARY] workers={mode} | min={ordered[0]} ms | mediane={ordered[(ordered.Length - 1) / 2]} ms | max={ordered[^1]} ms | moyenne={(long)durations.Average()} ms | essais={durations.Count}");
+            }
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
+        return 0;
+    }
+    catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException
+                               or InvalidDataException or OverflowException or FormatException)
+    {
+        Console.Error.WriteLine("Benchmark failed: " + ex.Message);
+        return 2;
+    }
+}
+
 // Standalone catalog-creation command: no web daemon is started.
 if (args.Length > 0 && args[0] == "--build-root")
 {
