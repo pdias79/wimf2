@@ -450,8 +450,10 @@ The new local `GET /api/indexing-status` endpoint returns each configured job's 
 
 ### Visual monitoring of scheduled indexing (PR #32)
 
-The local Web UI now includes a collapsible **Indexations planifiées** panel below the catalog refresh toolbar. For each job declared in `indexing`, it shows the configured name, indexed root and catalog output, its current state (waiting, running, completed or failed), its last successful completion date and any reported error.
+The local Web UI now has a **Catalogues et indexations** button in the top header. It opens a separate status panel containing the **Actualiser les catalogues** button, catalog refresh status, and scheduled indexing progress. For each job declared in `indexing`, it shows the configured name, indexed root and catalog output, its current state (waiting, running, completed or failed), its last successful completion date and any reported error.
 
 The panel polls the existing local `GET /api/indexing-status` endpoint every 15 seconds while the browser tab is visible. If `indexing` has no jobs, the panel remains visible and explains that no indexing tasks are configured (the daemon must be restarted after updating `wimf.json`). Status checks never start a disk scan and do not interrupt searches or the separate catalog refresh timer. Failed scans remain visible, including when network shares are disconnected; later retries update their state. Jobs run sequentially, so one long scan can leave subsequent jobs pending.
 
-To test, open `http://127.0.0.1:5080` with several indexing tasks configured. Expand **Indexations planifiées** and check the displayed states while a short indexing task executes and finishes. Disconnect a test share to inspect the error and reconnect it to observe the retry. The state is read-only; `/api/indexing-status` remains available for scripts.
+To test, open `http://127.0.0.1:5080` with several indexing tasks configured. Click **Catalogues et indexations** in the header and check the displayed states while a short indexing task executes and finishes. Disconnect a test share to inspect the error and reconnect it to observe the retry. The state is read-only; `/api/indexing-status` remains available for scripts.
+
+The catalog refresh button has moved out of **Résultats** into this upper panel; it still reloads the catalogs, and does not itself force an indexing rescan.
