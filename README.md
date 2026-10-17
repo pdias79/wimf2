@@ -494,3 +494,14 @@ Chaque entrée de `indexing` dans `wimf.json` accepte désormais un champ facult
 ```
 
 Le nombre de workers s'applique au catalogue concerné lors des indexations manuelles ou planifiées. Redémarrer le serveur après une modification du fichier. Les modes parallèles utilisent un parcours BFS, et peuvent modifier l'ordre des identifiants internes par rapport au parcours DFS à un worker.
+
+
+### Benchmark comparatif des workers
+
+Sans démarrer le serveur et **sans remplacer les catalogues configurés**, la commande suivante exécute trois passages avec 1, 16 et 50 workers :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --benchmark-root "\\\\192.168.1.200\\BACKUP_PC_Cecile" --workers 1,16,50 --repeats 3
+```
+
+Les passages alternent l'ordre des configurations pour limiter les biais liés au cache réseau. Chaque passage écrit temporairement un catalogue compressé dans le répertoire temporaire du système, puis le supprime. Les lignes `[BENCH]` donnent la durée de chaque passage, et `[BENCH-SUMMARY]` affiche le minimum, la médiane basse (si nombre pair), le maximum et la moyenne en millisecondes. La commande accepte aussi plusieurs options `--exclude PATH`, comme lors d'une indexation ordinaire. Elle n'utilise pas le fichier `wimf.json` et ne modifie pas l'historique d'indexation.
