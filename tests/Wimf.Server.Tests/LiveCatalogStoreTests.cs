@@ -210,4 +210,48 @@ public class LiveCatalogStoreTests
         writer.Write(text);
     }
 
+    [Fact]
+    public async Task MissingScheduledCatalogIsLoadedAfterItsFirstGeneration()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-pending-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var existingPath = Path.Combine(root, "existing.txt");
+            var pendingPath = Path.Combine(root, "new.txt.gz");
+            File.WriteAllText(existingPath, Fixture("Existing"));
+            var store = new LiveCatalogStore([existingPath, pendingPath], Array.Empty<string>(),
+                null, loadLocalFiles: true, allowMissingCatalogs: [pendingPath]);
+            Assert.Equal(["Existing"], store.Snapshot.Select(c => c.Header.Name));
+            Assert.Equal(2, store.LocalCount);
+            var pending = await store.RefreshAsync();
+            Assert.Equal(1, pending.FailedLocalCatalogs);
+            Assert.Single(store.Snapshot);
+
+            WriteGzipCatalog(pendingPath, Fixture("New"));
+            var loaded = await store.RefreshAsync();
+            Assert.Equal(0, loaded.FailedLocalCatalogs);
+            Assert.Equal(["Existing", "New"], store.Snapshot.Select(c => c.Header.Name));
+            Assert.Equal(2, loaded.CatalogCount);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void MissingUnmanagedCatalogStillFailsOnStartup()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-pending-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var missing = Path.Combine(root, "missing.txt.gz");
+            Assert.Throws<FileNotFoundException>(() =>
+                new LiveCatalogStore([missing], Array.Empty<string>(), null, loadLocalFiles: true));
+            Assert.Throws<FileNotFoundException>(() =>
+                new LiveCatalogStore([missing], Array.Empty<string>(), null,
+                    loadLocalFiles: true, allowMissingCatalogs: [Path.Combine(root, "other.txt.gz")]));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }
