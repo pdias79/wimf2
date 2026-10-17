@@ -80,6 +80,8 @@ public sealed class LegacyCatalogWriterTests
     [Theory]
     [InlineData(2)]
     [InlineData(4)]
+    [InlineData(16)]
+    [InlineData(50)]
     public void ParallelPrefetchPreservesCatalogEntriesAndParentPaths(int concurrency)
     {
         var work = Path.Combine(Path.GetTempPath(), "wimf-prefetch-" + Guid.NewGuid().ToString("N"));
@@ -106,8 +108,8 @@ public sealed class LegacyCatalogWriterTests
             Assert.Empty(after.Diagnostics);
             Assert.Equal(before.RecordCount, after.RecordCount);
             Assert.Equal(
-                before.EnumerateEntries().Select(e => before.GetFullPath(e.Id)),
-                after.EnumerateEntries().Select(e => after.GetFullPath(e.Id)));
+                before.EnumerateEntries().Select(e => before.GetFullPath(e.Id)).OrderBy(p => p),
+                after.EnumerateEntries().Select(e => after.GetFullPath(e.Id)).OrderBy(p => p));
         }
         finally { Directory.Delete(work, true); }
     }
