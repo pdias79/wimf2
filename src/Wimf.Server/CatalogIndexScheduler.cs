@@ -101,9 +101,12 @@ public sealed class CatalogIndexScheduler
             var prefetch = job.Workers;
             var bench = System.Diagnostics.Stopwatch.StartNew();
             CatalogScanMetrics? scanResult = null;
+            long scanElapsedMs = 0;
+            var entryCount = 0;
             Action<CatalogScanMetrics> metrics = m =>
             {
                 scanResult = m;
+                scanElapsedMs = bench.ElapsedMilliseconds;
                 if (jobIndex >= 0)
                     Volatile.Write(ref _statuses[jobIndex], Volatile.Read(ref _statuses[jobIndex]) with { ScanMetrics = m });
             };
@@ -112,19 +115,21 @@ public sealed class CatalogIndexScheduler
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
                     excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
-
+                entryCount = summary.Total;
             }
             else
             {
                 var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
                     excludePaths: job.Exclude, onProgress: progress,
-                    onMetrics: metrics, directoryPrefetch: prefetch);
-
+                    onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
+                entryCount = count;
             }
             bench.Stop();
             if (scanResult is not null)
                 Console.WriteLine($"[BENCH] {job.Root} | prefetch={prefetch} | total={bench.ElapsedMilliseconds} ms | " +
+                    $"scan={scanElapsedMs} ms | postscan={bench.ElapsedMilliseconds - scanElapsedMs} ms | " +
+                    $"elements={entryCount} | debit={(bench.ElapsedMilliseconds > 0 ? (long)(entryCount * 1000.0 / bench.ElapsedMilliseconds) : 0)} elem/s | " +
                     $"dossiers={scanResult.DirectoryCount} | enumeration={scanResult.DirectoryEnumerationMilliseconds} ms | " +
                     $"tri={scanResult.DirectorySortMilliseconds} ms | metadonnees={scanResult.MetadataMilliseconds} ms | " +
                     $"autres/ecriture={(scanResult.OutputMilliseconds is long outputMs ? $"{outputMs} ms" : "n/a")} | ignores=" +
