@@ -231,10 +231,15 @@ if ((sources.Count > 0 || paths.Count > 0) && refreshSeconds > 0)
     }, shutdown);
 }
 
+CatalogIndexScheduler? indexingScheduler = null;
+app.MapGet("/api/indexing-status", () =>
+    Results.Json(indexingScheduler?.Status ?? [], WimfJsonContext.Default.IndexingJobStatusArray));
+
 if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
-    var scheduler = new CatalogIndexScheduler(options.Indexing);
+    indexingScheduler = new CatalogIndexScheduler(options.Indexing);
+    var scheduler = indexingScheduler;
     _ = Task.Run(async () =>
     {
         try { await scheduler.RunAsync(shutdown); }
