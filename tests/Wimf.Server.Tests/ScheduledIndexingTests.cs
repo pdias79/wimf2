@@ -238,12 +238,14 @@ public sealed class ScheduledIndexingTests
             await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.True(scheduler.TryQueueManual(1, CancellationToken.None));
             Assert.Equal("queued", scheduler.Status[1].State);
+            Assert.NotNull(scheduler.Status[1].QueuedAt);
             Assert.False(scheduler.Status[1].CanStart);
             release.TrySetResult();
             await scheduled.WaitAsync(TimeSpan.FromSeconds(5));
             for (var attempt = 0; attempt < 100 && scheduler.Status[1].State != "completed"; attempt++)
                 await Task.Delay(20);
             Assert.Equal("completed", scheduler.Status[1].State);
+            Assert.Null(scheduler.Status[1].QueuedAt);
         }
         finally { Directory.Delete(folder, true); }
     }
