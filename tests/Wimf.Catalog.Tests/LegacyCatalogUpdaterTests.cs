@@ -42,6 +42,32 @@ public sealed class LegacyCatalogUpdaterTests
         finally { Directory.Delete(work, true); }
     }
 
+
+    [Fact]
+    public void UnchangedLargeCatalogReportsNoChangesOnRepeatedUpdate()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "wimf-update-repeat-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(work, "source");
+        Directory.CreateDirectory(root);
+        var output = Path.Combine(work, "catalog.txt.gz");
+        try
+        {
+            for (var i = 0; i < 120; i++)
+                File.WriteAllText(Path.Combine(root, $"file-{i:D3}.txt"), $"data-{i}");
+            LegacyCatalogWriter.Build(root, output);
+            for (var run = 0; run < 2; run++)
+            {
+                var summary = LegacyCatalogUpdater.Update(root, output);
+                Assert.Equal(120, summary.Total);
+                Assert.Equal(120, summary.Unchanged);
+                Assert.Equal(0, summary.Added);
+                Assert.Equal(0, summary.Modified);
+                Assert.Equal(0, summary.Removed);
+            }
+        }
+        finally { Directory.Delete(work, true); }
+    }
+
     [Fact]
     public void RejectsWrongRootWithoutChangingOriginalCatalog()
     {
