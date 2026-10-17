@@ -258,7 +258,7 @@ app.MapGet("/api/catalog-management", () =>
             index >= 0 ? index : null, job?.State, job?.NextUpdate, job?.LastError,
             job?.CanStart ?? false, job?.ScannedEntries ?? 0, job?.StartedAt,
             job?.LastSuccess, job?.SkippedEntries ?? 0, job?.SkippedDetails,
-            job?.EffectiveExclusions);
+            job?.EffectiveExclusions, job?.QueuedAt);
     }).ToArray();
     return Results.Json(managed, WimfJsonContext.Default.ManagedCatalogStatusArray);
 });
