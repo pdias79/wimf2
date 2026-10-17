@@ -343,4 +343,37 @@ public sealed class ScheduledIndexingTests
         finally { Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task CompleteSkippedReportContainsAllEntriesWhilePreviewIsLimitedToTwenty()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-skipped-export-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var files = Path.Combine(root, "files");
+            Directory.CreateDirectory(files);
+            for (var i = 0; i < 25; i++)
+                File.WriteAllText(Path.Combine(files, $"invalid;{i:000}.txt"), "content");
+
+            var output = Path.Combine(root, "catalog.txt.gz");
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(files, output, "Skipped", [], TimeSpan.FromDays(1))]);
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            var status = Assert.Single(scheduler.Status);
+            Assert.Equal("completed", status.State);
+            Assert.Equal(25, status.SkippedEntries);
+            Assert.Equal(20, status.SkippedDetails!.Length);
+
+            using var stream = scheduler.OpenSkippedReport(0);
+            Assert.NotNull(stream);
+            using var reader = new StreamReader(stream!);
+            var report = await reader.ReadToEndAsync();
+            for (var i = 0; i < 25; i++)
+                Assert.Contains($"invalid;{i:000}.txt", report);
+            Assert.Contains("Total ignore : 25", report);
+            Assert.Null(scheduler.OpenSkippedReport(1));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }
