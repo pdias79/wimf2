@@ -87,9 +87,9 @@ public static class WebUi
 </head>
 <body>
 <main>
-  <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et indexations</button><span id="health" class="status" role="status">Connexion…</span></div></header>
-  <section id="indexing-panel" class="panel" aria-label="Catalogues et indexations" hidden>
-    <div class="bar"><h2>Catalogues et indexations</h2><button id="refresh" type="button" class="copy">Actualiser les catalogues</button></div>
+  <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button><span id="health" class="status" role="status">Connexion…</span></div></header>
+  <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
+    <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Actualiser les catalogues</button></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
     <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
     <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
