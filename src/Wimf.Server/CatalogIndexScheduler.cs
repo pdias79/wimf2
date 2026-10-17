@@ -7,7 +7,8 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     string State, DateTimeOffset? LastSuccess, string? LastError,
     DateTimeOffset? LastUpdate = null, DateTimeOffset? NextUpdate = null,
     int? FileCount = null, bool CanStart = true,
-    int ScannedEntries = 0, DateTimeOffset? StartedAt = null);
+    int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
+    int SkippedEntries = 0);
 
 public sealed class CatalogIndexScheduler
 {
@@ -38,10 +39,18 @@ public sealed class CatalogIndexScheduler
                     Volatile.Write(ref _statuses[jobIndex],
                         Volatile.Read(ref _statuses[jobIndex]) with { ScannedEntries = count });
             };
+            Action<string> skipped = message =>
+            {
+                Console.Error.WriteLine(message);
+                if (jobIndex >= 0)
+                    Volatile.Write(ref _statuses[jobIndex],
+                        Volatile.Read(ref _statuses[jobIndex]) with
+                        { SkippedEntries = Volatile.Read(ref _statuses[jobIndex]).SkippedEntries + 1 });
+            };
             if (File.Exists(job.Output))
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: Console.Error.WriteLine,
+                    cancellationToken: token, onSkipped: skipped,
                     excludePaths: job.Exclude, onProgress: progress);
                 Console.WriteLine($"Indexed '{job.Root}': {summary.Total} entries, " +
                     $"{summary.Added} added, {summary.Modified} changed, {summary.Removed} removed, " +
@@ -50,7 +59,7 @@ public sealed class CatalogIndexScheduler
             else
             {
                 var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: Console.Error.WriteLine,
+                    cancellationToken: token, onSkipped: skipped,
                     excludePaths: job.Exclude, onProgress: progress);
                 Console.WriteLine($"Indexed '{job.Root}': {count} entries.");
             }
@@ -111,7 +120,7 @@ public sealed class CatalogIndexScheduler
             Console.WriteLine($"Indexing started: '{job.Root}' -> '{job.Output}'.");
             Volatile.Write(ref _statuses[i], _statuses[i] with
             {
-                State = "running", LastError = null, ScannedEntries = 0,
+                State = "running", LastError = null, ScannedEntries = 0, SkippedEntries = 0,
                 StartedAt = DateTimeOffset.UtcNow
             });
             await _execute(job, token);
