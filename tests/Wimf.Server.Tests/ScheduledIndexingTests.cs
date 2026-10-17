@@ -290,8 +290,12 @@ public sealed class ScheduledIndexingTests
             Assert.Equal(300, count);
             Assert.Equal([256, 300], reports);
 
+            // Exercise both creation of a missing catalog and refresh of an existing one.
+            File.Delete(catalog);
             var scheduler = new CatalogIndexScheduler(
                 [new IndexingJob(files, catalog, "Progress", [], TimeSpan.FromMinutes(1))]);
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            Assert.Equal(300, Assert.Single(scheduler.Status).ScannedEntries);
             File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddMinutes(-5));
             await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
             var status = Assert.Single(scheduler.Status);
