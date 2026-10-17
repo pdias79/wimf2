@@ -21,6 +21,10 @@ public sealed record SearchResponse(int Count, SearchHit[] Results);
 public sealed record ErrorResponse(string Error);
 public sealed record FileActionRequest(string Action, int CatalogIndex, int Id, string FullPath);
 public sealed record FileActionResponse(bool Success);
+public sealed record ManagedCatalogStatus(string Name, string Path, string? Root,
+    int? FileCount, DateTimeOffset? LastUpdate, bool Available,
+    int? IndexingJobIndex, string? State, DateTimeOffset? NextUpdate,
+    string? LastError, bool CanStart);
 public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOffset? LastRefresh,
     int FailedSources = 0, int FailedLocalCatalogs = 0);
 
@@ -35,4 +39,5 @@ public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOf
 [JsonSerializable(typeof(RefreshSummary))]
 [JsonSerializable(typeof(RefreshStatus))]
 [JsonSerializable(typeof(IndexingJobStatus[]))]
+[JsonSerializable(typeof(ManagedCatalogStatus[]))]
 public partial class WimfJsonContext : JsonSerializerContext;
