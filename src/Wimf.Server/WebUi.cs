@@ -219,6 +219,8 @@ public static class WebUi
   function renderIndexingStatus(catalogs) {
     const expandedPaths = new Set(Array.from(indexingList.querySelectorAll("details[data-catalog-path]"))
       .filter(details => details.open).map(details => details.dataset.catalogPath));
+    const expandedExclusions = new Set(Array.from(indexingList.querySelectorAll("details[data-exclusion-path]"))
+      .filter(details => details.open).map(details => details.dataset.exclusionPath));
     indexingList.replaceChildren();
     indexingError.textContent = "";
     const active = catalogs.filter(c => c.state === "running").length;
@@ -255,6 +257,23 @@ public static class WebUi
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
       item.append(heading, path, metadata);
+      if (Array.isArray(catalog.effectiveExclusions) && catalog.effectiveExclusions.length) {
+        const exclusions = document.createElement("details");
+        exclusions.className = "catalog-details";
+        exclusions.dataset.exclusionPath = catalog.path;
+        exclusions.open = expandedExclusions.has(catalog.path);
+        const summary = document.createElement("summary");
+        summary.textContent = "Répertoires et fichiers exclus (" + catalog.effectiveExclusions.length + ")";
+        exclusions.appendChild(summary);
+        const excludedList = document.createElement("ul");
+        for (const excludedPath of catalog.effectiveExclusions) {
+          const entry = document.createElement("li");
+          entry.textContent = excludedPath;
+          excludedList.appendChild(entry);
+        }
+        exclusions.appendChild(excludedList);
+        item.appendChild(exclusions);
+      }
       if (catalog.state === "running") {
         const progress = document.createElement("div");
         progress.className = "catalog-details";
