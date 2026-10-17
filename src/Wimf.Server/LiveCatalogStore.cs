@@ -170,7 +170,11 @@ public sealed class LiveCatalogStore
                 try
                 {
                     var stamp = GetStamp(_localPaths[i]);
-                    if (nextLocal[i] is not null && stamp == nextStamps[i]) continue;
+                    if (nextLocal[i] is not null && stamp == nextStamps[i])
+                    {
+                        localFailures[i] = false;
+                        continue;
+                    }
                     var loaded = LegacyCatalogReader.ReadFile(_localPaths[i]);
                     // A writer replacing the file during read must not publish a partial view.
                     if (GetStamp(_localPaths[i]) != stamp)
