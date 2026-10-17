@@ -5,14 +5,15 @@ using System.Text;
 namespace Wimf.Catalog;
 
 /// <summary>Builds a legacy-compatible UTF-8 or gzip catalog from an existing directory tree.</summary>
-public sealed record CatalogScanMetrics(long DirectoryEnumerationMilliseconds, long MetadataMilliseconds, long OutputMilliseconds, int DirectoryCount, long DirectorySortMilliseconds = 0);
+public sealed record CatalogScanMetrics(long DirectoryEnumerationMilliseconds, long MetadataMilliseconds, long? OutputMilliseconds, int DirectoryCount, long DirectorySortMilliseconds = 0);
 
 public static class LegacyCatalogWriter
 {
     public static int Build(string rootPath, string outputPath, string? catalogName = null,
         CancellationToken cancellationToken = default, Action<string>? onSkipped = null,
         IEnumerable<string>? excludePaths = null, Action<int>? onProgress = null,
-        Action<CatalogScanMetrics>? onMetrics = null)
+        Action<CatalogScanMetrics>? onMetrics = null, int directoryPrefetch = 1,
+        Action<int>? onDirectoriesEnumerated = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -35,6 +36,8 @@ public static class LegacyCatalogWriter
         var outputDirectory = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(outputDirectory);
         var temporary = Path.Combine(outputDirectory, "." + Path.GetFileName(output) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        if (directoryPrefetch < 1 || directoryPrefetch > 50)
+            throw new ArgumentOutOfRangeException(nameof(directoryPrefetch), "Directory prefetch must be between 1 and 50.");
         var nextId = 0;
         long enumerationTicks = 0, metadataTicks = 0, sortTicks = 0;
         var directoryCount = 0;
@@ -53,27 +56,73 @@ public static class LegacyCatalogWriter
                 writer.WriteLine(); // Legacy extension-header field; reader accepts an empty list.
 
                 var stack = new Stack<(DirectoryInfo Folder, int Parent)>();
-                stack.Push((new DirectoryInfo(root), 0));
-                while (stack.Count > 0)
+                // Single worker retains the legacy depth-first order. Concurrent workers
+                // traverse breadth-first like the original Python Folder_Explorer.
+                var queue = new Queue<(DirectoryInfo Folder, int Parent)>();
+                if (directoryPrefetch == 1) stack.Push((new DirectoryInfo(root), 0));
+                else queue.Enqueue((new DirectoryInfo(root), 0));
+                // Bounded BFS lookahead keeps network requests in flight while the main
+                // thread emits entries deterministically in discovery order.
+                var prefetched = new Dictionary<string, Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)>>();
+                var enumeratedDirectories = 0;
+                Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)> Fetch(DirectoryInfo folder) =>
+                    Task.Run(() =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                        var children = folder.EnumerateFileSystemInfos().ToArray();
+                        var enumerated = System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                        start = System.Diagnostics.Stopwatch.GetTimestamp();
+                        Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
+                        var sorted = System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                        onDirectoriesEnumerated?.Invoke(Interlocked.Increment(ref enumeratedDirectories));
+                        return (children, enumerated, sorted);
+                    }, cancellationToken);
+                void Prefetch()
+                {
+                    if (directoryPrefetch == 1) return;
+                    foreach (var pending in queue)
+                    {
+                        if (prefetched.Count >= directoryPrefetch) break;
+                        if (!prefetched.ContainsKey(pending.Folder.FullName))
+                            prefetched.Add(pending.Folder.FullName, Fetch(pending.Folder));
+                    }
+                }
+                Prefetch();
+                while (stack.Count > 0 || queue.Count > 0)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var (folder, parent) = stack.Pop();
+                    var (folder, parent) = directoryPrefetch == 1 ? stack.Pop() : queue.Dequeue();
                     // File-system enumeration order is not stable. Sort by ordinal name to
                     // make generated record order reproducible on one filesystem.
                     FileSystemInfo[] children;
-                    var enumerationStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     try
                     {
-                        children = folder.EnumerateFileSystemInfos().ToArray();
-                        enumerationTicks += System.Diagnostics.Stopwatch.GetTimestamp() - enumerationStart;
-                        var sortStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                        Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
-                        sortTicks += System.Diagnostics.Stopwatch.GetTimestamp() - sortStart;
+                        if (directoryPrefetch == 1)
+                        {
+                            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            children = folder.EnumerateFileSystemInfos().ToArray();
+                            enumerationTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                            start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
+                            sortTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                            onDirectoriesEnumerated?.Invoke(++enumeratedDirectories);
+                        }
+                        else
+                        {
+                            var task = prefetched.Remove(folder.FullName, out var queued)
+                                ? queued : Fetch(folder);
+                            var result = task.GetAwaiter().GetResult();
+                            children = result.Children;
+                            enumerationTicks += result.EnumerationTicks;
+                            sortTicks += result.SortTicks;
+                        }
                     }
                     catch (Exception ex) when (parent != 0 &&
                         ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
                     {
                         onSkipped?.Invoke($"Skipped inaccessible directory: {folder.FullName} ({ex.Message})");
+                        Prefetch();
                         continue;
                     }
                     directoryCount++;
@@ -129,7 +178,11 @@ public static class LegacyCatalogWriter
                         if ((nextId & 255) == 0) onProgress?.Invoke(nextId);
                         if (isDirectory) descend.Add(((DirectoryInfo)child, id));
                     }
-                    for (var i = descend.Count - 1; i >= 0; i--) stack.Push(descend[i]);
+                    if (directoryPrefetch == 1)
+                        for (var i = descend.Count - 1; i >= 0; i--) stack.Push(descend[i]);
+                    else
+                        foreach (var childDirectory in descend) queue.Enqueue(childDirectory);
+                    Prefetch();
                 }
                 writer.Flush();
                 file.Flush(flushToDisk: true);
@@ -145,7 +198,9 @@ public static class LegacyCatalogWriter
                 var metadataMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(0, metadataTicks).TotalMilliseconds;
                 var sortMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(0, sortTicks).TotalMilliseconds;
                 onMetrics(new CatalogScanMetrics(enumerationMs, metadataMs,
-                    Math.Max(0, (long)overallTimer.Elapsed.TotalMilliseconds - enumerationMs - metadataMs - sortMs), directoryCount, sortMs));
+                    directoryPrefetch == 1
+                        ? Math.Max(0, (long)overallTimer.Elapsed.TotalMilliseconds - enumerationMs - metadataMs - sortMs)
+                        : null, directoryCount, sortMs));
             }
             return nextId;
         }

@@ -10,7 +10,7 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
     int SkippedEntries = 0, string[]? SkippedDetails = null,
     string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null,
-    CatalogScanMetrics? ScanMetrics = null);
+    CatalogScanMetrics? ScanMetrics = null, int EnumeratedDirectories = 0);
 
 public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error);
@@ -70,6 +70,12 @@ public sealed class CatalogIndexScheduler
             report.WriteLine("Catalogue : " + (job.Name ?? job.Root));
             report.WriteLine("Source : " + job.Root);
             report.WriteLine();
+            Action<int> enumerated = count =>
+            {
+                if (jobIndex >= 0)
+                    Volatile.Write(ref _statuses[jobIndex],
+                        Volatile.Read(ref _statuses[jobIndex]) with { EnumeratedDirectories = count });
+            };
             Action<int> progress = count =>
             {
                 if (jobIndex >= 0)
@@ -91,6 +97,9 @@ public sealed class CatalogIndexScheduler
                     });
                 }
             };
+            // Opt-in experiment: 1 (default), 2 or 4 concurrent directory enumerations.
+            var prefetch = int.TryParse(Environment.GetEnvironmentVariable("WIMF_INDEX_PREFETCH"),
+                out var requested) && requested is 2 or 4 or 16 or 50 ? requested : 1;
             var bench = System.Diagnostics.Stopwatch.StartNew();
             CatalogScanMetrics? scanResult = null;
             Action<CatalogScanMetrics> metrics = m =>
@@ -103,22 +112,23 @@ public sealed class CatalogIndexScheduler
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics);
+                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
 
             }
             else
             {
                 var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress);
+                    excludePaths: job.Exclude, onProgress: progress,
+                    onMetrics: metrics, directoryPrefetch: prefetch);
 
             }
             bench.Stop();
             if (scanResult is not null)
-                Console.WriteLine($"[BENCH] {job.Root} | total={bench.ElapsedMilliseconds} ms | " +
+                Console.WriteLine($"[BENCH] {job.Root} | prefetch={prefetch} | total={bench.ElapsedMilliseconds} ms | " +
                     $"dossiers={scanResult.DirectoryCount} | enumeration={scanResult.DirectoryEnumerationMilliseconds} ms | " +
                     $"tri={scanResult.DirectorySortMilliseconds} ms | metadonnees={scanResult.MetadataMilliseconds} ms | " +
-                    $"autres/ecriture={scanResult.OutputMilliseconds} ms | ignores=" +
+                    $"autres/ecriture={(scanResult.OutputMilliseconds is long outputMs ? $"{outputMs} ms" : "n/a")} | ignores=" +
                     (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
             report.WriteLine();
             report.WriteLine("Total ignore : " + (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
