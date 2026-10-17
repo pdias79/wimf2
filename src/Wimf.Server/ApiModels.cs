@@ -1,3 +1,4 @@
+using Wimf.Catalog;
 using System.Text.Json.Serialization;
 
 namespace Wimf.Server;
