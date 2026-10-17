@@ -223,6 +223,7 @@ public static class WebUi
       .filter(details => details.open).map(details => details.dataset.exclusionPath));
     indexingList.replaceChildren();
     indexingError.textContent = "";
+    const runningCatalog = catalogs.find(c => c.state === "running");
     const active = catalogs.filter(c => c.state === "running").length;
     const errors = catalogs.filter(c => c.state === "failed").length;
     indexingSummary.textContent = catalogs.length + " catalogue(s)" +
@@ -249,6 +250,13 @@ public static class WebUi
         ? (catalog.available ? "Chargé" : "Indisponible")
         : (indexingLabels[catalog.state] || "En attente");
       heading.append(name, state);
+      if (catalog.state === "queued" && runningCatalog && runningCatalog.path !== catalog.path) {
+        const queueReason = document.createElement("div");
+        queueReason.className = "catalog-details";
+        queueReason.textContent = "En attente de la fin de l’indexation : " +
+          (runningCatalog.name || runningCatalog.path);
+        item.appendChild(queueReason);
+      }
       const path = document.createElement("div");
       path.className = "catalog-details";
       path.textContent = (catalog.root || "Racine inconnue") + " → " + catalog.path;
