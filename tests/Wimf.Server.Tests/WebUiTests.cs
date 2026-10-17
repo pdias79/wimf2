@@ -202,6 +202,8 @@ public class WebUiTests
         Assert.Contains("catalog.lastSuccess", WebUi.Html);
         Assert.Contains("catalog.skippedEntries", WebUi.Html);
         Assert.Contains("catalog.skippedDetails", WebUi.Html);
+        Assert.Contains("expandedPaths.has(catalog.path)", WebUi.Html);
+        Assert.Contains("details.dataset.catalogPath = catalog.path", WebUi.Html);
         Assert.Contains("Voir les éléments ignorés", WebUi.Html);
         Assert.Contains("Éléments ignorés", WebUi.Html);
         Assert.Contains("indexingCheckInProgress || document.hidden", WebUi.Html);
