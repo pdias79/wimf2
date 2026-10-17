@@ -9,7 +9,8 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     int? FileCount = null, bool CanStart = true,
     int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
     int SkippedEntries = 0, string[]? SkippedDetails = null,
-    string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null);
+    string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null,
+    CatalogScanMetrics? ScanMetrics = null);
 
 public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error);
@@ -91,11 +92,16 @@ public sealed class CatalogIndexScheduler
                     });
                 }
             };
-            Action<CatalogScanMetrics> metrics = m => Console.WriteLine(
+            Action<CatalogScanMetrics> metrics = m =>
+            {
+                if (jobIndex >= 0)
+                    Volatile.Write(ref _statuses[jobIndex], Volatile.Read(ref _statuses[jobIndex]) with { ScanMetrics = m });
+                Console.WriteLine(
                 $"Indexing timings for '{job.Root}': {m.DirectoryCount} directories; " +
                 $"enumeration {m.DirectoryEnumerationMilliseconds} ms; " +
                 $"metadata {m.MetadataMilliseconds} ms; " +
                 $"other/write {m.OutputMilliseconds} ms.");
+            };
             if (File.Exists(job.Output))
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
@@ -233,7 +239,7 @@ public sealed class CatalogIndexScheduler
             Console.WriteLine($"Indexing started: '{job.Root}' -> '{job.Output}'.");
             Volatile.Write(ref _statuses[i], _statuses[i] with
             {
-                State = "running", LastError = null, QueuedAt = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
+                State = "running", LastError = null, QueuedAt = null, ScanMetrics = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
                 StartedAt = DateTimeOffset.UtcNow
             });
             await _execute(job, token);
