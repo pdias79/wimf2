@@ -283,28 +283,14 @@ public static class WebUi
             list.appendChild(entry);
           }
           details.appendChild(list);
-          const copy = document.createElement("button");
-          copy.type = "button";
-          copy.className = "copy";
-          copy.textContent = "Copier le rapport";
-          copy.addEventListener("click", async () => {
-            const report = [
-              "Wimf2 — éléments ignorés",
-              "Catalogue : " + catalog.name,
-              "Source : " + (catalog.root || "Inconnue"),
-              "Total ignoré : " + catalog.skippedEntries,
-              "Détails disponibles : " + catalog.skippedDetails.length,
-              "",
-              ...catalog.skippedDetails
-            ].join("\\n");
-            try {
-              await navigator.clipboard.writeText(report);
-              copy.textContent = "Rapport copié";
-            } catch {
-              copy.textContent = "Copie impossible";
-            }
-          });
-          details.appendChild(copy);
+          if (catalog.state === "completed" && catalog.indexingJobIndex !== null) {
+            const download = document.createElement("a");
+            download.className = "copy";
+            download.textContent = "Télécharger le rapport TXT complet";
+            download.href = "/api/indexing/" + catalog.indexingJobIndex + "/skipped-report";
+            download.download = "wimf2-elements-ignores-" + catalog.indexingJobIndex + ".txt";
+            details.appendChild(download);
+          }
           item.appendChild(details);
         }
       }
