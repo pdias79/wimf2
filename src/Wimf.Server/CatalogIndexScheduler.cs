@@ -50,7 +50,8 @@ public sealed class CatalogIndexScheduler
             else
             {
                 var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: Console.Error.WriteLine, excludePaths: job.Exclude);
+                    cancellationToken: token, onSkipped: Console.Error.WriteLine,
+                    excludePaths: job.Exclude, onProgress: progress);
                 Console.WriteLine($"Indexed '{job.Root}': {count} entries.");
             }
         }, token));
