@@ -20,6 +20,8 @@ public sealed class CatalogPathExclusions
             OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
     }
 
+    public IReadOnlyList<string> Paths => _paths;
+
     private string Resolve(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
