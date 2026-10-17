@@ -70,6 +70,7 @@ public static class WebUi
     .saved-search .saved-label { flex: 1; min-width: 170px; overflow-wrap: anywhere; }
     .saved-search button { font-size: .8rem; }
     .saved-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .header-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
     .indexing-list { display: grid; gap: 10px; margin-top: 12px; }
     .indexing-item { padding: 10px 0; border-top: 1px solid color-mix(in srgb, CanvasText 12%, Canvas); overflow-wrap: anywhere; }
     .indexing-item:first-child { border-top: none; }
@@ -86,7 +87,14 @@ public static class WebUi
 </head>
 <body>
 <main>
-  <header><h1>Wimf <span class="muted">2</span></h1><span id="health" class="status" role="status">Connexion…</span></header>
+  <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et indexations</button><span id="health" class="status" role="status">Connexion…</span></div></header>
+  <section id="indexing-panel" class="panel" aria-label="Catalogues et indexations" hidden>
+    <div class="bar"><h2>Catalogues et indexations</h2><button id="refresh" type="button" class="copy">Actualiser les catalogues</button></div>
+    <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
+    <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
+    <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
+    <p id="indexing-error" class="status" role="status"></p>
+  </section>
   <p class="sub">Rechercher des fichiers dans les catalogues locaux chargés par le daemon.</p>
   <section class="panel" aria-label="Recherche">
     <form id="search-form">
@@ -128,12 +136,7 @@ public static class WebUi
     <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
   <section class="panel" aria-label="Résultats">
-    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span><span id="refresh-errors" class="status" role="status"></span></div></div>
-    <details id="indexing-panel" class="advanced">
-      <summary>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></summary>
-      <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
-      <p id="indexing-error" class="status" role="status"></p>
-    </details>
+    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2></div>
     <div class="result-tools">
       <label for="result-sort">Trier les résultats affichés :</label>
       <select id="result-sort" aria-label="Tri des résultats">
@@ -196,6 +199,12 @@ public static class WebUi
   const refreshTime = byId("refresh-time");
   const refreshErrors = byId("refresh-errors");
   const indexingPanel = byId("indexing-panel");
+  const indexingToggle = byId("indexing-toggle");
+  indexingToggle.addEventListener("click", () => {
+    indexingPanel.hidden = !indexingPanel.hidden;
+    indexingToggle.setAttribute("aria-expanded", String(!indexingPanel.hidden));
+    if (!indexingPanel.hidden) pollIndexingStatus();
+  });
   const indexingList = byId("indexing-list");
   const indexingSummary = byId("indexing-summary");
   const indexingError = byId("indexing-error");
