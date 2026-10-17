@@ -70,7 +70,7 @@ public static class LegacyCatalogWriter
                     foreach (var child in children)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        if (exclusions.Contains(child.FullName)) continue;
+                        if (exclusions.ContainsFullPath(child.FullName)) continue;
                         if (string.Equals(child.FullName, output, pathComparison) ||
                             string.Equals(child.FullName, temporary, pathComparison)) continue;
                         // The legacy semicolon-separated format cannot encode these names.

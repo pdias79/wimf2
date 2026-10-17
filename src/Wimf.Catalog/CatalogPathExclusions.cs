@@ -7,6 +7,7 @@ namespace Wimf.Catalog;
 public sealed class CatalogPathExclusions
 {
     private readonly string[] _paths;
+    private readonly string[] _directoryPrefixes;
     private readonly StringComparison _comparison;
     private readonly string _root;
 
@@ -18,6 +19,7 @@ public sealed class CatalogPathExclusions
             ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         _paths = (exclusions ?? []).Select(Resolve).Distinct(
             OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
+        _directoryPrefixes = _paths.Select(path => path + Path.DirectorySeparatorChar).ToArray();
     }
 
     public IReadOnlyList<string> Paths => _paths;
@@ -43,9 +45,21 @@ public sealed class CatalogPathExclusions
     public bool Contains(string path)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        foreach (var excluded in _paths)
-            if (string.Equals(full, excluded, _comparison) || IsDescendant(full, excluded))
+        return ContainsFullPath(full);
+    }
+
+    /// <summary>
+    /// Fast path for canonical absolute paths returned by FileSystemInfo.FullName.
+    /// Callers must not pass relative paths or paths containing unresolved segments.
+    /// </summary>
+    internal bool ContainsFullPath(string fullPath)
+    {
+        for (var i = 0; i < _paths.Length; i++)
+        {
+            if (string.Equals(fullPath, _paths[i], _comparison) ||
+                fullPath.StartsWith(_directoryPrefixes[i], _comparison))
                 return true;
+        }
         return false;
     }
 }

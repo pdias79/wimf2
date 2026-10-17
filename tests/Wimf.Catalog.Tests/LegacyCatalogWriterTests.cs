@@ -148,6 +148,30 @@ public sealed class LegacyCatalogWriterTests
     }
 
     [Fact]
+    public void ExcludesNestedDirectoryWithoutExcludingSimilarPrefix()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "wimf-nested-exclude-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(work, "source");
+        Directory.CreateDirectory(Path.Combine(root, "Program Files", "Microsoft Visual Studio"));
+        Directory.CreateDirectory(Path.Combine(root, "Program Files", "Microsoft Visual Studio Code"));
+        File.WriteAllText(Path.Combine(root, "Program Files", "Microsoft Visual Studio", "ignored.txt"), "skip");
+        File.WriteAllText(Path.Combine(root, "Program Files", "Microsoft Visual Studio Code", "kept.txt"), "keep");
+        var output = Path.Combine(work, "catalog.txt.gz");
+        try
+        {
+            LegacyCatalogWriter.Build(root, output,
+                excludePaths: [Path.Combine("Program Files", "Microsoft Visual Studio")]);
+            var catalog = LegacyCatalogReader.ReadFile(output);
+            var names = catalog.EnumerateEntries().Select(e => e.Name).ToArray();
+            Assert.DoesNotContain("Microsoft Visual Studio", names);
+            Assert.DoesNotContain("ignored.txt", names);
+            Assert.Contains("Microsoft Visual Studio Code", names);
+            Assert.Contains("kept.txt", names);
+        }
+        finally { Directory.Delete(work, true); }
+    }
+
+    [Fact]
     public void RejectsExclusionOfRootOrPathOutsideRoot()
     {
         var work = Path.Combine(Path.GetTempPath(), "wimf-exclude-" + Guid.NewGuid().ToString("N"));
