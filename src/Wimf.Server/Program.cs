@@ -309,9 +309,7 @@ if (options.Indexing is { Length: > 0 })
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         afterSuccess: async (job, token) =>
         {
-            var summary = await store.RefreshAsync(token);
-            Console.WriteLine($"Indexed catalog '{job.Output}' reloaded; " +
-                $"{summary.CatalogCount} catalog(s) searchable.");
+            await store.RefreshAsync(token);
         });
     var scheduler = indexingScheduler;
     _ = Task.Run(async () =>
