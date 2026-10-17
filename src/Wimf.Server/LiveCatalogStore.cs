@@ -54,7 +54,7 @@ public sealed class LiveCatalogStore
             _localCatalogs[i] = LegacyCatalogReader.ReadFile(_localPaths[i]);
             _localStamps[i] = GetStamp(_localPaths[i]);
         }
-        _snapshot = _localCatalogs.ToArray();
+        _snapshot = _localCatalogs.OfType<FileCatalog>().ToArray();
     }
 
     private static (long Ticks, long Length) GetStamp(string path)
