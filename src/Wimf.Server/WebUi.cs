@@ -266,6 +266,21 @@ public static class WebUi
         skipped.textContent = "Éléments ignorés (inaccessibles ou non pris en charge) : " +
           Number(catalog.skippedEntries).toLocaleString("fr-FR");
         item.appendChild(skipped);
+        if (Array.isArray(catalog.skippedDetails) && catalog.skippedDetails.length) {
+          const details = document.createElement("details");
+          const heading = document.createElement("summary");
+          heading.textContent = "Voir les éléments ignorés (" + catalog.skippedDetails.length +
+            " premiers sur " + catalog.skippedEntries + ")";
+          details.appendChild(heading);
+          const list = document.createElement("ul");
+          for (const message of catalog.skippedDetails) {
+            const entry = document.createElement("li");
+            entry.textContent = message;
+            list.appendChild(entry);
+          }
+          details.appendChild(list);
+          item.appendChild(details);
+        }
       }
       if (catalog.state === "completed" && catalog.startedAt && catalog.lastSuccess) {
         const started = new Date(catalog.startedAt).getTime();
