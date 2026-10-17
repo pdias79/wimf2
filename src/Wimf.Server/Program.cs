@@ -262,6 +262,15 @@ app.MapGet("/api/catalog-management", () =>
     return Results.Json(managed, WimfJsonContext.Default.ManagedCatalogStatusArray);
 });
 
+// Download the complete server-side TXT report, without exposing arbitrary disk paths.
+app.MapGet("/api/indexing/{index:int}/skipped-report", (int index) =>
+{
+    var stream = indexingScheduler?.OpenSkippedReport(index);
+    if (stream is null) return Results.NotFound();
+    return Results.File(stream, "text/plain; charset=utf-8",
+        $"wimf2-elements-ignores-{index}.txt");
+});
+
 // Manual scans are restricted to requests originating from the local Wimf page.
 app.MapPost("/api/indexing/{index:int}/start", (HttpContext context, int index) =>
 {
