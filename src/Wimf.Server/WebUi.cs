@@ -294,6 +294,16 @@ public static class WebUi
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
       item.append(heading, path, metadata);
+      if (catalog.scanMetrics) {
+        const metrics = catalog.scanMetrics;
+        const timing = document.createElement("div");
+        timing.className = "catalog-details";
+        timing.textContent = "Dernier scan : " + metrics.directoryCount.toLocaleString("fr-FR") +
+          " dossiers · Parcours/tri : " + metrics.directoryEnumerationMilliseconds + " ms" +
+          " · Métadonnées : " + metrics.metadataMilliseconds + " ms" +
+          " · Autres/écriture : " + metrics.outputMilliseconds + " ms";
+        item.appendChild(timing);
+      }
       if (catalog.state === "queued" && catalog.queuedAt) {
         const elapsed = Math.max(0, Math.floor((Date.now() - new Date(catalog.queuedAt).getTime()) / 1000));
         if (Number.isFinite(elapsed)) {
