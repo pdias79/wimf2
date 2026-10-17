@@ -250,13 +250,6 @@ public static class WebUi
         ? (catalog.available ? "Chargé" : "Indisponible")
         : (indexingLabels[catalog.state] || "En attente");
       heading.append(name, state);
-      if (catalog.state === "queued" && runningCatalog && runningCatalog.path !== catalog.path) {
-        const queueReason = document.createElement("div");
-        queueReason.className = "catalog-details";
-        queueReason.textContent = "En attente de la fin de l’indexation : " +
-          (runningCatalog.name || runningCatalog.path);
-        item.appendChild(queueReason);
-      }
       const path = document.createElement("div");
       path.className = "catalog-details";
       path.textContent = (catalog.root || "Racine inconnue") + " → " + catalog.path;
@@ -265,6 +258,13 @@ public static class WebUi
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
       item.append(heading, path, metadata);
+      if (catalog.state === "queued" && runningCatalog && runningCatalog.path !== catalog.path) {
+        const queueReason = document.createElement("div");
+        queueReason.className = "catalog-details";
+        queueReason.textContent = "En attente de la fin de l’indexation : " +
+          (runningCatalog.name || runningCatalog.path);
+        item.appendChild(queueReason);
+      }
       if (Array.isArray(catalog.effectiveExclusions) && catalog.effectiveExclusions.length) {
         const exclusions = document.createElement("details");
         exclusions.className = "catalog-details";
