@@ -5,11 +5,14 @@ using System.Text;
 namespace Wimf.Catalog;
 
 /// <summary>Builds a legacy-compatible UTF-8 or gzip catalog from an existing directory tree.</summary>
+public sealed record CatalogScanMetrics(long DirectoryEnumerationMilliseconds, long MetadataMilliseconds, long OutputMilliseconds, int DirectoryCount);
+
 public static class LegacyCatalogWriter
 {
     public static int Build(string rootPath, string outputPath, string? catalogName = null,
         CancellationToken cancellationToken = default, Action<string>? onSkipped = null,
-        IEnumerable<string>? excludePaths = null, Action<int>? onProgress = null)
+        IEnumerable<string>? excludePaths = null, Action<int>? onProgress = null,
+        Action<CatalogScanMetrics>? onMetrics = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -33,6 +36,9 @@ public static class LegacyCatalogWriter
         Directory.CreateDirectory(outputDirectory);
         var temporary = Path.Combine(outputDirectory, "." + Path.GetFileName(output) + "." + Guid.NewGuid().ToString("N") + ".tmp");
         var nextId = 0;
+        long enumerationTicks = 0, metadataTicks = 0;
+        var directoryCount = 0;
+        var overallTimer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -55,6 +61,7 @@ public static class LegacyCatalogWriter
                     // File-system enumeration order is not stable. Sort by ordinal name to
                     // make generated record order reproducible on one filesystem.
                     FileSystemInfo[] children;
+                    var enumerationStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     try
                     {
                         children = folder.EnumerateFileSystemInfos()
@@ -66,6 +73,8 @@ public static class LegacyCatalogWriter
                         onSkipped?.Invoke($"Skipped inaccessible directory: {folder.FullName} ({ex.Message})");
                         continue;
                     }
+                    enumerationTicks += System.Diagnostics.Stopwatch.GetTimestamp() - enumerationStart;
+                    directoryCount++;
                     var descend = new List<(DirectoryInfo Folder, int Parent)>();
                     foreach (var child in children)
                     {
@@ -87,6 +96,7 @@ public static class LegacyCatalogWriter
                         string extension;
                         ulong size;
                         long days;
+                        var metadataStart = System.Diagnostics.Stopwatch.GetTimestamp();
                         try
                         {
                             var attributes = child.Attributes;
@@ -103,6 +113,7 @@ public static class LegacyCatalogWriter
                             onSkipped?.Invoke($"Skipped inaccessible entry: {childPath} ({ex.Message})");
                             continue;
                         }
+                        metadataTicks += System.Diagnostics.Stopwatch.GetTimestamp() - metadataStart;
                         writer.Write(childName);
                         writer.Write(';');
                         writer.Write(extension);
@@ -125,6 +136,14 @@ public static class LegacyCatalogWriter
             }
             File.Move(temporary, output, overwrite: true);
             onProgress?.Invoke(nextId);
+            overallTimer.Stop();
+            if (onMetrics is not null)
+            {
+                var enumerationMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(0, enumerationTicks).TotalMilliseconds;
+                var metadataMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(0, metadataTicks).TotalMilliseconds;
+                onMetrics(new CatalogScanMetrics(enumerationMs, metadataMs,
+                    Math.Max(0, (long)overallTimer.Elapsed.TotalMilliseconds - enumerationMs - metadataMs), directoryCount));
+            }
             return nextId;
         }
         finally
