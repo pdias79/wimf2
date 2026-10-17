@@ -167,6 +167,12 @@ public sealed class CatalogIndexScheduler
     private async Task ExecuteAsync(int i, DateTimeOffset now, CancellationToken token)
     {
         var job = _jobs[i];
+        // Capture this attempt even when its source is unavailable before scanning starts.
+        Volatile.Write(ref _statuses[i], _statuses[i] with
+        {
+            StartedAt = DateTimeOffset.UtcNow, ScannedEntries = 0, SkippedEntries = 0,
+            SkippedDetails = []
+        });
         try
         {
             if (!Directory.Exists(job.Root))
