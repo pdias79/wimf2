@@ -8,7 +8,8 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     DateTimeOffset? LastUpdate = null, DateTimeOffset? NextUpdate = null,
     int? FileCount = null, bool CanStart = true,
     int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
-    int SkippedEntries = 0, string[]? SkippedDetails = null);
+    int SkippedEntries = 0, string[]? SkippedDetails = null,
+    string[]? EffectiveExclusions = null);
 
 public sealed class CatalogIndexScheduler
 {
@@ -29,7 +30,8 @@ public sealed class CatalogIndexScheduler
         _retryNotBefore = new DateTimeOffset[_jobs.Length];
         _manualQueued = new int[_jobs.Length];
         _statuses = _jobs.Select(job => new IndexingJobStatus(job.Name ?? job.Root,
-            job.Root, job.Output, "pending", null, null)).ToArray();
+            job.Root, job.Output, "pending", null, null,
+            EffectiveExclusions: new CatalogPathExclusions(job.Root, job.Exclude).Paths.ToArray())).ToArray();
         _execute = execute ?? ((job, token) => Task.Run(() =>
         {
             var jobIndex = Array.FindIndex(_jobs, candidate => ReferenceEquals(candidate, job));
