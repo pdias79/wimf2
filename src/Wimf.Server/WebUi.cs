@@ -129,9 +129,9 @@ public static class WebUi
   </section>
   <section class="panel" aria-label="Résultats">
     <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span><span id="refresh-errors" class="status" role="status"></span></div></div>
-    <details id="indexing-panel" class="advanced" hidden>
+    <details id="indexing-panel" class="advanced">
       <summary>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></summary>
-      <div id="indexing-list" class="indexing-list" aria-label="État des indexations"></div>
+      <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
       <p id="indexing-error" class="status" role="status"></p>
     </details>
     <div class="result-tools">
@@ -205,10 +205,16 @@ public static class WebUi
     completed: "Terminée", failed: "Échec"
   };
   function renderIndexingStatus(jobs) {
-    indexingPanel.hidden = jobs.length === 0;
     indexingList.replaceChildren();
     indexingError.textContent = "";
-    if (jobs.length === 0) return;
+    indexingSummary.textContent = "";
+    if (jobs.length === 0) {
+      const note = document.createElement("p");
+      note.className = "status";
+      note.textContent = "Aucune tâche d’indexation configurée. Vérifiez la section indexing dans wimf.json et redémarrez Wimf.";
+      indexingList.appendChild(note);
+      return;
+    }
     const active = jobs.filter(job => job.state === "running").length;
     const errors = jobs.filter(job => job.state === "failed").length;
     indexingSummary.textContent = jobs.length + " tâche(s)" +
@@ -256,7 +262,7 @@ public static class WebUi
       if (!Array.isArray(jobs)) throw new Error("Réponse des indexations invalide.");
       renderIndexingStatus(jobs);
     } catch {
-      indexingError.textContent = "État des indexations indisponible.";
+      indexingError.textContent = "État des indexations indisponible : vérifiez que le serveur utilise la dernière branche.";
       indexingError.classList.add("error");
     } finally {
       indexingCheckInProgress = false;
