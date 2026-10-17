@@ -95,6 +95,9 @@ var initialRefresh = await store.RefreshAsync();
 Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s); {initialRefresh.FailedSources} source(s) unavailable, {initialRefresh.FailedLocalCatalogs} local catalog(s) unavailable.");
 
 var builder = WebApplication.CreateSlimBuilder(Array.Empty<string>());
+// Avoid verbose ASP.NET Core request/endpoint logs during frequent UI polling.
+// Warnings and errors remain visible; explicit [BENCH] console output is unaffected.
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
 builder.WebHost.UseUrls("http://127.0.0.1:5080");
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, WimfJsonContext.Default));
