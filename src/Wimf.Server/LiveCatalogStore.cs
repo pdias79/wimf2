@@ -93,6 +93,63 @@ public sealed class LiveCatalogStore
     }
 
 
+    /// <summary>Reload one generated local catalog without contacting unrelated sources.</summary>
+    public async Task<RefreshSummary> RefreshLocalCatalogAsync(string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var fullPath = Path.GetFullPath(path);
+        var index = Array.FindIndex(_localPaths, configured => comparer.Equals(configured, fullPath));
+        if (index < 0) throw new ArgumentException("Catalog is not configured as a local catalog.", nameof(path));
+
+        await _refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var next = (FileCatalog?[])_localCatalogs.Clone();
+            var stamps = ((long Ticks, long Length)[])_localStamps.Clone();
+            var failedLocal = 0;
+            try
+            {
+                var stamp = GetStamp(fullPath);
+                if (next[index] is null || stamps[index] != stamp)
+                {
+                    var loaded = LegacyCatalogReader.ReadFile(fullPath);
+                    if (GetStamp(fullPath) != stamp)
+                        throw new IOException("Local catalog changed while loading.");
+                    next[index] = loaded;
+                    stamps[index] = stamp;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                       InvalidDataException or ArgumentException or
+                                       System.Text.DecoderFallbackException)
+            {
+                failedLocal = 1;
+                Console.Error.WriteLine($"Unable to refresh local catalog '{fullPath}': {ex.Message}");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _localCatalogs = next;
+            _localStamps = stamps;
+            var snapshot = next.OfType<FileCatalog>().Concat(_sourceCatalogs.OfType<FileCatalog>()).ToArray();
+            var previous = Volatile.Read(ref _snapshot);
+            if (!previous.AsSpan().SequenceEqual(snapshot))
+                Volatile.Write(ref _snapshot, snapshot);
+
+            // Preserve unrelated failure indicators: those sources were not retried here.
+            var preceding = Volatile.Read(ref _lastSummary);
+            var summary = new RefreshSummary(snapshot.Length, _sources.Length,
+                preceding?.FailedSources ?? 0, DateTimeOffset.UtcNow,
+                failedLocal + Math.Max(0, (preceding?.FailedLocalCatalogs ?? 0) -
+                    (preceding?.FailedLocalCatalogs > 0 ? 1 : 0)));
+            Volatile.Write(ref _lastSummary, summary);
+            return summary;
+        }
+        finally { _refreshLock.Release(); }
+    }
+
     /// <summary>Serializes updates; leaves working source entries intact if refresh fails.</summary>
     public async Task<RefreshSummary> RefreshAsync(CancellationToken cancellationToken = default)
     {
