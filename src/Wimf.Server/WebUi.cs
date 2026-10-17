@@ -58,6 +58,9 @@ public static class WebUi
     .pager select { padding: 7px 10px; }
     .empty { padding: 28px 0; color: GrayText; text-align: center; }
     .copy { font-size: .8rem; padding: 6px 9px; white-space: nowrap; background: #424f62; }
+    .skipped-report-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+    .skipped-report-download { display: inline-block; border-radius: 8px; color: white; font-weight: 600; text-decoration: none; cursor: pointer; }
+    .skipped-report-download:hover, .skipped-report-download:focus-visible { background: #344052; }
     .file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 240px; }
     .file-actions button { font-size: .78rem; }
     .catalog-list { display: grid; gap: 8px; margin-top: 12px; }
@@ -284,12 +287,15 @@ public static class WebUi
           }
           details.appendChild(list);
           if (catalog.state === "completed" && catalog.indexingJobIndex !== null) {
+            const actions = document.createElement("div");
+            actions.className = "skipped-report-actions";
             const download = document.createElement("a");
-            download.className = "copy";
+            download.className = "copy skipped-report-download";
             download.textContent = "Télécharger le rapport TXT complet";
             download.href = "/api/indexing/" + catalog.indexingJobIndex + "/skipped-report";
             download.download = "wimf2-elements-ignores-" + catalog.indexingJobIndex + ".txt";
-            details.appendChild(download);
+            actions.appendChild(download);
+            details.appendChild(actions);
           }
           item.appendChild(details);
         }
