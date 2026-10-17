@@ -250,6 +250,16 @@ public static class WebUi
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
       item.append(heading, path, metadata);
+      if (catalog.state === "running") {
+        const progress = document.createElement("div");
+        progress.className = "catalog-details";
+        const elapsed = catalog.startedAt
+          ? Math.max(0, Math.floor((Date.now() - new Date(catalog.startedAt).getTime()) / 1000))
+          : 0;
+        progress.textContent = "Progression : " + Number(catalog.scannedEntries || 0).toLocaleString("fr-FR") +
+          " éléments parcourus · " + Math.floor(elapsed / 60) + " min " + (elapsed % 60) + " s";
+        item.appendChild(progress);
+      }
       if (catalog.indexingJobIndex !== null) {
         const schedule = document.createElement("div");
         schedule.className = "catalog-details";
