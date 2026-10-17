@@ -141,4 +141,35 @@ public sealed class ScheduledIndexingTests
         finally { Directory.Delete(folder, true); }
     }
 
+    [Fact]
+    public async Task OfflineNetworkRootIsReportedAndRetriedWhenItReturns()
+    {
+        var workspace = Path.Combine(Path.GetTempPath(), "wimf-root-retry-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        try
+        {
+            var missingRoot = Path.Combine(workspace, "offline-share");
+            var output = Path.Combine(workspace, "index.txt");
+            var executions = 0;
+            var job = new IndexingJob(missingRoot, output, "Offline share", [], TimeSpan.FromMinutes(5));
+            var scheduler = new CatalogIndexScheduler([job], (j, ct) =>
+            {
+                executions++;
+                File.WriteAllText(j.Output, "created");
+                return Task.CompletedTask;
+            });
+            var now = DateTimeOffset.UtcNow;
+            await scheduler.CheckOnceAsync(now);
+            Assert.Equal(0, executions);
+            Assert.Equal("failed", scheduler.Status[0].State);
+            Assert.Contains("Indexing root unavailable", scheduler.Status[0].LastError);
+            Directory.CreateDirectory(missingRoot);
+            await scheduler.CheckOnceAsync(now.AddMinutes(2));
+            Assert.Equal(1, executions);
+            Assert.Equal("completed", scheduler.Status[0].State);
+            Assert.Null(scheduler.Status[0].LastError);
+        }
+        finally { Directory.Delete(workspace, true); }
+    }
+
 }
