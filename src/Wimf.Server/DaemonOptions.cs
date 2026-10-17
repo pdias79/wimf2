@@ -24,10 +24,11 @@ public sealed class IndexingJobConfiguration
     public int? IntervalMinutes { get; init; }
     public int? IntervalHours { get; init; }
     public int? IntervalDays { get; init; }
+    public int? Workers { get; init; }
 }
 
 public sealed record IndexingJob(string Root, string Output, string? Name,
-    string[] Exclude, TimeSpan Interval);
+    string[] Exclude, TimeSpan Interval, int Workers = 1);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DaemonConfiguration))]
@@ -109,8 +110,11 @@ public sealed record DaemonOptions(
                 var output = Resolve(baseDirectory, job.Output);
                 if (job.Exclude is null) throw new ArgumentException("indexing.exclude must be an array.");
                 _ = new Wimf.Catalog.CatalogPathExclusions(root, job.Exclude);
+                var workers = job.Workers ?? 1;
+                if (workers is < 1 or > 50)
+                    throw new ArgumentException("indexing.workers must be between 1 and 50.");
                 indexing.Add(new IndexingJob(root, output, job.Name, job.Exclude,
-                    TimeSpan.FromMinutes(minutes)));
+                    TimeSpan.FromMinutes(minutes), workers));
             }
         }
 

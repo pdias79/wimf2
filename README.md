@@ -475,3 +475,22 @@ The refresh is performed only after the writer finishes publishing the output; r
 ### Live scan progress (PR #34)
 
 While an indexing job runs, **Catalogues et actualisation** shows the number of filesystem entries scanned and elapsed time, refreshed through the existing 15-second UI polling. The counter comes directly from the legacy writer, both when creating a catalog and updating an existing one, and is reported every 256 records plus at successful completion to avoid per-record UI overhead. It includes cataloged files and folders; excluded/inaccessible entries are not counted. The figure is **not a percentage** because a full pre-count would require an additional traversal of a large disk or network share. The start time is recorded when a job begins, including manually requested runs. Searches continue to use the last valid catalog until the new scan completes.
+
+### Configurer les workers d'indexation
+
+Chaque entrée de `indexing` dans `wimf.json` accepte désormais un champ facultatif `workers` (entre **1 et 50**). Sa valeur par défaut est **1**, qui conserve le parcours séquentiel historique. Pour un partage réseau, on peut tester `"workers": 16` :
+
+```json
+{
+  "indexing": [
+    {
+      "root": "\\\\192.168.1.200\\BACKUP_PC_Cecile",
+      "output": "WIMF_DATABASE_BackupCecile.txt.gz",
+      "intervalDays": 7,
+      "workers": 16
+    }
+  ]
+}
+```
+
+Le nombre de workers s'applique au catalogue concerné lors des indexations manuelles ou planifiées. Redémarrer le serveur après une modification du fichier. Les modes parallèles utilisent un parcours BFS, et peuvent modifier l'ordre des identifiants internes par rapport au parcours DFS à un worker.
