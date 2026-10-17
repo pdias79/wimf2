@@ -341,6 +341,8 @@ public sealed class ScheduledIndexingTests
             Assert.Equal("completed", status.State);
             Assert.Equal(300, status.ScannedEntries);
             Assert.NotNull(status.StartedAt);
+            Assert.Equal(2, scheduler.History.Length);
+            Assert.All(scheduler.History, run => Assert.Equal("completed", run.State));
         }
         finally { Directory.Delete(root, true); }
     }
