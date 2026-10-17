@@ -200,7 +200,7 @@ public class WebUiTests
         Assert.Contains("setInterval(pollIndexingStatus, 15000)", WebUi.Html);
         Assert.Contains("indexingCheckInProgress || document.hidden", WebUi.Html);
         Assert.DoesNotContain("indexingPanel.hidden = jobs.length === 0", WebUi.Html);
-        Assert.Contains("Aucune tâche d’indexation configurée", WebUi.Html);
+        Assert.Contains("Aucun catalogue configuré", WebUi.Html);
         Assert.Contains("Chargement des indexations…", WebUi.Html);
         Assert.DoesNotContain("id=\"indexing-panel\" class=\"advanced\" hidden", WebUi.Html);
         foreach (var state in new[] { "pending", "running", "completed", "failed" })
