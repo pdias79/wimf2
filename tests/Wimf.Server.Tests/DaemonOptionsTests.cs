@@ -18,9 +18,9 @@ public sealed class DaemonOptionsTests
         try
         {
             var config = Path.Combine(directory, "wimf.json");
-            var workersField = workers.HasValue ? $",\\"workers\\":{workers.Value}" : "";
+            var workersField = workers.HasValue ? $",\"workers\":{workers.Value}" : "";
             File.WriteAllText(config,
-                "{\\"catalogs\\":[\\"catalog.gz\\"],\\"indexing\\":[{\\"root\\":\\"source\\",\\"output\\":\\"catalog.gz\\",\\"intervalHours\\":1" +
+                "{\"catalogs\":[\"catalog.gz\"],\"indexing\":[{\"root\":\"source\",\"output\":\"catalog.gz\",\"intervalHours\":1" +
                 workersField + "}]}");
             var options = DaemonOptions.Parse(["--config", config]);
             Assert.Equal(expected, Assert.Single(options.Indexing!).Workers);
@@ -39,7 +39,7 @@ public sealed class DaemonOptionsTests
         {
             var config = Path.Combine(directory, "wimf.json");
             File.WriteAllText(config,
-                "{\\"catalogs\\":[\\"catalog.gz\\"],\\"indexing\\":[{\\"root\\":\\"source\\",\\"output\\":\\"catalog.gz\\",\\"intervalHours\\":1,\\"workers\\":" +
+                "{\"catalogs\":[\"catalog.gz\"],\"indexing\":[{\"root\":\"source\",\"output\":\"catalog.gz\",\"intervalHours\":1,\"workers\":" +
                 workers + "}]}");
             Assert.Throws<ArgumentException>(() => DaemonOptions.Parse(["--config", config]));
         }
