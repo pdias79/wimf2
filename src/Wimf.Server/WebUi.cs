@@ -70,6 +70,11 @@ public static class WebUi
     .saved-search .saved-label { flex: 1; min-width: 170px; overflow-wrap: anywhere; }
     .saved-search button { font-size: .8rem; }
     .saved-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .indexing-list { display: grid; gap: 10px; margin-top: 12px; }
+    .indexing-item { padding: 10px 0; border-top: 1px solid color-mix(in srgb, CanvasText 12%, Canvas); overflow-wrap: anywhere; }
+    .indexing-item:first-child { border-top: none; }
+    .indexing-item strong { margin-right: 8px; }
+    .indexing-item .error { color: #ba3636; }
     .muted { color: GrayText; font-weight: 400; }
     @media (max-width: 640px) {
       main { padding: 20px 12px; }
@@ -124,6 +129,11 @@ public static class WebUi
   </section>
   <section class="panel" aria-label="Résultats">
     <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span><span id="refresh-errors" class="status" role="status"></span></div></div>
+    <details id="indexing-panel" class="advanced" hidden>
+      <summary>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></summary>
+      <div id="indexing-list" class="indexing-list" aria-label="État des indexations"></div>
+      <p id="indexing-error" class="status" role="status"></p>
+    </details>
     <div class="result-tools">
       <label for="result-sort">Trier les résultats affichés :</label>
       <select id="result-sort" aria-label="Tri des résultats">
@@ -185,6 +195,73 @@ public static class WebUi
   const refreshButton = byId("refresh");
   const refreshTime = byId("refresh-time");
   const refreshErrors = byId("refresh-errors");
+  const indexingPanel = byId("indexing-panel");
+  const indexingList = byId("indexing-list");
+  const indexingSummary = byId("indexing-summary");
+  const indexingError = byId("indexing-error");
+  let indexingCheckInProgress = false;
+  const indexingLabels = {
+    pending: "En attente", running: "En cours",
+    completed: "Terminée", failed: "Échec"
+  };
+  function renderIndexingStatus(jobs) {
+    indexingPanel.hidden = jobs.length === 0;
+    indexingList.replaceChildren();
+    indexingError.textContent = "";
+    if (jobs.length === 0) return;
+    const active = jobs.filter(job => job.state === "running").length;
+    const errors = jobs.filter(job => job.state === "failed").length;
+    indexingSummary.textContent = jobs.length + " tâche(s)" +
+      (active ? " · " + active + " en cours" : "") +
+      (errors ? " · " + errors + " en échec" : "");
+    const fragment = document.createDocumentFragment();
+    for (const job of jobs) {
+      const item = document.createElement("div");
+      item.className = "indexing-item";
+      const heading = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = job.name || job.root || "Indexation";
+      const state = document.createElement("span");
+      state.className = job.state === "failed" ? "status error" : "status";
+      state.textContent = indexingLabels[job.state] || "État inconnu";
+      heading.append(name, state);
+      const path = document.createElement("div");
+      path.className = "catalog-details";
+      path.textContent = (job.root || "") + " → " + (job.output || "");
+      item.append(heading, path);
+      if (job.lastSuccess) {
+        const success = document.createElement("div");
+        success.className = "catalog-details";
+        success.textContent = "Dernière indexation réussie : " +
+          new Date(job.lastSuccess).toLocaleString("fr-FR");
+        item.appendChild(success);
+      }
+      if (job.lastError) {
+        const failure = document.createElement("div");
+        failure.className = "status error";
+        failure.textContent = "Erreur : " + job.lastError;
+        item.appendChild(failure);
+      }
+      fragment.appendChild(item);
+    }
+    indexingList.appendChild(fragment);
+  }
+  async function pollIndexingStatus() {
+    if (indexingCheckInProgress || document.hidden) return;
+    indexingCheckInProgress = true;
+    try {
+      const response = await fetch("/api/indexing-status", { cache: "no-store" });
+      if (!response.ok) throw new Error("État des indexations indisponible.");
+      const jobs = await response.json();
+      if (!Array.isArray(jobs)) throw new Error("Réponse des indexations invalide.");
+      renderIndexingStatus(jobs);
+    } catch {
+      indexingError.textContent = "État des indexations indisponible.";
+      indexingError.classList.add("error");
+    } finally {
+      indexingCheckInProgress = false;
+    }
+  }
   let lastObservedRefresh = null;
   let refreshCheckInProgress = false;
   let refreshRequestInProgress = false;
@@ -631,6 +708,8 @@ public static class WebUi
     }
   }
   setInterval(pollRefreshStatus, 15000);
+  setInterval(pollIndexingStatus, 15000);
+  pollIndexingStatus();
 
   Promise.all([
     fetch("/api/health").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
