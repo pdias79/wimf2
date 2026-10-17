@@ -1,6 +1,7 @@
 {
   "catalogs": [
-    "WIMF_DATABASE_DisqueC.txt.gz"
+    "WIMF_DATABASE_DisqueC.txt.gz",
+    "Documents.txt.gz"
   ],
   "sources": [],
   "cacheDirectory": null,
@@ -16,6 +17,13 @@
         "Windows\\Temp"
       ],
       "intervalDays": 7
+    },
+    {
+      "root": "Documents",
+      "output": "Documents.txt.gz",
+      "name": "Documents",
+      "exclude": [],
+      "intervalMinutes": 15
     }
   ]
 }
