@@ -235,6 +235,9 @@ CatalogIndexScheduler? indexingScheduler = null;
 app.MapGet("/api/indexing-status", () =>
     Results.Json(indexingScheduler?.Status ?? [], WimfJsonContext.Default.IndexingJobStatusArray));
 
+app.MapGet("/api/indexing-history", () =>
+    Results.Json(indexingScheduler?.History ?? [], WimfJsonContext.Default.IndexingRunHistoryEntryArray));
+
 // Count entries only once per immutable catalog snapshot, not every UI poll.
 var fileCounts = new System.Runtime.CompilerServices.ConditionalWeakTable<
     Wimf.Catalog.Catalog, System.Runtime.CompilerServices.StrongBox<int>>();

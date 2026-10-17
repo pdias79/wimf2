@@ -97,6 +97,9 @@ public static class WebUi
     <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
     <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
     <p id="indexing-error" class="status" role="status"></p>
+    <details id="indexing-history-panel"><summary>Historique des indexations (session en cours)</summary>
+      <div id="indexing-history" class="catalog-details">Aucune indexation terminée.</div>
+    </details>
   </section>
   <p class="sub">Rechercher des fichiers dans les catalogues locaux chargés par le daemon.</p>
   <section class="panel" aria-label="Recherche">
@@ -206,12 +209,45 @@ public static class WebUi
   indexingToggle.addEventListener("click", () => {
     indexingPanel.hidden = !indexingPanel.hidden;
     indexingToggle.setAttribute("aria-expanded", String(!indexingPanel.hidden));
-    if (!indexingPanel.hidden) pollIndexingStatus();
+    if (!indexingPanel.hidden) { pollIndexingStatus(); pollIndexingHistory(); }
   });
   const indexingList = byId("indexing-list");
   const indexingSummary = byId("indexing-summary");
   const indexingError = byId("indexing-error");
   let indexingCheckInProgress = false;
+  let historyCheckInProgress = false;
+  async function pollIndexingHistory() {
+    if (historyCheckInProgress || document.hidden || indexingPanel.hidden) return;
+    historyCheckInProgress = true;
+    try {
+      const response = await fetch("/api/indexing-history", { cache: "no-store" });
+      if (!response.ok) throw new Error();
+      const runs = await response.json();
+      if (!Array.isArray(runs)) throw new Error();
+      const container = byId("indexing-history");
+      container.replaceChildren();
+      if (!runs.length) {
+        container.textContent = "Aucune indexation terminée depuis le démarrage.";
+      } else {
+        const list = document.createElement("ul");
+        for (const run of runs) {
+          const item = document.createElement("li");
+          const seconds = Math.max(0, Math.floor(
+            (new Date(run.finishedAt) - new Date(run.startedAt)) / 1000));
+          item.textContent = new Date(run.finishedAt).toLocaleString("fr-FR") +
+            " · " + run.name + " · " +
+            (run.state === "completed" ? "Terminée" : run.state === "failed" ? "Échec" : "Annulée") +
+            " · " + Math.floor(seconds / 60) + " min " + (seconds % 60) + " s" +
+            " · " + run.scannedEntries + " éléments · " + run.skippedEntries + " ignorés" +
+            (run.error ? " · Erreur : " + run.error : "");
+          list.appendChild(item);
+        }
+        container.appendChild(list);
+      }
+    } catch {
+      byId("indexing-history").textContent = "Historique indisponible.";
+    } finally { historyCheckInProgress = false; }
+  }
   const indexingLabels = {
     pending: "Non démarrée", queued: "En file d’attente", running: "En cours",
     completed: "Terminée", failed: "Échec"
@@ -399,6 +435,8 @@ public static class WebUi
       const catalogs = await response.json();
       if (!Array.isArray(catalogs)) throw new Error("Réponse des catalogues invalide.");
       renderIndexingStatus(catalogs);
+      // Keep history aligned with the catalog status refresh when the panel is visible.
+      if (!indexingPanel.hidden) pollIndexingHistory();
     } catch {
       indexingError.textContent = "État des catalogues indisponible : vérifiez la version du serveur.";
       indexingError.classList.add("error");

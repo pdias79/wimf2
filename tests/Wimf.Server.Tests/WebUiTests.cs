@@ -186,7 +186,7 @@ public class WebUiTests
         Assert.Contains("id=\"indexing-toggle\"", WebUi.Html);
         Assert.Contains("aria-controls=\"indexing-panel\"", WebUi.Html);
         Assert.Contains("indexingToggle.setAttribute(\"aria-expanded\"", WebUi.Html);
-        Assert.Contains("if (!indexingPanel.hidden) pollIndexingStatus()", WebUi.Html);
+        Assert.Contains("if (!indexingPanel.hidden) { pollIndexingStatus(); pollIndexingHistory(); }", WebUi.Html);
         Assert.Contains("Catalogues et actualisation", WebUi.Html);
         Assert.Contains("id=\"refresh\" type=\"button\"", WebUi.Html);
         Assert.Contains("Actualiser les catalogues", WebUi.Html);
@@ -194,6 +194,8 @@ public class WebUiTests
         Assert.DoesNotContain("<details id=\"indexing-panel\"", WebUi.Html);
         Assert.Contains("<section class=\"panel\" aria-label=\"Résultats\">", WebUi.Html);
         Assert.Contains("id=\"indexing-list\"", WebUi.Html);
+        Assert.Contains("id=\"indexing-history-panel\"", WebUi.Html);
+        Assert.Contains("fetch(\"/api/indexing-history\"", WebUi.Html);
         Assert.Contains("id=\"indexing-summary\"", WebUi.Html);
         Assert.Contains("id=\"indexing-error\"", WebUi.Html);
         Assert.Contains("fetch(\"/api/catalog-management\"", WebUi.Html);

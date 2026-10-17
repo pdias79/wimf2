@@ -11,6 +11,9 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     int SkippedEntries = 0, string[]? SkippedDetails = null,
     string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null);
 
+public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
+    DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error);
+
 public sealed class CatalogIndexScheduler
 {
     private readonly IndexingJob[] _jobs;
@@ -20,6 +23,26 @@ public sealed class CatalogIndexScheduler
     private readonly IndexingJobStatus[] _statuses;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
     private readonly int[] _manualQueued;
+    private readonly object _historyLock = new();
+    private readonly List<IndexingRunHistoryEntry> _history = [];
+
+    public IndexingRunHistoryEntry[] History
+    {
+        get { lock (_historyLock) return _history.ToArray(); }
+    }
+
+    private void RecordRun(int i, string state, string? error = null)
+    {
+        var status = Volatile.Read(ref _statuses[i]);
+        var finished = DateTimeOffset.UtcNow;
+        lock (_historyLock)
+        {
+            _history.Insert(0, new IndexingRunHistoryEntry(status.Name, state,
+                status.StartedAt ?? finished, finished, status.ScannedEntries,
+                status.SkippedEntries, error));
+            if (_history.Count > 50) _history.RemoveRange(50, _history.Count - 50);
+        }
+    }
 
     public CatalogIndexScheduler(IEnumerable<IndexingJob> jobs,
         Func<IndexingJob, CancellationToken, Task>? execute = null,
@@ -144,6 +167,12 @@ public sealed class CatalogIndexScheduler
     private async Task ExecuteAsync(int i, DateTimeOffset now, CancellationToken token)
     {
         var job = _jobs[i];
+        // Capture this attempt even when its source is unavailable before scanning starts.
+        Volatile.Write(ref _statuses[i], _statuses[i] with
+        {
+            StartedAt = DateTimeOffset.UtcNow, ScannedEntries = 0, SkippedEntries = 0,
+            SkippedDetails = []
+        });
         try
         {
             if (!Directory.Exists(job.Root))
@@ -159,6 +188,7 @@ public sealed class CatalogIndexScheduler
             {
                 State = "completed", LastSuccess = DateTimeOffset.UtcNow, LastError = null
             });
+            RecordRun(i, "completed");
             Console.WriteLine($"Indexing completed: '{job.Root}' -> '{job.Output}'.");
             _retryNotBefore[i] = DateTimeOffset.MinValue;
             // A catalog is fully published before refreshing the search snapshot.
@@ -173,7 +203,11 @@ public sealed class CatalogIndexScheduler
                 }
             }
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            RecordRun(i, "cancelled");
+            throw;
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
                                    InvalidDataException or ArgumentException or OverflowException or
                                    System.Security.SecurityException)
@@ -181,6 +215,7 @@ public sealed class CatalogIndexScheduler
             var offline = !Directory.Exists(job.Root);
             _retryNotBefore[i] = now.Add(offline ? TimeSpan.FromMinutes(1) : TimeSpan.FromHours(1));
             Volatile.Write(ref _statuses[i], _statuses[i] with { State = "failed", LastError = ex.Message });
+            RecordRun(i, "failed", ex.Message);
             Console.Error.WriteLine($"Indexing failed for '{job.Root}' -> '{job.Output}': " +
                 $"{ex.Message} (retry after {_retryNotBefore[i]:O}).");
         }
