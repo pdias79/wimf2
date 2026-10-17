@@ -260,6 +260,13 @@ public static class WebUi
           " éléments parcourus · " + Math.floor(elapsed / 60) + " min " + (elapsed % 60) + " s";
         item.appendChild(progress);
       }
+      if ((catalog.state === "running" || catalog.state === "completed") && Number(catalog.skippedEntries) > 0) {
+        const skipped = document.createElement("div");
+        skipped.className = "catalog-details";
+        skipped.textContent = "Éléments ignorés (inaccessibles ou non pris en charge) : " +
+          Number(catalog.skippedEntries).toLocaleString("fr-FR");
+        item.appendChild(skipped);
+      }
       if (catalog.state === "completed" && catalog.startedAt && catalog.lastSuccess) {
         const started = new Date(catalog.startedAt).getTime();
         const finished = new Date(catalog.lastSuccess).getTime();
