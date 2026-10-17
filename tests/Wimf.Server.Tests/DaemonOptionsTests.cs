@@ -6,6 +6,46 @@ namespace Wimf.Server.Tests;
 
 public sealed class DaemonOptionsTests
 {
+    [Theory]
+    [InlineData(null, 1)]
+    [InlineData(1, 1)]
+    [InlineData(16, 16)]
+    [InlineData(50, 50)]
+    public void IndexingWorkersAreConfiguredPerCatalog(int? workers, int expected)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "wimf-workers-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var config = Path.Combine(directory, "wimf.json");
+            var workersField = workers.HasValue ? $",\\"workers\\":{workers.Value}" : "";
+            File.WriteAllText(config,
+                "{\\"catalogs\\":[\\"catalog.gz\\"],\\"indexing\\":[{\\"root\\":\\"source\\",\\"output\\":\\"catalog.gz\\",\\"intervalHours\\":1" +
+                workersField + "}]}");
+            var options = DaemonOptions.Parse(["--config", config]);
+            Assert.Equal(expected, Assert.Single(options.Indexing!).Workers);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(51)]
+    public void RejectsOutOfRangeIndexingWorkers(int workers)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "wimf-workers-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var config = Path.Combine(directory, "wimf.json");
+            File.WriteAllText(config,
+                "{\\"catalogs\\":[\\"catalog.gz\\"],\\"indexing\\":[{\\"root\\":\\"source\\",\\"output\\":\\"catalog.gz\\",\\"intervalHours\\":1,\\"workers\\":" +
+                workers + "}]}");
+            Assert.Throws<ArgumentException>(() => DaemonOptions.Parse(["--config", config]));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     [Fact]
     public void EmptyArgumentsKeepCurrentDefaults()
     {
