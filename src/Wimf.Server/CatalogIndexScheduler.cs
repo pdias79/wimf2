@@ -23,6 +23,8 @@ public sealed class CatalogIndexScheduler
     private readonly IndexingJobStatus[] _statuses;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
     private readonly int[] _manualQueued;
+    private readonly object _cancellationLock = new();
+    private readonly CancellationTokenSource?[] _cancellations;
     private readonly object _historyLock = new();
     private readonly List<IndexingRunHistoryEntry> _history = [];
 
@@ -52,6 +54,7 @@ public sealed class CatalogIndexScheduler
         _afterSuccess = afterSuccess;
         _retryNotBefore = new DateTimeOffset[_jobs.Length];
         _manualQueued = new int[_jobs.Length];
+        _cancellations = new CancellationTokenSource?[_jobs.Length];
         _statuses = _jobs.Select(job => new IndexingJobStatus(job.Name ?? job.Root,
             job.Root, job.Output, "pending", null, null,
             EffectiveExclusions: new CatalogPathExclusions(job.Root, job.Exclude).Paths.ToArray())).ToArray();
@@ -142,6 +145,23 @@ public sealed class CatalogIndexScheduler
         }
     }
 
+    /// <summary>Cancel a waiting manual request or ask a running scan to stop.</summary>
+    public bool TryCancel(int index)
+    {
+        if (index < 0 || index >= _jobs.Length) return false;
+        lock (_cancellationLock)
+        {
+            var status = Volatile.Read(ref _statuses[index]);
+            var source = _cancellations[index];
+            if (source is null || status.State is not ("queued" or "running")) return false;
+            source.Cancel();
+            if (status.State == "queued")
+                Volatile.Write(ref _statuses[index], status with
+                { State = "cancelled", QueuedAt = null, LastError = null });
+            return true;
+        }
+    }
+
     /// <summary>Queue manual indexing without blocking an HTTP request on a long scan.</summary>
     public bool TryQueueManual(int index, CancellationToken shutdown)
     {
@@ -149,17 +169,33 @@ public sealed class CatalogIndexScheduler
         if (Volatile.Read(ref _statuses[index]).State == "running" ||
             Interlocked.CompareExchange(ref _manualQueued[index], 1, 0) != 0)
             return false;
-        Volatile.Write(ref _statuses[index], _statuses[index] with { State = "queued", LastError = null, QueuedAt = DateTimeOffset.UtcNow });
+        CancellationTokenSource source;
+        lock (_cancellationLock)
+        {
+            source = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
+            _cancellations[index] = source;
+            Volatile.Write(ref _statuses[index], _statuses[index] with
+            { State = "queued", LastError = null, QueuedAt = DateTimeOffset.UtcNow });
+        }
         _ = Task.Run(async () =>
         {
             try
             {
-                await _executionLock.WaitAsync(shutdown);
-                try { await ExecuteAsync(index, DateTimeOffset.UtcNow, shutdown); }
+                await _executionLock.WaitAsync(source.Token);
+                try { source.Token.ThrowIfCancellationRequested(); await ExecuteAsync(index, DateTimeOffset.UtcNow, source.Token); }
                 finally { _executionLock.Release(); }
             }
-            catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
-            finally { Volatile.Write(ref _manualQueued[index], 0); }
+            catch (OperationCanceledException) when (source.IsCancellationRequested) { }
+            finally
+            {
+                lock (_cancellationLock)
+                {
+                    if (ReferenceEquals(_cancellations[index], source))
+                        _cancellations[index] = null;
+                    Volatile.Write(ref _manualQueued[index], 0);
+                }
+                source.Dispose();
+            }
         }, CancellationToken.None);
         return true;
     }
@@ -167,6 +203,18 @@ public sealed class CatalogIndexScheduler
     private async Task ExecuteAsync(int i, DateTimeOffset now, CancellationToken token)
     {
         var job = _jobs[i];
+        CancellationTokenSource? scheduledSource = null;
+        lock (_cancellationLock)
+        {
+            if (_cancellations[i] is null)
+            {
+                scheduledSource = CancellationTokenSource.CreateLinkedTokenSource(token);
+                _cancellations[i] = scheduledSource;
+                token = scheduledSource.Token;
+            }
+        }
+        try
+        {
         // Capture this attempt even when its source is unavailable before scanning starts.
         Volatile.Write(ref _statuses[i], _statuses[i] with
         {
@@ -205,6 +253,8 @@ public sealed class CatalogIndexScheduler
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
+            Volatile.Write(ref _statuses[i], _statuses[i] with
+            { State = "cancelled", QueuedAt = null });
             RecordRun(i, "cancelled");
             throw;
         }
@@ -218,6 +268,19 @@ public sealed class CatalogIndexScheduler
             RecordRun(i, "failed", ex.Message);
             Console.Error.WriteLine($"Indexing failed for '{job.Root}' -> '{job.Output}': " +
                 $"{ex.Message} (retry after {_retryNotBefore[i]:O}).");
+        }
+        }
+        finally
+        {
+            if (scheduledSource is not null)
+            {
+                lock (_cancellationLock)
+                {
+                    if (ReferenceEquals(_cancellations[i], scheduledSource))
+                        _cancellations[i] = null;
+                }
+                scheduledSource.Dispose();
+            }
         }
     }
 
