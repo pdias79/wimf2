@@ -56,6 +56,28 @@ public sealed class LegacyCatalogWriterTests
     }
 
     [Fact]
+    public void ReportsNonnegativeScanTimingAndDirectoryCount()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "wimf-metrics-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(work, "source");
+        Directory.CreateDirectory(Path.Combine(root, "Nested"));
+        File.WriteAllText(Path.Combine(root, "Nested", "file.txt"), "test");
+        var output = Path.Combine(work, "catalog.txt.gz");
+        try
+        {
+            CatalogScanMetrics? metrics = null;
+            LegacyCatalogWriter.Build(root, output, onMetrics: value => metrics = value);
+            Assert.NotNull(metrics);
+            Assert.Equal(2, metrics.DirectoryCount);
+            Assert.True(metrics.DirectoryEnumerationMilliseconds >= 0);
+            Assert.True(metrics.MetadataMilliseconds >= 0);
+            Assert.True(metrics.OutputMilliseconds >= 0);
+            Assert.Equal(2, LegacyCatalogReader.ReadFile(output).RecordCount);
+        }
+        finally { Directory.Delete(work, true); }
+    }
+
+    [Fact]
     public void AllowsOutputInsideSourceWithoutIndexingOutputOrTemporaryFile()
     {
         var work = Path.Combine(Path.GetTempPath(), "wimf-build-" + Guid.NewGuid().ToString("N"));

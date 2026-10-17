@@ -95,6 +95,9 @@ var initialRefresh = await store.RefreshAsync();
 Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s); {initialRefresh.FailedSources} source(s) unavailable, {initialRefresh.FailedLocalCatalogs} local catalog(s) unavailable.");
 
 var builder = WebApplication.CreateSlimBuilder(Array.Empty<string>());
+// Avoid verbose ASP.NET Core request/endpoint logs during frequent UI polling.
+// Warnings and errors remain visible; explicit [BENCH] console output is unaffected.
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
 builder.WebHost.UseUrls("http://127.0.0.1:5080");
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, WimfJsonContext.Default));
@@ -261,7 +264,7 @@ app.MapGet("/api/catalog-management", () =>
             index >= 0 ? index : null, job?.State, job?.NextUpdate, job?.LastError,
             job?.CanStart ?? false, job?.ScannedEntries ?? 0, job?.StartedAt,
             job?.LastSuccess, job?.SkippedEntries ?? 0, job?.SkippedDetails,
-            job?.EffectiveExclusions, job?.QueuedAt);
+            job?.EffectiveExclusions, job?.QueuedAt, job?.ScanMetrics);
     }).ToArray();
     return Results.Json(managed, WimfJsonContext.Default.ManagedCatalogStatusArray);
 });
@@ -309,9 +312,7 @@ if (options.Indexing is { Length: > 0 })
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         afterSuccess: async (job, token) =>
         {
-            var summary = await store.RefreshAsync(token);
-            Console.WriteLine($"Indexed catalog '{job.Output}' reloaded; " +
-                $"{summary.CatalogCount} catalog(s) searchable.");
+            await store.RefreshAsync(token);
         });
     var scheduler = indexingScheduler;
     _ = Task.Run(async () =>
