@@ -9,7 +9,7 @@ public static class LegacyCatalogWriter
 {
     public static int Build(string rootPath, string outputPath, string? catalogName = null,
         CancellationToken cancellationToken = default, Action<string>? onSkipped = null,
-        IEnumerable<string>? excludePaths = null)
+        IEnumerable<string>? excludePaths = null, Action<int>? onProgress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -111,6 +111,7 @@ public static class LegacyCatalogWriter
                         writer.Write(';');
                         writer.WriteLine(days.ToString(CultureInfo.InvariantCulture));
                         var id = ++nextId;
+                        if ((nextId & 255) == 0) onProgress?.Invoke(nextId);
                         if (isDirectory) descend.Add(((DirectoryInfo)child, id));
                     }
                     for (var i = descend.Count - 1; i >= 0; i--) stack.Push(descend[i]);
@@ -121,6 +122,7 @@ public static class LegacyCatalogWriter
                 // Number of records is derived later via the reader.
             }
             File.Move(temporary, output, overwrite: true);
+            onProgress?.Invoke(nextId);
             return nextId;
         }
         finally

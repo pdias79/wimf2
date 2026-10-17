@@ -6,7 +6,8 @@ namespace Wimf.Server;
 public sealed record IndexingJobStatus(string Name, string Root, string Output,
     string State, DateTimeOffset? LastSuccess, string? LastError,
     DateTimeOffset? LastUpdate = null, DateTimeOffset? NextUpdate = null,
-    int? FileCount = null, bool CanStart = true);
+    int? FileCount = null, bool CanStart = true,
+    int ScannedEntries = 0, DateTimeOffset? StartedAt = null);
 
 public sealed class CatalogIndexScheduler
 {
@@ -30,10 +31,18 @@ public sealed class CatalogIndexScheduler
             job.Root, job.Output, "pending", null, null)).ToArray();
         _execute = execute ?? ((job, token) => Task.Run(() =>
         {
+            var jobIndex = Array.FindIndex(_jobs, candidate => ReferenceEquals(candidate, job));
+            Action<int> progress = count =>
+            {
+                if (jobIndex >= 0)
+                    Volatile.Write(ref _statuses[jobIndex],
+                        Volatile.Read(ref _statuses[jobIndex]) with { ScannedEntries = count });
+            };
             if (File.Exists(job.Output))
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: Console.Error.WriteLine, excludePaths: job.Exclude);
+                    cancellationToken: token, onSkipped: Console.Error.WriteLine,
+                    excludePaths: job.Exclude, onProgress: progress);
                 Console.WriteLine($"Indexed '{job.Root}': {summary.Total} entries, " +
                     $"{summary.Added} added, {summary.Modified} changed, {summary.Removed} removed, " +
                     $"{summary.Skipped} skipped.");
@@ -41,7 +50,8 @@ public sealed class CatalogIndexScheduler
             else
             {
                 var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: Console.Error.WriteLine, excludePaths: job.Exclude);
+                    cancellationToken: token, onSkipped: Console.Error.WriteLine,
+                    excludePaths: job.Exclude, onProgress: progress);
                 Console.WriteLine($"Indexed '{job.Root}': {count} entries.");
             }
         }, token));
@@ -76,7 +86,7 @@ public sealed class CatalogIndexScheduler
         if (Volatile.Read(ref _statuses[index]).State == "running" ||
             Interlocked.CompareExchange(ref _manualQueued[index], 1, 0) != 0)
             return false;
-        Volatile.Write(ref _statuses[index], _statuses[index] with { State = "pending", LastError = null });
+        Volatile.Write(ref _statuses[index], _statuses[index] with { State = "queued", LastError = null });
         _ = Task.Run(async () =>
         {
             try
@@ -99,7 +109,11 @@ public sealed class CatalogIndexScheduler
             if (!Directory.Exists(job.Root))
                 throw new DirectoryNotFoundException($"Indexing root unavailable: {job.Root}");
             Console.WriteLine($"Indexing started: '{job.Root}' -> '{job.Output}'.");
-            Volatile.Write(ref _statuses[i], _statuses[i] with { State = "running", LastError = null });
+            Volatile.Write(ref _statuses[i], _statuses[i] with
+            {
+                State = "running", LastError = null, ScannedEntries = 0,
+                StartedAt = DateTimeOffset.UtcNow
+            });
             await _execute(job, token);
             Volatile.Write(ref _statuses[i], _statuses[i] with
             {

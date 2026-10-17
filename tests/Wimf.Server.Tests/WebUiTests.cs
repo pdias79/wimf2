@@ -197,7 +197,7 @@ public class WebUiTests
         Assert.Contains("id=\"indexing-summary\"", WebUi.Html);
         Assert.Contains("id=\"indexing-error\"", WebUi.Html);
         Assert.Contains("fetch(\"/api/catalog-management\"", WebUi.Html);
-        Assert.Contains("setInterval(pollIndexingStatus, 15000)", WebUi.Html);
+        Assert.Contains("setInterval(pollIndexingStatus, 2000)", WebUi.Html);
         Assert.Contains("indexingCheckInProgress || document.hidden", WebUi.Html);
         Assert.DoesNotContain("indexingPanel.hidden = jobs.length === 0", WebUi.Html);
         Assert.Contains("Aucun catalogue configuré", WebUi.Html);
@@ -217,6 +217,18 @@ public class WebUiTests
         Assert.Contains("method: \"POST\"", WebUi.Html);
         Assert.Contains("\"/api/indexing/\" + catalog.indexingJobIndex + \"/start\"", WebUi.Html);
         Assert.Contains("start.disabled = !catalog.canStart", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IndexingPanelDisplaysLiveCountAndElapsedTimeWithoutPercentages()
+    {
+        Assert.Contains("catalog.scannedEntries", WebUi.Html);
+        Assert.Contains("catalog.startedAt", WebUi.Html);
+        Assert.Contains("Progression :", WebUi.Html);
+        Assert.Contains("éléments parcourus", WebUi.Html);
+        Assert.Contains("Date.now()", WebUi.Html);
+        Assert.DoesNotContain("progress.value", WebUi.Html);
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 

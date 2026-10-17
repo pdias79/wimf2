@@ -212,6 +212,43 @@ public sealed class ScheduledIndexingTests
     }
 
     [Fact]
+    public async Task ManualScanShowsQueuedWhileAnotherScanHoldsTheLock()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "wimf-queue-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var first = Path.Combine(folder, "first.txt");
+            var second = Path.Combine(folder, "second.txt");
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(folder, first, "First", [], TimeSpan.FromDays(1)),
+                 new IndexingJob(folder, second, "Second", [], TimeSpan.FromDays(1))],
+                async (job, token) =>
+                {
+                    if (job.Output == first)
+                    {
+                        started.TrySetResult();
+                        await release.Task.WaitAsync(token);
+                    }
+                    File.WriteAllText(job.Output, "done");
+                });
+            var scheduled = scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(scheduler.TryQueueManual(1, CancellationToken.None));
+            Assert.Equal("queued", scheduler.Status[1].State);
+            Assert.False(scheduler.Status[1].CanStart);
+            release.TrySetResult();
+            await scheduled.WaitAsync(TimeSpan.FromSeconds(5));
+            for (var attempt = 0; attempt < 100 && scheduler.Status[1].State != "completed"; attempt++)
+                await Task.Delay(20);
+            Assert.Equal("completed", scheduler.Status[1].State);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
     public async Task SuccessfulScheduledScanImmediatelyReloadsCatalog()
     {
         var root = Path.Combine(Path.GetTempPath(), "wimf-refresh-sched-" + Guid.NewGuid().ToString("N"));
@@ -268,6 +305,40 @@ public sealed class ScheduledIndexingTests
             Assert.Equal(1, invoked);
             Assert.Equal("completed", scheduler.Status[0].State);
             Assert.Null(scheduler.Status[0].LastError);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task IndexingReportsScannedEntriesAndStartTime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-progress-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var files = Path.Combine(root, "files");
+            Directory.CreateDirectory(files);
+            for (var i = 0; i < 300; i++)
+                File.WriteAllText(Path.Combine(files, $"item-{i:000}.txt"), "x");
+            var catalog = Path.Combine(root, "catalog.txt.gz");
+            var reports = new List<int>();
+            var count = Wimf.Catalog.LegacyCatalogWriter.Build(
+                files, catalog, "Progress", onProgress: reports.Add);
+            Assert.Equal(300, count);
+            Assert.Equal([256, 300], reports);
+
+            // Exercise both creation of a missing catalog and refresh of an existing one.
+            File.Delete(catalog);
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(files, catalog, "Progress", [], TimeSpan.FromMinutes(1))]);
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            Assert.Equal(300, Assert.Single(scheduler.Status).ScannedEntries);
+            File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddMinutes(-5));
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            var status = Assert.Single(scheduler.Status);
+            Assert.Equal("completed", status.State);
+            Assert.Equal(300, status.ScannedEntries);
+            Assert.NotNull(status.StartedAt);
         }
         finally { Directory.Delete(root, true); }
     }
