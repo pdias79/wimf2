@@ -77,6 +77,37 @@ public sealed class LegacyCatalogWriterTests
         finally { Directory.Delete(work, true); }
     }
 
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void ParallelPrefetchPreservesCatalogEntriesAndParentPaths(int concurrency)
+    {
+        var work = Path.Combine(Path.GetTempPath(), "wimf-prefetch-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(work, "source");
+        Directory.CreateDirectory(root);
+        for (var i = 0; i < 12; i++)
+        {
+            var directory = Path.Combine(root, $"dir-{i:D2}");
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "file.txt"), "content");
+        }
+        var sequential = Path.Combine(work, "seq.txt");
+        var parallel = Path.Combine(work, "parallel.txt");
+        try
+        {
+            LegacyCatalogWriter.Build(root, sequential);
+            LegacyCatalogWriter.Build(root, parallel, directoryPrefetch: concurrency);
+            var before = LegacyCatalogReader.ReadFile(sequential);
+            var after = LegacyCatalogReader.ReadFile(parallel);
+            Assert.Empty(after.Diagnostics);
+            Assert.Equal(before.RecordCount, after.RecordCount);
+            Assert.Equal(
+                before.EnumerateEntries().Select(e => before.GetFullPath(e.Id)),
+                after.EnumerateEntries().Select(e => after.GetFullPath(e.Id)));
+        }
+        finally { Directory.Delete(work, true); }
+    }
+
     [Fact]
     public void AllowsOutputInsideSourceWithoutIndexingOutputOrTemporaryFile()
     {
