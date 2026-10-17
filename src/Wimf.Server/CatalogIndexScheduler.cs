@@ -13,14 +13,17 @@ public sealed class CatalogIndexScheduler
     private readonly IndexingJob[] _jobs;
     private readonly DateTimeOffset[] _retryNotBefore;
     private readonly Func<IndexingJob, CancellationToken, Task> _execute;
+    private readonly Func<IndexingJob, CancellationToken, Task>? _afterSuccess;
     private readonly IndexingJobStatus[] _statuses;
     private readonly SemaphoreSlim _executionLock = new(1, 1);
     private readonly int[] _manualQueued;
 
     public CatalogIndexScheduler(IEnumerable<IndexingJob> jobs,
-        Func<IndexingJob, CancellationToken, Task>? execute = null)
+        Func<IndexingJob, CancellationToken, Task>? execute = null,
+        Func<IndexingJob, CancellationToken, Task>? afterSuccess = null)
     {
         _jobs = jobs.ToArray();
+        _afterSuccess = afterSuccess;
         _retryNotBefore = new DateTimeOffset[_jobs.Length];
         _manualQueued = new int[_jobs.Length];
         _statuses = _jobs.Select(job => new IndexingJobStatus(job.Name ?? job.Root,
@@ -104,6 +107,17 @@ public sealed class CatalogIndexScheduler
             });
             Console.WriteLine($"Indexing completed: '{job.Root}' -> '{job.Output}'.");
             _retryNotBefore[i] = DateTimeOffset.MinValue;
+            // A catalog is fully published before refreshing the search snapshot.
+            // Refresh failures must never make an otherwise successful scan "failed".
+            if (_afterSuccess is not null)
+            {
+                try { await _afterSuccess(job, token); }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Unable to reload indexed catalog '{job.Output}': {ex.Message}");
+                }
+            }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or

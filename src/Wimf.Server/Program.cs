@@ -279,7 +279,13 @@ app.MapPost("/api/indexing/{index:int}/start", (HttpContext context, int index) 
 if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
-    indexingScheduler = new CatalogIndexScheduler(options.Indexing);
+    indexingScheduler = new CatalogIndexScheduler(options.Indexing,
+        afterSuccess: async (job, token) =>
+        {
+            var summary = await store.RefreshAsync(token);
+            Console.WriteLine($"Indexed catalog '{job.Output}' reloaded; " +
+                $"{summary.CatalogCount} catalog(s) searchable.");
+        });
     var scheduler = indexingScheduler;
     _ = Task.Run(async () =>
     {
