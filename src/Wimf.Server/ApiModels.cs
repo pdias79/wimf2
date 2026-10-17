@@ -25,7 +25,8 @@ public sealed record ManagedCatalogStatus(string Name, string Path, string? Root
     int? FileCount, DateTimeOffset? LastUpdate, bool Available,
     int? IndexingJobIndex, string? State, DateTimeOffset? NextUpdate,
     string? LastError, bool CanStart,
-    int ScannedEntries = 0, DateTimeOffset? StartedAt = null);
+    int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
+    DateTimeOffset? LastSuccess = null);
 public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOffset? LastRefresh,
     int FailedSources = 0, int FailedLocalCatalogs = 0);
 
