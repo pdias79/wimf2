@@ -214,6 +214,8 @@ public static class WebUi
     completed: "Terminée", failed: "Échec"
   };
   function renderIndexingStatus(catalogs) {
+    const expandedPaths = new Set(Array.from(indexingList.querySelectorAll("details[data-catalog-path]"))
+      .filter(details => details.open).map(details => details.dataset.catalogPath));
     indexingList.replaceChildren();
     indexingError.textContent = "";
     const active = catalogs.filter(c => c.state === "running").length;
@@ -268,6 +270,8 @@ public static class WebUi
         item.appendChild(skipped);
         if (Array.isArray(catalog.skippedDetails) && catalog.skippedDetails.length) {
           const details = document.createElement("details");
+          details.dataset.catalogPath = catalog.path;
+          details.open = expandedPaths.has(catalog.path);
           const heading = document.createElement("summary");
           heading.textContent = "Voir les éléments ignorés (" + catalog.skippedDetails.length +
             " premiers sur " + catalog.skippedEntries + ")";
