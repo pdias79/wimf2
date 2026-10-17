@@ -21,6 +21,7 @@ public sealed class IndexingJobConfiguration
     public string Output { get; init; } = "";
     public string? Name { get; init; }
     public string[] Exclude { get; init; } = [];
+    public int? IntervalMinutes { get; init; }
     public int? IntervalHours { get; init; }
     public int? IntervalDays { get; init; }
 }
@@ -95,17 +96,21 @@ public sealed record DaemonOptions(
             foreach (var job in document.Indexing ?? [])
             {
                 if (job is null) throw new ArgumentException("indexing entries must be objects.");
-                if (job.IntervalHours.HasValue == job.IntervalDays.HasValue)
-                    throw new ArgumentException("Specify exactly one of intervalHours or intervalDays for each indexing job.");
-                var hours = job.IntervalHours ?? checked((long)job.IntervalDays!.Value * 24);
-                if (hours < 1 || hours > 87600)
-                    throw new ArgumentException("Indexing intervals must be between one hour and ten years.");
+                var specifiedIntervals = (job.IntervalMinutes.HasValue ? 1 : 0) +
+                    (job.IntervalHours.HasValue ? 1 : 0) + (job.IntervalDays.HasValue ? 1 : 0);
+                if (specifiedIntervals != 1)
+                    throw new ArgumentException("Specify exactly one of intervalMinutes, intervalHours or intervalDays for each indexing job.");
+                var minutes = job.IntervalMinutes.HasValue ? (long)job.IntervalMinutes.Value :
+                    job.IntervalHours.HasValue ? (long)job.IntervalHours.Value * 60 :
+                    (long)job.IntervalDays!.Value * 24 * 60;
+                if (minutes < 1 || minutes > 3650L * 24 * 60)
+                    throw new ArgumentException("Indexing intervals must be between one minute and ten years.");
                 var root = Resolve(baseDirectory, job.Root);
                 var output = Resolve(baseDirectory, job.Output);
                 if (job.Exclude is null) throw new ArgumentException("indexing.exclude must be an array.");
                 _ = new Wimf.Catalog.CatalogPathExclusions(root, job.Exclude);
                 indexing.Add(new IndexingJob(root, output, job.Name, job.Exclude,
-                    TimeSpan.FromHours(hours)));
+                    TimeSpan.FromMinutes(minutes)));
             }
         }
 
