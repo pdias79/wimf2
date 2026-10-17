@@ -86,7 +86,7 @@ public sealed class CatalogIndexScheduler
         if (Volatile.Read(ref _statuses[index]).State == "running" ||
             Interlocked.CompareExchange(ref _manualQueued[index], 1, 0) != 0)
             return false;
-        Volatile.Write(ref _statuses[index], _statuses[index] with { State = "pending", LastError = null });
+        Volatile.Write(ref _statuses[index], _statuses[index] with { State = "queued", LastError = null });
         _ = Task.Run(async () =>
         {
             try
