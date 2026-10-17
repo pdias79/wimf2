@@ -82,6 +82,16 @@ public sealed class LiveCatalogStore
     public RefreshSummary? LastSummary => Volatile.Read(ref _lastSummary);
     public int SourceCount => _sources.Length;
     public int LocalCount => _localCatalogs.Length;
+    /// <summary>Configured local catalog paths, including unavailable ones.</summary>
+    public (string Path, FileCatalog? Catalog)[] LocalCatalogStatus
+    {
+        get
+        {
+            var catalogs = Volatile.Read(ref _localCatalogs);
+            return _localPaths.Select((path, i) => (path, catalogs[i])).ToArray();
+        }
+    }
+
 
     /// <summary>Serializes updates; leaves working source entries intact if refresh fails.</summary>
     public async Task<RefreshSummary> RefreshAsync(CancellationToken cancellationToken = default)

@@ -179,4 +179,45 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void IndexingPanelPollsJobProgressWithoutReloadingSearchResults()
+    {
+        Assert.Contains("id=\"indexing-panel\"", WebUi.Html);
+        Assert.Contains("id=\"indexing-toggle\"", WebUi.Html);
+        Assert.Contains("aria-controls=\"indexing-panel\"", WebUi.Html);
+        Assert.Contains("indexingToggle.setAttribute(\"aria-expanded\"", WebUi.Html);
+        Assert.Contains("if (!indexingPanel.hidden) pollIndexingStatus()", WebUi.Html);
+        Assert.Contains("Catalogues et actualisation", WebUi.Html);
+        Assert.Contains("id=\"refresh\" type=\"button\"", WebUi.Html);
+        Assert.Contains("Actualiser les catalogues", WebUi.Html);
+        Assert.Contains("refreshButton.addEventListener(\"click\"", WebUi.Html);
+        Assert.DoesNotContain("<details id=\"indexing-panel\"", WebUi.Html);
+        Assert.Contains("<section class=\"panel\" aria-label=\"Résultats\">", WebUi.Html);
+        Assert.Contains("id=\"indexing-list\"", WebUi.Html);
+        Assert.Contains("id=\"indexing-summary\"", WebUi.Html);
+        Assert.Contains("id=\"indexing-error\"", WebUi.Html);
+        Assert.Contains("fetch(\"/api/catalog-management\"", WebUi.Html);
+        Assert.Contains("setInterval(pollIndexingStatus, 15000)", WebUi.Html);
+        Assert.Contains("indexingCheckInProgress || document.hidden", WebUi.Html);
+        Assert.DoesNotContain("indexingPanel.hidden = jobs.length === 0", WebUi.Html);
+        Assert.Contains("Aucun catalogue configuré", WebUi.Html);
+        Assert.Contains("Chargement des indexations…", WebUi.Html);
+        Assert.DoesNotContain("id=\"indexing-panel\" class=\"advanced\" hidden", WebUi.Html);
+        foreach (var state in new[] { "pending", "running", "completed", "failed" })
+            Assert.Contains(state + ":", WebUi.Html);
+        Assert.Contains("catalog.lastError", WebUi.Html);
+        Assert.Contains("catalog.lastUpdate", WebUi.Html);
+        Assert.Contains("indexingList.replaceChildren()", WebUi.Html);
+        Assert.Contains("name.textContent = catalog.name", WebUi.Html);
+        Assert.Contains("catalog.fileCount", WebUi.Html);
+        Assert.Contains("catalog.lastUpdate", WebUi.Html);
+        Assert.Contains("catalog.nextUpdate", WebUi.Html);
+        Assert.Contains("catalog.indexingJobIndex !== null", WebUi.Html);
+        Assert.Contains("Lancer une indexation", WebUi.Html);
+        Assert.Contains("method: \"POST\"", WebUi.Html);
+        Assert.Contains("\"/api/indexing/\" + catalog.indexingJobIndex + \"/start\"", WebUi.Html);
+        Assert.Contains("start.disabled = !catalog.canStart", WebUi.Html);
+        Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
 }

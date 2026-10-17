@@ -172,4 +172,43 @@ public sealed class ScheduledIndexingTests
         finally { Directory.Delete(workspace, true); }
     }
 
+    [Fact]
+    public async Task ManualIndexingStartsImmediatelyAndRejectsDuplicateRequests()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "wimf-manual-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var output = Path.Combine(folder, "catalog.txt");
+            File.WriteAllText(output, "existing");
+            File.SetLastWriteTimeUtc(output, DateTime.UtcNow);
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var count = 0;
+            var scheduler = new CatalogIndexScheduler(
+                [new IndexingJob(folder, output, "Manual", [], TimeSpan.FromDays(30))],
+                async (job, token) =>
+                {
+                    Interlocked.Increment(ref count);
+                    started.TrySetResult();
+                    await resume.Task.WaitAsync(token);
+                    File.WriteAllText(job.Output, "reindexed");
+                });
+            Assert.False(scheduler.TryQueueManual(-1, CancellationToken.None));
+            Assert.False(scheduler.TryQueueManual(1, CancellationToken.None));
+            Assert.True(scheduler.TryQueueManual(0, CancellationToken.None));
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal("running", scheduler.Status[0].State);
+            Assert.False(scheduler.Status[0].CanStart);
+            Assert.False(scheduler.TryQueueManual(0, CancellationToken.None));
+            resume.TrySetResult();
+            for (var attempt = 0; attempt < 50 && scheduler.Status[0].State != "completed"; attempt++)
+                await Task.Delay(20);
+            Assert.Equal("completed", scheduler.Status[0].State);
+            Assert.Equal(1, count);
+            Assert.True(scheduler.Status[0].CanStart);
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
 }

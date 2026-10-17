@@ -70,6 +70,12 @@ public static class WebUi
     .saved-search .saved-label { flex: 1; min-width: 170px; overflow-wrap: anywhere; }
     .saved-search button { font-size: .8rem; }
     .saved-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .header-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .indexing-list { display: grid; gap: 10px; margin-top: 12px; }
+    .indexing-item { padding: 10px 0; border-top: 1px solid color-mix(in srgb, CanvasText 12%, Canvas); overflow-wrap: anywhere; }
+    .indexing-item:first-child { border-top: none; }
+    .indexing-item strong { margin-right: 8px; }
+    .indexing-item .error { color: #ba3636; }
     .muted { color: GrayText; font-weight: 400; }
     @media (max-width: 640px) {
       main { padding: 20px 12px; }
@@ -81,7 +87,14 @@ public static class WebUi
 </head>
 <body>
 <main>
-  <header><h1>Wimf <span class="muted">2</span></h1><span id="health" class="status" role="status">Connexion…</span></header>
+  <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button><span id="health" class="status" role="status">Connexion…</span></div></header>
+  <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
+    <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Actualiser les catalogues</button></div>
+    <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
+    <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
+    <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
+    <p id="indexing-error" class="status" role="status"></p>
+  </section>
   <p class="sub">Rechercher des fichiers dans les catalogues locaux chargés par le daemon.</p>
   <section class="panel" aria-label="Recherche">
     <form id="search-form">
@@ -123,7 +136,7 @@ public static class WebUi
     <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
   <section class="panel" aria-label="Résultats">
-    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2><div><span id="catalogs" class="status"></span> <button id="refresh" type="button" class="copy">Actualiser les catalogues</button><span id="refresh-time" class="status"></span><span id="refresh-errors" class="status" role="status"></span></div></div>
+    <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2></div>
     <div class="result-tools">
       <label for="result-sort">Trier les résultats affichés :</label>
       <select id="result-sort" aria-label="Tri des résultats">
@@ -185,6 +198,112 @@ public static class WebUi
   const refreshButton = byId("refresh");
   const refreshTime = byId("refresh-time");
   const refreshErrors = byId("refresh-errors");
+  const indexingPanel = byId("indexing-panel");
+  const indexingToggle = byId("indexing-toggle");
+  indexingToggle.addEventListener("click", () => {
+    indexingPanel.hidden = !indexingPanel.hidden;
+    indexingToggle.setAttribute("aria-expanded", String(!indexingPanel.hidden));
+    if (!indexingPanel.hidden) pollIndexingStatus();
+  });
+  const indexingList = byId("indexing-list");
+  const indexingSummary = byId("indexing-summary");
+  const indexingError = byId("indexing-error");
+  let indexingCheckInProgress = false;
+  const indexingLabels = {
+    pending: "En attente", running: "En cours",
+    completed: "Terminée", failed: "Échec"
+  };
+  function renderIndexingStatus(catalogs) {
+    indexingList.replaceChildren();
+    indexingError.textContent = "";
+    const active = catalogs.filter(c => c.state === "running").length;
+    const errors = catalogs.filter(c => c.state === "failed").length;
+    indexingSummary.textContent = catalogs.length + " catalogue(s)" +
+      (active ? " · " + active + " en cours" : "") +
+      (errors ? " · " + errors + " en échec" : "");
+    if (catalogs.length === 0) {
+      const note = document.createElement("p");
+      note.className = "status";
+      note.textContent = "Aucun catalogue configuré dans wimf.json.";
+      indexingList.appendChild(note);
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    const formatDate = date => date ? new Date(date).toLocaleString("fr-FR") : "Jamais";
+    for (const catalog of catalogs) {
+      const item = document.createElement("div");
+      item.className = "indexing-item";
+      const heading = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = catalog.name || catalog.path || "Catalogue";
+      const state = document.createElement("span");
+      state.className = catalog.state === "failed" ? "status error" : "status";
+      state.textContent = catalog.indexingJobIndex === null
+        ? (catalog.available ? "Chargé" : "Indisponible")
+        : (indexingLabels[catalog.state] || "En attente");
+      heading.append(name, state);
+      const path = document.createElement("div");
+      path.className = "catalog-details";
+      path.textContent = (catalog.root || "Racine inconnue") + " → " + catalog.path;
+      const metadata = document.createElement("div");
+      metadata.className = "catalog-details";
+      metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
+        " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
+      item.append(heading, path, metadata);
+      if (catalog.indexingJobIndex !== null) {
+        const schedule = document.createElement("div");
+        schedule.className = "catalog-details";
+        schedule.textContent = "Prochaine actualisation prévue : " +
+          (catalog.state === "running" ? "En cours" : formatDate(catalog.nextUpdate));
+        const start = document.createElement("button");
+        start.type = "button";
+        start.className = "copy";
+        start.textContent = "Lancer une indexation";
+        start.disabled = !catalog.canStart;
+        start.setAttribute("aria-label", "Indexer " + catalog.name);
+        start.addEventListener("click", async () => {
+          start.disabled = true;
+          indexingError.textContent = "";
+          try {
+            if (!confirm("Lancer maintenant l’indexation complète de " + catalog.name + " ?")) return;
+            const response = await fetch("/api/indexing/" + catalog.indexingJobIndex + "/start", {
+              method: "POST", headers: { "Content-Type": "application/json" }
+            });
+            if (!response.ok) throw new Error(response.status === 409
+              ? "Indexation déjà en cours ou en attente." : "Impossible de lancer l’indexation.");
+            indexingError.textContent = "Indexation demandée pour " + catalog.name + ".";
+            await pollIndexingStatus();
+          } catch (error) {
+            indexingError.textContent = error.message || "Erreur réseau.";
+            indexingError.classList.add("error");
+          } finally { start.disabled = false; }
+        });
+        item.append(schedule, start);
+      }
+      if (catalog.lastError) {
+        const failure = document.createElement("div");
+        failure.className = "status error";
+        failure.textContent = "Erreur : " + catalog.lastError;
+        item.appendChild(failure);
+      }
+      fragment.appendChild(item);
+    }
+    indexingList.appendChild(fragment);
+  }
+  async function pollIndexingStatus() {
+    if (indexingCheckInProgress || document.hidden) return;
+    indexingCheckInProgress = true;
+    try {
+      const response = await fetch("/api/catalog-management", { cache: "no-store" });
+      if (!response.ok) throw new Error("État des catalogues indisponible.");
+      const catalogs = await response.json();
+      if (!Array.isArray(catalogs)) throw new Error("Réponse des catalogues invalide.");
+      renderIndexingStatus(catalogs);
+    } catch {
+      indexingError.textContent = "État des catalogues indisponible : vérifiez la version du serveur.";
+      indexingError.classList.add("error");
+    } finally { indexingCheckInProgress = false; }
+  }
   let lastObservedRefresh = null;
   let refreshCheckInProgress = false;
   let refreshRequestInProgress = false;
@@ -631,6 +750,8 @@ public static class WebUi
     }
   }
   setInterval(pollRefreshStatus, 15000);
+  setInterval(pollIndexingStatus, 15000);
+  pollIndexingStatus();
 
   Promise.all([
     fetch("/api/health").then(r => { if (!r.ok) throw new Error(); return r.json(); }),

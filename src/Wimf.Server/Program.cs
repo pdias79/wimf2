@@ -235,6 +235,47 @@ CatalogIndexScheduler? indexingScheduler = null;
 app.MapGet("/api/indexing-status", () =>
     Results.Json(indexingScheduler?.Status ?? [], WimfJsonContext.Default.IndexingJobStatusArray));
 
+// Count entries only once per immutable catalog snapshot, not every UI poll.
+var fileCounts = new System.Runtime.CompilerServices.ConditionalWeakTable<
+    Wimf.Catalog.Catalog, System.Runtime.CompilerServices.StrongBox<int>>();
+// Catalog management includes configured local files that have not yet been generated.
+app.MapGet("/api/catalog-management", () =>
+{
+    var jobs = indexingScheduler?.Status ?? [];
+    var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    var managed = store.LocalCatalogStatus.Select(entry =>
+    {
+        var catalog = entry.Catalog;
+        var index = Array.FindIndex(jobs, job => comparer.Equals(job.Output, entry.Path));
+        var job = index >= 0 ? jobs[index] : null;
+        return new ManagedCatalogStatus(
+            catalog?.Header.Name ?? job?.Name ?? Path.GetFileName(entry.Path),
+            entry.Path, catalog?.Header.RootPath ?? job?.Root,
+            catalog is null ? null : fileCounts.GetValue(catalog,
+                loaded => new System.Runtime.CompilerServices.StrongBox<int>(
+                    loaded.EnumerateEntries().Count(e => e.Extension != "folder"))).Value,
+            catalog?.Header.CreatedAt, catalog is not null,
+            index >= 0 ? index : null, job?.State, job?.NextUpdate, job?.LastError,
+            job?.CanStart ?? false);
+    }).ToArray();
+    return Results.Json(managed, WimfJsonContext.Default.ManagedCatalogStatusArray);
+});
+
+// Manual scans are restricted to requests originating from the local Wimf page.
+app.MapPost("/api/indexing/{index:int}/start", (HttpContext context, int index) =>
+{
+    if (indexingScheduler is null || index < 0 || index >= indexingScheduler.Status.Length)
+        return Results.NotFound();
+    var origin = context.Request.Headers.Origin.ToString();
+    var site = context.Request.Headers["Sec-Fetch-Site"].ToString();
+    if (!string.Equals(origin, "http://127.0.0.1:5080", StringComparison.Ordinal) ||
+        !string.Equals(context.Request.Host.Value, "127.0.0.1:5080", StringComparison.OrdinalIgnoreCase) ||
+        (site.Length > 0 && site != "same-origin"))
+        return Results.StatusCode(403);
+    return indexingScheduler.TryQueueManual(index, app.Lifetime.ApplicationStopping)
+        ? Results.StatusCode(202) : Results.StatusCode(409);
+});
+
 if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;

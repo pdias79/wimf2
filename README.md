@@ -446,3 +446,22 @@ A catalog that was successfully loaded earlier stays searchable from the last va
 #### Diagnose the first indexing of a network share
 
 The new local `GET /api/indexing-status` endpoint returns each configured job's `name`, `root`, `output`, `state` (`pending`, `running`, `completed`, or `failed`), `lastSuccess` and `lastError`. In PowerShell, run `Invoke-RestMethod http://127.0.0.1:5080/api/indexing-status | Format-List` to see which indexing job has started and the last error if any. `pending` can mean an earlier sequential scan has not yet finished. The first indexing of an absent output starts when the root is available, and may take time on a remote disk. Before diagnosing the scheduler, verify a share path with `Test-Path -LiteralPath '\\\\192.168.1.1\\Disque dur'` (replace the address with the actual Freebox address). A disconnected root is retried approximately every minute, while catalog loading checks follow `refreshSeconds`.
+
+
+### Visual monitoring of scheduled indexing (PR #32)
+
+The local Web UI now has a **Catalogues et actualisation** button in the top header. It opens a separate status panel containing the **Actualiser les catalogues** button, catalog refresh status, and scheduled indexing progress. For each job declared in `indexing`, it shows the configured name, indexed root and catalog output, its current state (waiting, running, completed or failed), its last successful completion date and any reported error.
+
+The panel polls the existing local `GET /api/indexing-status` endpoint every 15 seconds while the browser tab is visible. If `indexing` has no jobs, the panel remains visible and explains that no indexing tasks are configured (the daemon must be restarted after updating `wimf.json`). Status checks never start a disk scan and do not interrupt searches or the separate catalog refresh timer. Failed scans remain visible, including when network shares are disconnected; later retries update their state. Jobs run sequentially, so one long scan can leave subsequent jobs pending.
+
+To test, open `http://127.0.0.1:5080` with several indexing tasks configured. Click **Catalogues et actualisation** in the header and check the displayed states while a short indexing task executes and finishes. Disconnect a test share to inspect the error and reconnect it to observe the retry. The state is read-only; `/api/indexing-status` remains available for scripts.
+
+The catalog refresh button has moved out of **Résultats** into this upper panel; it still reloads the catalogs, and does not itself force an indexing rescan.
+
+### Catalog management details and manual indexing (PR #32)
+
+The **Catalogues et actualisation** panel now lists each configured local catalog, even if its file is currently unavailable. It displays the last successful catalog creation/update date from the catalog header and a **file count** (directories excluded; the count is cached for each immutable loaded catalog). For unavailable or not-yet-created catalogs, the date and count are shown as unavailable.
+
+Catalogs with an `indexing` job additionally display the **next expected indexing date** based on the output catalog's last modification time plus `intervalMinutes`, `intervalHours` or `intervalDays`, and a **Lancer une indexation** button. The next date is indicative: actual scans can start later if another scan is running, the daemon is stopped, or a source is offline. The button requests an immediate **full rescan**, distinct from the general **Actualiser les catalogues** control (which only reloads generated catalog files). A manual rescan can be queued while another scan is running; duplicate manual requests for a job are rejected and the button is disabled while its job is running or already queued. Manual scan calls require the same-origin local UI, and scans remain sequential.
+
+The management panel retrieves `GET /api/catalog-management` (metadata and planned scans) and calls `POST /api/indexing/{index}/start` for manual actions. When a scan completes, the daemon's existing catalog refresh mechanism loads it, or the user can select **Actualiser les catalogues**. This panel does not change the original read-only search endpoints.
