@@ -194,6 +194,8 @@ public class WebUiTests
         Assert.DoesNotContain("<details id=\"indexing-panel\"", WebUi.Html);
         Assert.Contains("<section class=\"panel\" aria-label=\"Résultats\">", WebUi.Html);
         Assert.Contains("id=\"indexing-list\"", WebUi.Html);
+        Assert.Contains("id=\"indexing-history-panel\"", WebUi.Html);
+        Assert.Contains("fetch(\"/api/indexing-history\"", WebUi.Html);
         Assert.Contains("id=\"indexing-summary\"", WebUi.Html);
         Assert.Contains("id=\"indexing-error\"", WebUi.Html);
         Assert.Contains("fetch(\"/api/catalog-management\"", WebUi.Html);
