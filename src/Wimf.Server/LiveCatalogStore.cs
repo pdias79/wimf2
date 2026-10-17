@@ -141,9 +141,7 @@ public sealed class LiveCatalogStore
             // Preserve unrelated failure indicators: those sources were not retried here.
             var preceding = Volatile.Read(ref _lastSummary);
             var summary = new RefreshSummary(snapshot.Length, _sources.Length,
-                preceding?.FailedSources ?? 0, DateTimeOffset.UtcNow,
-                failedLocal + Math.Max(0, (preceding?.FailedLocalCatalogs ?? 0) -
-                    (preceding?.FailedLocalCatalogs > 0 ? 1 : 0)));
+                preceding?.FailedSources ?? 0, DateTimeOffset.UtcNow, failedLocal);
             Volatile.Write(ref _lastSummary, summary);
             return summary;
         }
