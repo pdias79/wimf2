@@ -198,6 +198,8 @@ public class WebUiTests
         Assert.Contains("id=\"indexing-error\"", WebUi.Html);
         Assert.Contains("fetch(\"/api/catalog-management\"", WebUi.Html);
         Assert.Contains("setInterval(pollIndexingStatus, 2000)", WebUi.Html);
+        Assert.Contains("catalog.state === \"queued\" && runningCatalog", WebUi.Html);
+        Assert.Contains("En attente de la fin de l’indexation", WebUi.Html);
         Assert.Contains("Dernière indexation :", WebUi.Html);
         Assert.Contains("catalog.lastSuccess", WebUi.Html);
         Assert.Contains("catalog.skippedEntries", WebUi.Html);
