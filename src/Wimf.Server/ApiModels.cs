@@ -34,4 +34,5 @@ public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOf
 [JsonSerializable(typeof(FileActionResponse))]
 [JsonSerializable(typeof(RefreshSummary))]
 [JsonSerializable(typeof(RefreshStatus))]
+[JsonSerializable(typeof(IndexingJobStatus[]))]
 public partial class WimfJsonContext : JsonSerializerContext;

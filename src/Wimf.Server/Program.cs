@@ -82,7 +82,9 @@ var refreshSeconds = options.RefreshSeconds;
 var enableFileActions = options.EnableFileActions;
 
 LiveCatalogStore store;
-try { store = new LiveCatalogStore(paths, sources, cacheDirectory, loadLocalFiles: true); }
+try { store = new LiveCatalogStore(paths, sources, cacheDirectory, loadLocalFiles: true,
+    allowMissingCatalogs: options.Indexing?.Select(job => job.Output),
+    tolerateUnavailableCatalogs: true); }
 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
                            or System.Text.DecoderFallbackException or ArgumentException)
 {
@@ -227,6 +229,24 @@ if ((sources.Count > 0 || paths.Count > 0) && refreshSeconds > 0)
         }
         catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
     }, shutdown);
+}
+
+CatalogIndexScheduler? indexingScheduler = null;
+app.MapGet("/api/indexing-status", () =>
+    Results.Json(indexingScheduler?.Status ?? [], WimfJsonContext.Default.IndexingJobStatusArray));
+
+if (options.Indexing is { Length: > 0 })
+{
+    var shutdown = app.Lifetime.ApplicationStopping;
+    indexingScheduler = new CatalogIndexScheduler(options.Indexing);
+    var scheduler = indexingScheduler;
+    _ = Task.Run(async () =>
+    {
+        try { await scheduler.RunAsync(shutdown); }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+        catch (Exception ex) { Console.Error.WriteLine($"Indexing scheduler stopped: {ex.Message}"); }
+    }, shutdown);
+    Console.WriteLine($"Scheduled indexing configured for {options.Indexing.Length} catalog(s).");
 }
 
 Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");

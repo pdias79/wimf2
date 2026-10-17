@@ -398,3 +398,51 @@ dotnet run --project src/Wimf.Server -- `
 The same exclusions work in update mode by appending `--update-existing`. Exclusion paths can be absolute (but must remain within the indexed root) or relative to the indexed root. An excluded file is omitted; an excluded directory and all its descendants are omitted. Matches are case-insensitive on Windows and case-sensitive on Linux. Prefixes are not enough: excluding `Private` does **not** exclude `PrivateAgain`. The indexed root cannot be excluded.
 
 Intentional exclusions are not counted as inaccessible paths and are not stored in the catalog. Repeat the same flags on future updates to keep the same scope. Previously indexed entries that become excluded will be reported as removed.
+
+
+### Scheduled indexing from wimf.json (PR #31)
+
+An optional `indexing` array centralizes the roots, output catalog paths, exclusion rules and independent indexing intervals:
+
+```json
+{
+  "catalogs": ["WIMF_DATABASE_DisqueC.txt.gz", "Archives.txt.gz"],
+  "sources": [],
+  "cacheDirectory": null,
+  "refreshSeconds": 300,
+  "indexing": [
+    {
+      "root": "C:\\",
+      "output": "WIMF_DATABASE_DisqueC.txt.gz",
+      "name": "Disque C",
+      "exclude": ["$Recycle.Bin", "System Volume Information", "Windows\\Temp"],
+      "intervalDays": 7
+    },
+    {
+      "root": "D:\\Archives",
+      "output": "Archives.txt.gz",
+      "name": "Archives",
+      "exclude": ["Temp"],
+      "intervalHours": 12
+    }
+  ]
+}
+```
+
+Each job must specify **exactly one** positive `intervalMinutes`, `intervalHours` or `intervalDays` (maximum 3650 days). For example, `"intervalMinutes": 5` runs a small-directory indexing job approximately every five minutes while `"intervalDays": 7` works for a large disk. Each catalog has its own schedule. Paths in `root` and `output` are relative to the JSON file location unless absolute; entries in `exclude` are relative to the corresponding **indexing root**, unless absolute. The output must also appear in `catalogs` and only one indexing job may own an output. Catalog files referenced in `catalogs` may be missing on startup **only when a corresponding `indexing` job owns that output**. Wimf starts with the existing catalogs and the scheduler creates the missing output in the background; it becomes searchable after the next catalog refresh (`refreshSeconds` or manual refresh). A missing or inaccessible catalog **without** an indexing job also no longer blocks startup: it remains unavailable until a subsequent refresh discovers it. Invalid existing catalog data may still be rejected as a configuration/data error. Config without `indexing` behaves as before.
+
+When running, the scheduler checks due jobs about once a minute (so minute intervals are approximate, not second-precise), using each output catalog's last modification time as the last successful indexing time. If an existing catalog is overdue, the first update begins in the background shortly after daemon startup. A failed scan keeps the previous catalog intact where possible. A missing/offline indexing root is retried at the next minute tick; other scan failures are retried after at least one hour. Shutdown requests cancel indexing. Scans execute sequentially to avoid competing whole-disk workloads.
+
+**Important:** This is a scheduled **full filesystem rescan**, not a journal-based incremental index. `--update-existing` compares changes but reads all file metadata and rewrites the catalog; lengthy scans can consume CPU, I/O and memory. Do not configure very short intervals for large disks. The existing `refreshSeconds` option controls when the Web server reloads the generated catalog, **not** when the disk is rescanned. The background indexing schedule is active only while Wimf is running; missed updates run after the next startup when the catalog is overdue. A manual update using the same output while scheduled indexing is running should be avoided.
+
+
+### Offline catalogs during daemon startup (PR #31)
+
+If a catalog listed in `catalogs` lives on a disconnected network drive or is missing, Wimf now starts with the catalogs that are readable. The unavailable catalog is reported in stderr and in `failedLocalCatalogs` on `/api/refresh-status`, but other catalog searches remain available. At every `refreshSeconds` interval (default 300 seconds), Wimf retries loading it. Once the remote share reconnects or the catalog is created, it is loaded automatically and appears in the Web UI without restarting. `POST /api/refresh` triggers an immediate check.
+
+A catalog that was successfully loaded earlier stays searchable from the last valid in-memory snapshot when its underlying share disconnects. This behavior applies to both scheduled indexing outputs and ordinary paths in `catalogs`; no new JSON property is required. `refreshSeconds: 0` disables automatic retries, but manual refresh remains available. If all catalogs are unavailable, the server still starts with zero searchable catalogs. Network indexing itself will retry on its independent scheduling/error cadence.
+
+
+#### Diagnose the first indexing of a network share
+
+The new local `GET /api/indexing-status` endpoint returns each configured job's `name`, `root`, `output`, `state` (`pending`, `running`, `completed`, or `failed`), `lastSuccess` and `lastError`. In PowerShell, run `Invoke-RestMethod http://127.0.0.1:5080/api/indexing-status | Format-List` to see which indexing job has started and the last error if any. `pending` can mean an earlier sequential scan has not yet finished. The first indexing of an absent output starts when the root is available, and may take time on a remote disk. Before diagnosing the scheduler, verify a share path with `Test-Path -LiteralPath '\\\\192.168.1.1\\Disque dur'` (replace the address with the actual Freebox address). A disconnected root is retried approximately every minute, while catalog loading checks follow `refreshSeconds`.

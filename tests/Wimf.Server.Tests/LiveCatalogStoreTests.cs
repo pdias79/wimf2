@@ -210,4 +210,96 @@ public class LiveCatalogStoreTests
         writer.Write(text);
     }
 
+    [Fact]
+    public async Task MissingScheduledCatalogIsLoadedAfterItsFirstGeneration()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-pending-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var existingPath = Path.Combine(root, "existing.txt");
+            var pendingPath = Path.Combine(root, "new.txt.gz");
+            File.WriteAllText(existingPath, Fixture("Existing"));
+            var store = new LiveCatalogStore([existingPath, pendingPath], Array.Empty<string>(),
+                null, loadLocalFiles: true, allowMissingCatalogs: [pendingPath]);
+            Assert.Equal(["Existing"], store.Snapshot.Select(c => c.Header.Name));
+            Assert.Equal(2, store.LocalCount);
+            var pending = await store.RefreshAsync();
+            Assert.Equal(1, pending.FailedLocalCatalogs);
+            Assert.Single(store.Snapshot);
+
+            WriteGzipCatalog(pendingPath, Fixture("New"));
+            var loaded = await store.RefreshAsync();
+            Assert.Equal(0, loaded.FailedLocalCatalogs);
+            Assert.Equal(["Existing", "New"], store.Snapshot.Select(c => c.Header.Name));
+            Assert.Equal(2, loaded.CatalogCount);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void MissingUnmanagedCatalogStillFailsOnStartup()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-pending-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var missing = Path.Combine(root, "missing.txt.gz");
+            Assert.Throws<FileNotFoundException>(() =>
+                new LiveCatalogStore([missing], Array.Empty<string>(), null, loadLocalFiles: true));
+            Assert.Throws<FileNotFoundException>(() =>
+                new LiveCatalogStore([missing], Array.Empty<string>(), null,
+                    loadLocalFiles: true, allowMissingCatalogs: [Path.Combine(root, "other.txt.gz")]));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task UnavailableUnmanagedCatalogDoesNotBlockStartupAndLoadsWhenRestored()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-offline-start-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var onlinePath = Path.Combine(root, "online.txt");
+            var offlinePath = Path.Combine(root, "offline", "network.txt.gz");
+            File.WriteAllText(onlinePath, Fixture("Online"));
+            var store = new LiveCatalogStore([onlinePath, offlinePath], Array.Empty<string>(), null,
+                loadLocalFiles: true, tolerateUnavailableCatalogs: true);
+            Assert.Equal(["Online"], store.Snapshot.Select(c => c.Header.Name));
+            var initial = await store.RefreshAsync();
+            Assert.Equal(1, initial.FailedLocalCatalogs);
+            Assert.Single(store.Snapshot);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(offlinePath)!);
+            WriteGzipCatalog(offlinePath, Fixture("Network"));
+            var recovered = await store.RefreshAsync();
+            Assert.Equal(0, recovered.FailedLocalCatalogs);
+            Assert.Equal(["Online", "Network"], store.Snapshot.Select(c => c.Header.Name));
+            Assert.Equal(2, recovered.CatalogCount);
+
+            Directory.Delete(Path.GetDirectoryName(offlinePath)!, recursive: true);
+            var disconnected = await store.RefreshAsync();
+            Assert.Equal(1, disconnected.FailedLocalCatalogs);
+            Assert.Equal(["Online", "Network"], store.Snapshot.Select(c => c.Header.Name));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void InvalidExistingCatalogIsNotSilentlyTreatedAsAnOfflineShare()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-invalid-start-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "corrupt.txt");
+            File.WriteAllText(path, "not a valid WIMF catalog");
+            Assert.ThrowsAny<InvalidDataException>(() =>
+                new LiveCatalogStore([path], Array.Empty<string>(), null,
+                    loadLocalFiles: true, tolerateUnavailableCatalogs: true));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }

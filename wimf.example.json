@@ -1,8 +1,29 @@
 {
   "catalogs": [
-    "WIMF_DATABASE_DisqueC.txt.gz"
+    "WIMF_DATABASE_DisqueC.txt.gz",
+    "Documents.txt.gz"
   ],
   "sources": [],
   "cacheDirectory": null,
-  "refreshSeconds": 300
+  "refreshSeconds": 300,
+  "indexing": [
+    {
+      "root": "C:\\",
+      "output": "WIMF_DATABASE_DisqueC.txt.gz",
+      "name": "Disque C",
+      "exclude": [
+        "$Recycle.Bin",
+        "System Volume Information",
+        "Windows\\Temp"
+      ],
+      "intervalDays": 7
+    },
+    {
+      "root": "Documents",
+      "output": "Documents.txt.gz",
+      "name": "Documents",
+      "exclude": [],
+      "intervalMinutes": 15
+    }
+  ]
 }
