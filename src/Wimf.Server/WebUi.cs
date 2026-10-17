@@ -302,7 +302,7 @@ public static class WebUi
           " dossiers · Énumération : " + metrics.directoryEnumerationMilliseconds + " ms" +
           " · Tri : " + metrics.directorySortMilliseconds + " ms" +
           " · Métadonnées : " + metrics.metadataMilliseconds + " ms" +
-          " · Autres/écriture : " + metrics.outputMilliseconds + " ms";
+          " · Autres/écriture : " + (metrics.outputMilliseconds === null ? "n/d" : metrics.outputMilliseconds + " ms");
         item.appendChild(timing);
       }
       if (catalog.state === "queued" && catalog.queuedAt) {
