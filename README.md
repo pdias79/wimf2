@@ -446,3 +446,12 @@ A catalog that was successfully loaded earlier stays searchable from the last va
 #### Diagnose the first indexing of a network share
 
 The new local `GET /api/indexing-status` endpoint returns each configured job's `name`, `root`, `output`, `state` (`pending`, `running`, `completed`, or `failed`), `lastSuccess` and `lastError`. In PowerShell, run `Invoke-RestMethod http://127.0.0.1:5080/api/indexing-status | Format-List` to see which indexing job has started and the last error if any. `pending` can mean an earlier sequential scan has not yet finished. The first indexing of an absent output starts when the root is available, and may take time on a remote disk. Before diagnosing the scheduler, verify a share path with `Test-Path -LiteralPath '\\\\192.168.1.1\\Disque dur'` (replace the address with the actual Freebox address). A disconnected root is retried approximately every minute, while catalog loading checks follow `refreshSeconds`.
+
+
+### Visual monitoring of scheduled indexing (PR #32)
+
+The local Web UI now includes a collapsible **Indexations planifiées** panel below the catalog refresh toolbar. For each job declared in `indexing`, it shows the configured name, indexed root and catalog output, its current state (waiting, running, completed or failed), its last successful completion date and any reported error.
+
+The panel polls the existing local `GET /api/indexing-status` endpoint every 15 seconds while the browser tab is visible. If `indexing` has no jobs, the panel is hidden. Status checks never start a disk scan and do not interrupt searches or the separate catalog refresh timer. Failed scans remain visible, including when network shares are disconnected; later retries update their state. Jobs run sequentially, so one long scan can leave subsequent jobs pending.
+
+To test, open `http://127.0.0.1:5080` with several indexing tasks configured. Expand **Indexations planifiées** and check the displayed states while a short indexing task executes and finishes. Disconnect a test share to inspect the error and reconnect it to observe the retry. The state is read-only; `/api/indexing-status` remains available for scripts.
