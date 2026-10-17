@@ -256,7 +256,8 @@ app.MapGet("/api/catalog-management", () =>
                     loaded.EnumerateEntries().Count(e => e.Extension != "folder"))).Value,
             catalog?.Header.CreatedAt, catalog is not null,
             index >= 0 ? index : null, job?.State, job?.NextUpdate, job?.LastError,
-            job?.CanStart ?? false, job?.ScannedEntries ?? 0, job?.StartedAt);
+            job?.CanStart ?? false, job?.ScannedEntries ?? 0, job?.StartedAt,
+            job?.LastSuccess);
     }).ToArray();
     return Results.Json(managed, WimfJsonContext.Default.ManagedCatalogStatusArray);
 });

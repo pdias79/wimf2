@@ -260,6 +260,19 @@ public static class WebUi
           " éléments parcourus · " + Math.floor(elapsed / 60) + " min " + (elapsed % 60) + " s";
         item.appendChild(progress);
       }
+      if (catalog.state === "completed" && catalog.startedAt && catalog.lastSuccess) {
+        const started = new Date(catalog.startedAt).getTime();
+        const finished = new Date(catalog.lastSuccess).getTime();
+        if (Number.isFinite(started) && Number.isFinite(finished) && finished >= started) {
+          const duration = Math.floor((finished - started) / 1000);
+          const summary = document.createElement("div");
+          summary.className = "catalog-details";
+          summary.textContent = "Dernière indexation : " +
+            Number(catalog.scannedEntries || 0).toLocaleString("fr-FR") +
+            " éléments parcourus · " + Math.floor(duration / 60) + " min " + (duration % 60) + " s";
+          item.appendChild(summary);
+        }
+      }
       if (catalog.indexingJobIndex !== null) {
         const schedule = document.createElement("div");
         schedule.className = "catalog-details";

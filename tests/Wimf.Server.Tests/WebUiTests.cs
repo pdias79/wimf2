@@ -198,6 +198,8 @@ public class WebUiTests
         Assert.Contains("id=\"indexing-error\"", WebUi.Html);
         Assert.Contains("fetch(\"/api/catalog-management\"", WebUi.Html);
         Assert.Contains("setInterval(pollIndexingStatus, 2000)", WebUi.Html);
+        Assert.Contains("Dernière indexation :", WebUi.Html);
+        Assert.Contains("catalog.lastSuccess", WebUi.Html);
         Assert.Contains("indexingCheckInProgress || document.hidden", WebUi.Html);
         Assert.DoesNotContain("indexingPanel.hidden = jobs.length === 0", WebUi.Html);
         Assert.Contains("Aucun catalogue configuré", WebUi.Html);
