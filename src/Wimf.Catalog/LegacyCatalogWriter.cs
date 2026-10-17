@@ -35,8 +35,8 @@ public static class LegacyCatalogWriter
         var outputDirectory = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(outputDirectory);
         var temporary = Path.Combine(outputDirectory, "." + Path.GetFileName(output) + "." + Guid.NewGuid().ToString("N") + ".tmp");
-        if (directoryPrefetch < 1 || directoryPrefetch > 4)
-            throw new ArgumentOutOfRangeException(nameof(directoryPrefetch), "Directory prefetch must be between 1 and 4.");
+        if (directoryPrefetch < 1 || directoryPrefetch > 50)
+            throw new ArgumentOutOfRangeException(nameof(directoryPrefetch), "Directory prefetch must be between 1 and 50.");
         var nextId = 0;
         long enumerationTicks = 0, metadataTicks = 0, sortTicks = 0;
         var directoryCount = 0;
@@ -55,9 +55,13 @@ public static class LegacyCatalogWriter
                 writer.WriteLine(); // Legacy extension-header field; reader accepts an empty list.
 
                 var stack = new Stack<(DirectoryInfo Folder, int Parent)>();
-                stack.Push((new DirectoryInfo(root), 0));
-                // Prefetch at most four pending directories without changing the
-                // sequential order in which parent IDs and catalog entries are written.
+                // Single worker retains the legacy depth-first order. Concurrent workers
+                // traverse breadth-first like the original Python Folder_Explorer.
+                var queue = new Queue<(DirectoryInfo Folder, int Parent)>();
+                if (directoryPrefetch == 1) stack.Push((new DirectoryInfo(root), 0));
+                else queue.Enqueue((new DirectoryInfo(root), 0));
+                // Bounded BFS lookahead keeps network requests in flight while the main
+                // thread emits entries deterministically in discovery order.
                 var prefetched = new Dictionary<string, Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)>>();
                 Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)> Fetch(DirectoryInfo folder) =>
                     Task.Run(() =>
@@ -73,17 +77,18 @@ public static class LegacyCatalogWriter
                 void Prefetch()
                 {
                     if (directoryPrefetch == 1) return;
-                    foreach (var pending in stack)
+                    foreach (var pending in queue)
                     {
                         if (prefetched.Count >= directoryPrefetch) break;
                         if (!prefetched.ContainsKey(pending.Folder.FullName))
                             prefetched.Add(pending.Folder.FullName, Fetch(pending.Folder));
                     }
                 }
-                while (stack.Count > 0)
+                Prefetch();
+                while (stack.Count > 0 || queue.Count > 0)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var (folder, parent) = stack.Pop();
+                    var (folder, parent) = directoryPrefetch == 1 ? stack.Pop() : queue.Dequeue();
                     // File-system enumeration order is not stable. Sort by ordinal name to
                     // make generated record order reproducible on one filesystem.
                     FileSystemInfo[] children;
@@ -168,7 +173,10 @@ public static class LegacyCatalogWriter
                         if ((nextId & 255) == 0) onProgress?.Invoke(nextId);
                         if (isDirectory) descend.Add(((DirectoryInfo)child, id));
                     }
-                    for (var i = descend.Count - 1; i >= 0; i--) stack.Push(descend[i]);
+                    if (directoryPrefetch == 1)
+                        for (var i = descend.Count - 1; i >= 0; i--) stack.Push(descend[i]);
+                    else
+                        foreach (var childDirectory in descend) queue.Enqueue(childDirectory);
                     Prefetch();
                 }
                 writer.Flush();
