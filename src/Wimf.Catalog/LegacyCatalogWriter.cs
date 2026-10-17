@@ -70,15 +70,17 @@ public static class LegacyCatalogWriter
                     foreach (var child in children)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        if (exclusions.ContainsFullPath(child.FullName)) continue;
-                        if (string.Equals(child.FullName, output, pathComparison) ||
-                            string.Equals(child.FullName, temporary, pathComparison)) continue;
+                        var childPath = child.FullName;
+                        var childName = child.Name;
+                        if (exclusions.ContainsFullPath(childPath)) continue;
+                        if (string.Equals(childPath, output, pathComparison) ||
+                            string.Equals(childPath, temporary, pathComparison)) continue;
                         // The legacy semicolon-separated format cannot encode these names.
                         // Skip the entry (and its descendants if it is a directory) rather
                         // than abandoning an entire disk scan.
-                        if (child.Name.IndexOfAny([';', '\r', '\n']) >= 0)
+                        if (childName.IndexOfAny([';', '\r', '\n']) >= 0)
                         {
-                            onSkipped?.Invoke($"Skipped unsupported file name: {child.FullName}");
+                            onSkipped?.Invoke($"Skipped unsupported file name: {childPath}");
                             continue;
                         }
                         bool isDirectory;
@@ -90,7 +92,7 @@ public static class LegacyCatalogWriter
                             var attributes = child.Attributes;
                             if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
                             isDirectory = (attributes & FileAttributes.Directory) != 0;
-                            extension = isDirectory ? "folder" : Path.GetExtension(child.Name).TrimStart('.');
+                            extension = isDirectory ? "folder" : Path.GetExtension(childName).TrimStart('.');
                             size = isDirectory ? 0UL : checked((ulong)((FileInfo)child).Length);
                             var modified = new DateTimeOffset(child.LastWriteTimeUtc, TimeSpan.Zero).ToUnixTimeSeconds();
                             days = Math.DivRem(modified, 86400, out var remainder);
@@ -98,10 +100,10 @@ public static class LegacyCatalogWriter
                         }
                         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
                         {
-                            onSkipped?.Invoke($"Skipped inaccessible entry: {child.FullName} ({ex.Message})");
+                            onSkipped?.Invoke($"Skipped inaccessible entry: {childPath} ({ex.Message})");
                             continue;
                         }
-                        writer.Write(child.Name);
+                        writer.Write(childName);
                         writer.Write(';');
                         writer.Write(extension);
                         writer.Write(';');
