@@ -36,18 +36,25 @@ public static class LegacyCatalogUpdater
             cancellationToken, message => { skipped++; onSkipped?.Invoke(message); }, excludePaths,
             onProgress);
         var updated = LegacyCatalogReader.ReadFile(output);
-        var after = MakeIndex(updated);
+        // Compare against one mutable index instead of retaining a second full
+        // dictionary of paths. Entries left in "before" were removed.
         var added = 0;
         var modified = 0;
         var unchanged = 0;
-        foreach (var (path, state) in after)
+        var total = 0;
+        foreach (var entry in updated.EnumerateEntries())
         {
-            if (!before.TryGetValue(path, out var oldState)) added++;
-            else if (state == oldState) unchanged++;
-            else modified++;
+            total++;
+            var path = updated.GetFullPath(entry.Id);
+            var state = (entry.Extension, entry.Size, entry.ModifiedAt.ToUnixTimeSeconds() / 86400);
+            if (before.Remove(path, out var oldState))
+            {
+                if (state == oldState) unchanged++;
+                else modified++;
+            }
+            else added++;
         }
-        var removed = before.Count - (modified + unchanged);
-        return new CatalogUpdateSummary(after.Count, added, modified, removed, unchanged, skipped);
+        return new CatalogUpdateSummary(total, added, modified, before.Count, unchanged, skipped);
     }
 
     private static Dictionary<string, (string Extension, ulong Size, long Day)> MakeIndex(Catalog catalog)
