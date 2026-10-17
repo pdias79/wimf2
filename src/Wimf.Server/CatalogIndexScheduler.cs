@@ -33,6 +33,14 @@ public sealed class CatalogIndexScheduler
         _execute = execute ?? ((job, token) => Task.Run(() =>
         {
             var jobIndex = Array.FindIndex(_jobs, candidate => ReferenceEquals(candidate, job));
+            // Stream the complete diagnostic report to disk rather than retaining it in memory.
+            var reportPath = job.Output + ".skipped-report.txt";
+            using var report = new StreamWriter(new FileStream(reportPath, FileMode.Create,
+                FileAccess.Write, FileShare.Read), new System.Text.UTF8Encoding(false));
+            report.WriteLine("Wimf2 - elements ignores");
+            report.WriteLine("Catalogue : " + (job.Name ?? job.Root));
+            report.WriteLine("Source : " + job.Root);
+            report.WriteLine();
             Action<int> progress = count =>
             {
                 if (jobIndex >= 0)
@@ -42,6 +50,7 @@ public sealed class CatalogIndexScheduler
             Action<string> skipped = message =>
             {
                 Console.Error.WriteLine(message);
+                report.WriteLine(message);
                 if (jobIndex >= 0)
                 {
                     // Keep a bounded sample to avoid unbounded memory use on large scans.
@@ -70,7 +79,20 @@ public sealed class CatalogIndexScheduler
                     excludePaths: job.Exclude, onProgress: progress);
                 Console.WriteLine($"Indexed '{job.Root}': {count} entries.");
             }
+            report.WriteLine();
+            report.WriteLine("Total ignore : " + (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
         }, token));
+    }
+
+    public Stream? OpenSkippedReport(int index)
+    {
+        if (index < 0 || index >= _jobs.Length) return null;
+        var status = Volatile.Read(ref _statuses[index]);
+        if (status.State != "completed" || status.SkippedEntries == 0) return null;
+        var path = _jobs[index].Output + ".skipped-report.txt";
+        try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
+        catch (FileNotFoundException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
     }
 
     public IndexingJobStatus[] Status
