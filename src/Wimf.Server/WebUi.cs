@@ -760,7 +760,7 @@ public static class WebUi
     }
   }
   setInterval(pollRefreshStatus, 15000);
-  setInterval(pollIndexingStatus, 15000);
+  setInterval(pollIndexingStatus, 2000);
   pollIndexingStatus();
 
   Promise.all([
