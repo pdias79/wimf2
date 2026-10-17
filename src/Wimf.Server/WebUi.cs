@@ -214,6 +214,8 @@ public static class WebUi
     completed: "Terminée", failed: "Échec"
   };
   function renderIndexingStatus(catalogs) {
+    const expandedPaths = new Set(Array.from(indexingList.querySelectorAll("details[data-catalog-path]"))
+      .filter(details => details.open).map(details => details.dataset.catalogPath));
     indexingList.replaceChildren();
     indexingError.textContent = "";
     const active = catalogs.filter(c => c.state === "running").length;
@@ -266,6 +268,23 @@ public static class WebUi
         skipped.textContent = "Éléments ignorés (inaccessibles ou non pris en charge) : " +
           Number(catalog.skippedEntries).toLocaleString("fr-FR");
         item.appendChild(skipped);
+        if (Array.isArray(catalog.skippedDetails) && catalog.skippedDetails.length) {
+          const details = document.createElement("details");
+          details.dataset.catalogPath = catalog.path;
+          details.open = expandedPaths.has(catalog.path);
+          const heading = document.createElement("summary");
+          heading.textContent = "Voir les éléments ignorés (" + catalog.skippedDetails.length +
+            " premiers sur " + catalog.skippedEntries + ")";
+          details.appendChild(heading);
+          const list = document.createElement("ul");
+          for (const message of catalog.skippedDetails) {
+            const entry = document.createElement("li");
+            entry.textContent = message;
+            list.appendChild(entry);
+          }
+          details.appendChild(list);
+          item.appendChild(details);
+        }
       }
       if (catalog.state === "completed" && catalog.startedAt && catalog.lastSuccess) {
         const started = new Date(catalog.startedAt).getTime();
