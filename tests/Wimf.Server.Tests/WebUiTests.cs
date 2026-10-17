@@ -206,6 +206,8 @@ public class WebUiTests
         Assert.Contains("/cancel", WebUi.Html);
         Assert.Contains("cancelled: \"Annulée\"", WebUi.Html);
         Assert.Contains("catalog.queuedAt", WebUi.Html);
+        Assert.Contains("catalog.scanMetrics", WebUi.Html);
+        Assert.Contains("Parcours/tri :", WebUi.Html);
         Assert.Contains("Temps en file d’attente", WebUi.Html);
         Assert.Contains("Dernière indexation :", WebUi.Html);
         Assert.Contains("catalog.lastSuccess", WebUi.Html);
