@@ -381,7 +381,7 @@ if (options.Indexing is { Length: > 0 })
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         afterSuccess: async (job, token) =>
         {
-            await store.RefreshAsync(token);
+            await store.RefreshLocalCatalogAsync(job.Output, token);
         });
     var scheduler = indexingScheduler;
     _ = Task.Run(async () =>
