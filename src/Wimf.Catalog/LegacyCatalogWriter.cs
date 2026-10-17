@@ -12,7 +12,7 @@ public static class LegacyCatalogWriter
     public static int Build(string rootPath, string outputPath, string? catalogName = null,
         CancellationToken cancellationToken = default, Action<string>? onSkipped = null,
         IEnumerable<string>? excludePaths = null, Action<int>? onProgress = null,
-        Action<CatalogScanMetrics>? onMetrics = null)
+        Action<CatalogScanMetrics>? onMetrics = null, int directoryPrefetch = 1)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -35,6 +35,8 @@ public static class LegacyCatalogWriter
         var outputDirectory = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(outputDirectory);
         var temporary = Path.Combine(outputDirectory, "." + Path.GetFileName(output) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        if (directoryPrefetch < 1 || directoryPrefetch > 4)
+            throw new ArgumentOutOfRangeException(nameof(directoryPrefetch), "Directory prefetch must be between 1 and 4.");
         var nextId = 0;
         long enumerationTicks = 0, metadataTicks = 0, sortTicks = 0;
         var directoryCount = 0;
@@ -54,6 +56,30 @@ public static class LegacyCatalogWriter
 
                 var stack = new Stack<(DirectoryInfo Folder, int Parent)>();
                 stack.Push((new DirectoryInfo(root), 0));
+                // Prefetch at most four pending directories without changing the
+                // sequential order in which parent IDs and catalog entries are written.
+                var prefetched = new Dictionary<string, Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)>>();
+                Task<(FileSystemInfo[] Children, long EnumerationTicks, long SortTicks)> Fetch(DirectoryInfo folder) =>
+                    Task.Run(() =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                        var children = folder.EnumerateFileSystemInfos().ToArray();
+                        var enumerated = System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                        start = System.Diagnostics.Stopwatch.GetTimestamp();
+                        Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
+                        return (children, enumerated, System.Diagnostics.Stopwatch.GetTimestamp() - start);
+                    }, cancellationToken);
+                void Prefetch()
+                {
+                    if (directoryPrefetch == 1) return;
+                    foreach (var pending in stack)
+                    {
+                        if (prefetched.Count >= directoryPrefetch) break;
+                        if (!prefetched.ContainsKey(pending.Folder.FullName))
+                            prefetched.Add(pending.Folder.FullName, Fetch(pending.Folder));
+                    }
+                }
                 while (stack.Count > 0)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -61,19 +87,32 @@ public static class LegacyCatalogWriter
                     // File-system enumeration order is not stable. Sort by ordinal name to
                     // make generated record order reproducible on one filesystem.
                     FileSystemInfo[] children;
-                    var enumerationStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     try
                     {
-                        children = folder.EnumerateFileSystemInfos().ToArray();
-                        enumerationTicks += System.Diagnostics.Stopwatch.GetTimestamp() - enumerationStart;
-                        var sortStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                        Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
-                        sortTicks += System.Diagnostics.Stopwatch.GetTimestamp() - sortStart;
+                        if (directoryPrefetch == 1)
+                        {
+                            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            children = folder.EnumerateFileSystemInfos().ToArray();
+                            enumerationTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                            start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
+                            sortTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                        }
+                        else
+                        {
+                            var task = prefetched.Remove(folder.FullName, out var queued)
+                                ? queued : Fetch(folder);
+                            var result = task.GetAwaiter().GetResult();
+                            children = result.Children;
+                            enumerationTicks += result.EnumerationTicks;
+                            sortTicks += result.SortTicks;
+                        }
                     }
                     catch (Exception ex) when (parent != 0 &&
                         ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
                     {
                         onSkipped?.Invoke($"Skipped inaccessible directory: {folder.FullName} ({ex.Message})");
+                        Prefetch();
                         continue;
                     }
                     directoryCount++;
@@ -130,6 +169,7 @@ public static class LegacyCatalogWriter
                         if (isDirectory) descend.Add(((DirectoryInfo)child, id));
                     }
                     for (var i = descend.Count - 1; i >= 0; i--) stack.Push(descend[i]);
+                    Prefetch();
                 }
                 writer.Flush();
                 file.Flush(flushToDisk: true);
