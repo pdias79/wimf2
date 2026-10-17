@@ -78,7 +78,6 @@ public sealed class CatalogIndexScheduler
             };
             Action<string> skipped = message =>
             {
-                Console.Error.WriteLine(message);
                 report.WriteLine(message);
                 if (jobIndex >= 0)
                 {
@@ -92,32 +91,35 @@ public sealed class CatalogIndexScheduler
                     });
                 }
             };
+            var bench = System.Diagnostics.Stopwatch.StartNew();
+            CatalogScanMetrics? scanResult = null;
             Action<CatalogScanMetrics> metrics = m =>
             {
+                scanResult = m;
                 if (jobIndex >= 0)
                     Volatile.Write(ref _statuses[jobIndex], Volatile.Read(ref _statuses[jobIndex]) with { ScanMetrics = m });
-                Console.WriteLine(
-                $"Indexing timings for '{job.Root}': {m.DirectoryCount} directories; " +
-                $"enumeration {m.DirectoryEnumerationMilliseconds} ms; " +
-                $"metadata {m.MetadataMilliseconds} ms; " +
-                $"other/write {m.OutputMilliseconds} ms.");
             };
             if (File.Exists(job.Output))
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
                     excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics);
-                Console.WriteLine($"Indexed '{job.Root}': {summary.Total} entries, " +
-                    $"{summary.Added} added, {summary.Modified} changed, {summary.Removed} removed, " +
-                    $"{summary.Skipped} skipped.");
+
             }
             else
             {
                 var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
                     excludePaths: job.Exclude, onProgress: progress);
-                Console.WriteLine($"Indexed '{job.Root}': {count} entries.");
+
             }
+            bench.Stop();
+            if (scanResult is not null)
+                Console.WriteLine($"[BENCH] {job.Root} | total={bench.ElapsedMilliseconds} ms | " +
+                    $"dossiers={scanResult.DirectoryCount} | enumeration={scanResult.DirectoryEnumerationMilliseconds} ms | " +
+                    $"tri={scanResult.DirectorySortMilliseconds} ms | metadonnees={scanResult.MetadataMilliseconds} ms | " +
+                    $"autres/ecriture={scanResult.OutputMilliseconds} ms | ignores=" +
+                    (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
             report.WriteLine();
             report.WriteLine("Total ignore : " + (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
         }, token));
@@ -236,7 +238,7 @@ public sealed class CatalogIndexScheduler
         {
             if (!Directory.Exists(job.Root))
                 throw new DirectoryNotFoundException($"Indexing root unavailable: {job.Root}");
-            Console.WriteLine($"Indexing started: '{job.Root}' -> '{job.Output}'.");
+
             Volatile.Write(ref _statuses[i], _statuses[i] with
             {
                 State = "running", LastError = null, QueuedAt = null, ScanMetrics = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
@@ -248,7 +250,7 @@ public sealed class CatalogIndexScheduler
                 State = "completed", LastSuccess = DateTimeOffset.UtcNow, LastError = null
             });
             RecordRun(i, "completed");
-            Console.WriteLine($"Indexing completed: '{job.Root}' -> '{job.Output}'.");
+
             _retryNotBefore[i] = DateTimeOffset.MinValue;
             // A catalog is fully published before refreshing the search snapshot.
             // Refresh failures must never make an otherwise successful scan "failed".
