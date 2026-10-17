@@ -91,6 +91,9 @@ public sealed class CatalogIndexScheduler
                     });
                 }
             };
+            // Opt-in experiment: 1 (default), 2 or 4 concurrent directory enumerations.
+            var prefetch = int.TryParse(Environment.GetEnvironmentVariable("WIMF_INDEX_PREFETCH"),
+                out var requested) && requested is 2 or 4 ? requested : 1;
             var bench = System.Diagnostics.Stopwatch.StartNew();
             CatalogScanMetrics? scanResult = null;
             Action<CatalogScanMetrics> metrics = m =>
@@ -103,19 +106,20 @@ public sealed class CatalogIndexScheduler
             {
                 var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics);
+                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch);
 
             }
             else
             {
                 var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress);
+                    excludePaths: job.Exclude, onProgress: progress,
+                    onMetrics: metrics, directoryPrefetch: prefetch);
 
             }
             bench.Stop();
             if (scanResult is not null)
-                Console.WriteLine($"[BENCH] {job.Root} | total={bench.ElapsedMilliseconds} ms | " +
+                Console.WriteLine($"[BENCH] {job.Root} | prefetch={prefetch} | total={bench.ElapsedMilliseconds} ms | " +
                     $"dossiers={scanResult.DirectoryCount} | enumeration={scanResult.DirectoryEnumerationMilliseconds} ms | " +
                     $"tri={scanResult.DirectorySortMilliseconds} ms | metadonnees={scanResult.MetadataMilliseconds} ms | " +
                     $"autres/ecriture={scanResult.OutputMilliseconds} ms | ignores=" +
