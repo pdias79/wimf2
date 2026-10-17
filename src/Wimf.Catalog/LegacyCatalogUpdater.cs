@@ -11,7 +11,8 @@ public static class LegacyCatalogUpdater
 {
     public static CatalogUpdateSummary Update(string rootPath, string outputPath,
         string? catalogName = null, CancellationToken cancellationToken = default,
-        Action<string>? onSkipped = null, IEnumerable<string>? excludePaths = null)
+        Action<string>? onSkipped = null, IEnumerable<string>? excludePaths = null,
+        Action<int>? onProgress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -32,7 +33,8 @@ public static class LegacyCatalogUpdater
         var skipped = 0;
         // The writer commits the replacement only after a successful scan.
         LegacyCatalogWriter.Build(root, output, catalogName ?? previous.Header.Name,
-            cancellationToken, message => { skipped++; onSkipped?.Invoke(message); }, excludePaths);
+            cancellationToken, message => { skipped++; onSkipped?.Invoke(message); }, excludePaths,
+            onProgress);
         var updated = LegacyCatalogReader.ReadFile(output);
         var after = MakeIndex(updated);
         var added = 0;
