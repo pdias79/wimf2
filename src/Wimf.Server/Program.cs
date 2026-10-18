@@ -25,11 +25,37 @@ if (args.Length > 0 && args[0] == "--watch-root")
             InternalBufferSize = 64 * 1024
         };
         long observed = 0;
+        long retained = 0;
         long errors = 0;
+        // Time-based de-duplication is diagnostic only: it must never be used as
+        // proof that no filesystem change happened.
+        var recent = new Dictionary<(string Action, string Path), DateTimeOffset>();
+        var sync = new object();
+        var window = TimeSpan.FromMilliseconds(500);
         void Record(string action, string path)
         {
             Interlocked.Increment(ref observed);
-            Console.WriteLine($"[WATCH] {DateTimeOffset.Now:O} | {action} | {path}");
+            var now = DateTimeOffset.UtcNow;
+            var shouldPrint = false;
+            lock (sync)
+            {
+                // Avoid unbounded growth during long-running monitoring.
+                if (recent.Count > 10000)
+                {
+                    foreach (var key in recent.Where(item => now - item.Value > window)
+                                 .Select(item => item.Key).ToArray())
+                        recent.Remove(key);
+                }
+                var key = (action, OperatingSystem.IsWindows() ? path.ToUpperInvariant() : path);
+                if (!recent.TryGetValue(key, out var previous) || now - previous >= window)
+                {
+                    recent[key] = now;
+                    shouldPrint = true;
+                    Interlocked.Increment(ref retained);
+                }
+            }
+            if (shouldPrint)
+                Console.WriteLine($"[WATCH] {DateTimeOffset.Now:O} | {action} | {path}");
         }
         watcher.Created += (_, e) => Record("created", e.FullPath);
         watcher.Changed += (_, e) => Record("changed", e.FullPath);
@@ -54,7 +80,7 @@ if (args.Length > 0 && args[0] == "--watch-root")
             try { await Task.Delay(Timeout.InfiniteTimeSpan, shutdown.Token); }
             catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
             watcher.EnableRaisingEvents = false;
-            Console.WriteLine($"[WATCH-SUMMARY] events={Interlocked.Read(ref observed)} | errors={Interlocked.Read(ref errors)} | no persistence or replay");
+            Console.WriteLine($"[WATCH-SUMMARY] events={Interlocked.Read(ref observed)} | grouped={Interlocked.Read(ref retained)} | duplicates={Interlocked.Read(ref observed) - Interlocked.Read(ref retained)} | errors={Interlocked.Read(ref errors)} | no persistence or replay");
             return Volatile.Read(ref errors) == 0 ? 0 : 1;
         }
         finally { Console.CancelKeyPress -= handler; }
