@@ -6,16 +6,17 @@ using Wimf.Server;
 // Compare an in-memory incremental projection against a disposable full scan.
 if (args.Length > 0 && args[0] == "--incremental-candidate")
 {
-    if (args.Length != 6 || args[2] != "--catalog" || args[4] != "--journal")
+    if ((args.Length != 6 && args.Length != 8) || args[2] != "--catalog" || args[4] != "--journal" ||
+        (args.Length == 8 && args[6] != "--candidate-output"))
     {
-        Console.Error.WriteLine("Usage: --incremental-candidate ROOT --catalog CATALOG --journal FILE");
+        Console.Error.WriteLine("Usage: --incremental-candidate ROOT --catalog CATALOG --journal FILE [--candidate-output NEW_FILE]");
         return 2;
     }
     try
     {
         Console.WriteLine("[CANDIDATE-START] Projecting journal hints and building a disposable full reference.");
         var report = IncrementalCandidateComparison.Compare(args[1], args[3], args[5],
-            onMismatch: Console.WriteLine);
+            onMismatch: Console.WriteLine, candidateOutput: args.Length == 8 ? args[7] : null);
         Console.WriteLine($"[CANDIDATE-RESULT] candidate={report.Candidate} | reference={report.Reference} | missing={report.Missing} | extra={report.Extra} | different={report.Different} | invalid={report.Invalid} | hints={report.Hints} | equal={report.Equal} | fullScanRequired={report.FullScanRequired}");
         Console.WriteLine("[CANDIDATE-RESULT] Read-only prototype. Equality does not certify future SMB notification completeness.");
         return report.Equal ? 0 : 1;
