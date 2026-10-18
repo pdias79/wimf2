@@ -60,7 +60,7 @@ public static class IncrementalCandidateComparison
                 {
                     var directory = pending.Pop();
                     if (!directory.Equals(root, comparison))
-                        candidate[directory] = new State("folder", 0, 0);
+                        candidate[directory] = new State("folder", 0, Day(Directory.GetLastWriteTimeUtc(directory)));
                     foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
                     {
                         var attributes = File.GetAttributes(entry);
@@ -81,6 +81,7 @@ public static class IncrementalCandidateComparison
             }
         }
 
+        var candidateSize = candidate.Count;
         var temp = Path.Combine(Path.GetTempPath(), "wimf-candidate-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         try
@@ -103,18 +104,20 @@ public static class IncrementalCandidateComparison
             foreach (var path in candidate.Keys.Take(30))
                 onMismatch?.Invoke("[CANDIDATE-EXTRA] " + path);
             var referenceCount = reference.EnumerateEntries().Count();
-            var candidateCount = referenceCount - missing + extra;
-            return new Result(candidateCount, referenceCount, missing, extra, different,
+            return new Result(candidateSize, referenceCount, missing, extra, different,
                 invalid, hints.Count, missing == 0 && extra == 0 && different == 0 && invalid == 0, true);
         }
         finally { Directory.Delete(temp, recursive: true); }
     }
 
+    private static long Day(DateTime utc) =>
+        new DateTimeOffset(utc, TimeSpan.Zero).ToUnixTimeSeconds() / 86400;
+
     private static State ReadFile(string path)
     {
         var info = new FileInfo(path);
-        var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+        var extension = Path.GetExtension(path).TrimStart('.');
         return new State(extension, checked((ulong)info.Length),
-            new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero).ToUnixTimeSeconds() / 86400);
+            Day(info.LastWriteTimeUtc));
     }
 }
