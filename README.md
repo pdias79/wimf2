@@ -701,3 +701,16 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --smb-controlled-t
 ```
 
 La sortie `[CONTROLLED-RESULT]` fournit `changes`, `covered`, `uncovered`, `invalid` et `watcherErrors`. Le test ne modifie pas les catalogues de production : son catalogue témoin et son journal sont temporaires et supprimés à la fin. **Ne modifier aucun fichier du partage avant `[CONTROLLED-READY]`**, sinon les différences peuvent ne pas être couvertes par le journal. Ne pas lancer en parallèle un autre processus WIMF2 utilisant la même racine pour un benchmark comparable. La surveillance SMB ne garantit toujours pas la réception des changements ; même avec `uncovered=0`, `fullScanRequired=True` reste obligatoire.
+
+
+#### Comparaison d'un candidat incrémental en mémoire avec le scan complet
+
+Cette commande expérimentale projette les chemins du journal SMB sur les entrées du catalogue existant **en mémoire**, examine les fichiers et sous-arbres concernés, et compare ensuite chaque chemin, extension, taille et jour de modification à un catalogue complet temporaire :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-candidate "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue" --journal "$journal"
+```
+
+La sortie `[CANDIDATE-RESULT]` indique `candidate`, `reference`, `missing`, `extra`, `different`, `invalid`, `hints` et `equal`. Le code de sortie vaut 1 si la comparaison échoue. Ce prototype ne produit **pas** de catalogue incrémental sérialisé et ne modifie pas le catalogue de production. Il ne tient pas encore compte des exclusions de l'indexation planifiée et les modifications faites pendant la comparaison peuvent créer des écarts. Des liens/reparse points, fichiers illisibles et dossiers devenus indisponibles entraînent une erreur ou demandent un scan complet.
+
+**Même `equal=True` n'autorise aucune publication :** les notifications SMB peuvent être incomplètes et l'état `fullScanRequired=True` reste obligatoire.
