@@ -19,7 +19,7 @@ if (args.Length > 0 && args[0] == "--incremental-preview")
         var result = IncrementalScanPreview.Analyze(args[1], args[3], lastRecords,
             onTarget: target => Console.WriteLine($"[INCREMENTAL-TARGET] {target}"),
             onProgress: (files, folders) => Console.WriteLine($"[INCREMENTAL-PROGRESS] files={files} | folders={folders}"));
-        Console.WriteLine($"[INCREMENTAL-PREVIEW] directories={result.Directories} | files={result.Files} | folders={result.Folders} | skipped={result.Skipped} | invalid={result.InvalidRecords} | fullScanRequired={result.FullScanRequired}");
+        Console.WriteLine($"[INCREMENTAL-PREVIEW] directories={result.Directories} | files={result.Files} | folders={result.Folders} | skipped={result.Skipped} | invalid={result.InvalidRecords} | deletes={result.Deletes} | renames={result.Renames} | unknown={result.Unknown} | fullScanRequired={result.FullScanRequired}");
         Console.WriteLine("[INCREMENTAL-PREVIEW] Read-only experiment. No catalog was modified; a complete scan is still required.");
         return result.Skipped == 0 && result.InvalidRecords == 0 ? 0 : 1;
     }
