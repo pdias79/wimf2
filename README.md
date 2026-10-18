@@ -505,3 +505,8 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --benchmark-root "
 ```
 
 Les passages alternent l'ordre des configurations pour limiter les biais liés au cache réseau. Chaque passage écrit temporairement un catalogue compressé dans le répertoire temporaire du système, puis le supprime. Les lignes `[BENCH]` donnent la durée de chaque passage, et `[BENCH-SUMMARY]` affiche le minimum, la médiane basse (si nombre pair), le maximum et la moyenne en millisecondes. La commande accepte aussi plusieurs options `--exclude PATH`, comme lors d'une indexation ordinaire. Elle n'utilise pas le fichier `wimf.json` et ne modifie pas l'historique d'indexation.
+
+
+#### Recommandation du nombre de workers
+
+À la fin de `--benchmark-root`, la ligne `[BENCH-RECOMMENDATION]` indique le plus petit nombre de workers testé dont la médiane ne dépasse pas 105 % de la meilleure médiane. Le choix évite d'augmenter la concurrence pour un gain marginal. Il s'agit d'une **suggestion**, jamais d'une modification automatique de `wimf.json`. Si le nombre d'éléments varie entre les passages, le benchmark signale `[BENCH-WARNING]`, termine avec le code 1 et ne formule pas de recommandation : stabiliser l'arborescence puis recommencer. Des décomptes identiques ne garantissent toutefois pas que les fichiers sont restés identiques.
