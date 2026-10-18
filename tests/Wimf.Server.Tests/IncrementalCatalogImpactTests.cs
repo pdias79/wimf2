@@ -54,8 +54,8 @@ public class IncrementalCatalogImpactTests
             var missing = Path.Combine(root, "never-indexed");
             var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(missing));
             File.WriteAllLines(journal, [
-                "E\\tdeleted\\t" + encoded,
-                "K\\tdeleted\\tunknown\\t" + encoded
+                "E\tdeleted\t" + encoded,
+                "K\tdeleted\tunknown\t" + encoded
             ]);
             var output = new List<string>();
             var result = IncrementalCatalogImpact.Analyze(root, journal, catalog,
