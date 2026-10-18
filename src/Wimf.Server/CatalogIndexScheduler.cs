@@ -110,21 +110,12 @@ public sealed class CatalogIndexScheduler
                 if (jobIndex >= 0)
                     Volatile.Write(ref _statuses[jobIndex], Volatile.Read(ref _statuses[jobIndex]) with { ScanMetrics = m });
             };
-            if (File.Exists(job.Output))
-            {
-                var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
-                entryCount = summary.Total;
-            }
-            else
-            {
-                var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress,
-                    onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
-                entryCount = count;
-            }
+            // Scheduled publications remain full scans until SMB continuity is proven.
+            // Stage and verify before replacing a live catalog.
+            entryCount = ScheduledCatalogPublication.Refresh(job.Root, job.Output, job.Name,
+                cancellationToken: token, onSkipped: skipped, exclusions: job.Exclude,
+                onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch,
+                onDirectoriesEnumerated: enumerated);
             bench.Stop();
             if (scanResult is not null)
                 Console.WriteLine($"[BENCH] {job.Root} | prefetch={prefetch} | total={bench.ElapsedMilliseconds} ms | " +
