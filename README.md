@@ -585,3 +585,12 @@ Ajouter facultativement `watchRoots` à `wimf.json` pour surveiller des partages
 Il s'agit d'un exemple de propriété à intégrer dans la configuration existante, **pas** d'un fichier complet à substituer à `wimf.json`. Le chemin JSON doit contenir des antislashs échappés (`\\\\`). Après redémarrage du serveur, des lignes `[SMB-WATCH]` signalent les surveillances démarrées et leur bilan à l'arrêt ; `[SMB-WATCH-ERROR]` indique les erreurs, notamment les pertes possibles d'événements. Un partage indisponible au démarrage est ignoré pour la surveillance, sans empêcher le serveur de démarrer.
 
 **Sécurité et fiabilité :** cette fonction est opt-in, ne journalise pas les chemins individuels, ne met pas à jour les catalogues, ne persiste pas les notifications et ne remplace pas le scan complet. Un `FileSystemWatcher` sur SMB ne garantit ni la réception de toutes les notifications ni leur rattrapage après déconnexion. Désactiver en supprimant `watchRoots` ou en utilisant `[]`.
+
+
+### Surveillance SMB persistante (expérimental)
+
+Quand `watchRoots` est configuré, le serveur retient les répertoires concernés par les notifications dans un journal append-only local, sous `%LOCALAPPDATA%\\Wimf2\\smb-watch` sur Windows. Les renommages enregistrent les dossiers source et destination. Les chemins sont encodés en Base64 UTF-8 et peuvent révéler des noms confidentiels : protéger le dossier de journal.
+
+Consulter le compteur et l'état de prudence à `http://127.0.0.1:5080/api/smb-watch`. Les journaux sont relus au démarrage. Une limite de 2 000 répertoires distincts s'applique en mémoire à chaque racine ; au-delà, il faut procéder à un scan complet. Cette première version conserve un historique append-only qui peut grossir au fil du temps ; ne pas l'utiliser comme catalogue d'événements garanti.
+
+**Important :** `fullScanRequired=True` est volontaire et ne s'efface pas automatiquement : une écoute SMB (même persistée) ne couvre pas les arrêts ou déconnexions et ne prouve jamais l'exhaustivité. Cette PR ne modifie ni les catalogues ni le planificateur de scans complets ; une future PR définira la réconciliation et la remise à zéro contrôlée de cet état.
