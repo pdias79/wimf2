@@ -53,6 +53,9 @@ public class IncrementalCandidateComparisonTests
             LegacyCatalogWriter.Build(root, catalog);
             File.WriteAllText(Path.Combine(root, "missed.txt"), "new");
             File.WriteAllText(journal, "");
+            var output = Path.Combine(temp, "rejected.txt.gz");
+            Assert.Throws<InvalidDataException>(() => IncrementalCandidateComparison.Compare(root, catalog, journal, candidateOutput: output));
+            Assert.False(File.Exists(output));
             var result = IncrementalCandidateComparison.Compare(root, catalog, journal);
             Assert.False(result.Equal);
             Assert.Equal(1, result.Missing);
