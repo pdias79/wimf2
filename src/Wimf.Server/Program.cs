@@ -560,7 +560,9 @@ foreach (var root in options.WatchRoots ?? [])
 {
     try
     {
-        var watcher = new SmbBackgroundWatcher(root);
+        var watcher = new SmbBackgroundWatcher(root,
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Wimf2", "smb-watch"));
         watcher.Start();
         smbWatchers.Add(watcher);
     }
@@ -573,6 +575,10 @@ app.Lifetime.ApplicationStopping.Register(() =>
 {
     foreach (var watcher in smbWatchers) watcher.Dispose();
 });
+
+app.MapGet("/api/smb-watch", () => Results.Text(string.Join("\\n",
+    smbWatchers.Select(w => $"root={w.Root} | events={w.Observed} | directories={w.AffectedDirectories.Length} | errors={w.Errors} | fullScanRequired={w.NeedsFullScan}")),
+    "text/plain; charset=utf-8"));
 
 Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");
 if (enableFileActions) Console.WriteLine("Local file actions enabled (requires an interactive desktop session).");
