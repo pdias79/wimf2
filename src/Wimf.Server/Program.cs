@@ -3,6 +3,33 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Audit how many real changes are covered by recorded SMB notifications.
+if (args.Length > 0 && args[0] == "--incremental-audit")
+{
+    if ((args.Length != 6 && args.Length != 8) || args[2] != "--catalog" ||
+        args[4] != "--journal" || (args.Length == 8 && args[6] != "--last-records"))
+    {
+        Console.Error.WriteLine("Usage: --incremental-audit ROOT --catalog CATALOG --journal FILE [--last-records N]");
+        return 2;
+    }
+    try
+    {
+        Console.WriteLine("[INCREMENTAL-AUDIT-START] Running full reference scan; catalogs remain untouched.");
+        var last = args.Length == 8 ? int.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture) : 0;
+        var report = IncrementalCoverageAudit.Analyze(args[1], args[3], args[5], last,
+            onUncovered: path => Console.WriteLine($"[INCREMENTAL-UNCOVERED] {path}"));
+        Console.WriteLine($"[INCREMENTAL-AUDIT] changes={report.Changes} | covered={report.Covered} | uncovered={report.Uncovered} | invalid={report.InvalidRecords} | fullScanRequired={report.FullScanRequired}");
+        Console.WriteLine("[INCREMENTAL-AUDIT] Diagnostic only. SMB change notifications are not a reliable publication source.");
+        return report.Uncovered == 0 && report.InvalidRecords == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException or FormatException or OverflowException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-AUDIT-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Compare an existing catalog against a disposable full-scan reference.
 if (args.Length > 0 && args[0] == "--incremental-reference")
 {
