@@ -3,6 +3,31 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Compare an in-memory incremental projection against a disposable full scan.
+if (args.Length > 0 && args[0] == "--incremental-candidate")
+{
+    if (args.Length != 6 || args[2] != "--catalog" || args[4] != "--journal")
+    {
+        Console.Error.WriteLine("Usage: --incremental-candidate ROOT --catalog CATALOG --journal FILE");
+        return 2;
+    }
+    try
+    {
+        Console.WriteLine("[CANDIDATE-START] Projecting journal hints and building a disposable full reference.");
+        var report = IncrementalCandidateComparison.Compare(args[1], args[3], args[5],
+            onMismatch: Console.WriteLine);
+        Console.WriteLine($"[CANDIDATE-RESULT] candidate={report.Candidate} | reference={report.Reference} | missing={report.Missing} | extra={report.Extra} | different={report.Different} | invalid={report.Invalid} | hints={report.Hints} | equal={report.Equal} | fullScanRequired={report.FullScanRequired}");
+        Console.WriteLine("[CANDIDATE-RESULT] Read-only prototype. Equality does not certify future SMB notification completeness.");
+        return report.Equal ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException or FormatException or OverflowException)
+    {
+        Console.Error.WriteLine("[CANDIDATE-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // A disposable baseline -> watch -> audit workflow. Never updates production catalogs.
 if (args.Length > 0 && args[0] == "--smb-controlled-test")
 {
