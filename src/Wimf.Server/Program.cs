@@ -42,9 +42,9 @@ if (args.Length > 0 && args[0] == "--watch-root")
                 // Avoid unbounded growth during long-running monitoring.
                 if (recent.Count > 10000)
                 {
-                    foreach (var key in recent.Where(item => now - item.Value > window)
+                    foreach (var expiredKey in recent.Where(item => now - item.Value > window)
                                  .Select(item => item.Key).ToArray())
-                        recent.Remove(key);
+                        recent.Remove(expiredKey);
                 }
                 var key = (action, OperatingSystem.IsWindows() ? path.ToUpperInvariant() : path);
                 if (!recent.TryGetValue(key, out var previous) || now - previous >= window)
