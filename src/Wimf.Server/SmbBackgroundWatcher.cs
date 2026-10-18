@@ -69,8 +69,29 @@ public sealed class SmbBackgroundWatcher : IDisposable
         get { lock (_sync) return _directories.OrderBy(x => x, StringComparer.Ordinal).ToArray(); }
     }
 
+    private void Marker(string kind)
+    {
+        lock (_sync)
+        {
+            try
+            {
+                var bytes = Encoding.UTF8.GetBytes("S\t" + kind + "\t" +
+                    DateTimeOffset.UtcNow.ToString("O") + "\n");
+                _stream!.Write(bytes);
+                _stream.Flush(flushToDisk: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
+            {
+                _needsFullScan = true;
+                Interlocked.Increment(ref _errors);
+                Console.Error.WriteLine($"[SMB-WATCH-ERROR] Marker write failed: {ex.Message}");
+            }
+        }
+    }
+
     public void Start()
     {
+        Marker("start");
         _watcher.EnableRaisingEvents = true;
         Console.WriteLine($"[SMB-WATCH] started | {_root} | persisted hints; full rescan required");
     }
@@ -132,6 +153,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     private void OnError(object sender, ErrorEventArgs e)
     {
         _needsFullScan = true;
+        Marker("error");
         Interlocked.Increment(ref _errors);
         Console.Error.WriteLine($"[SMB-WATCH-ERROR] {_root}: {e.GetException().Message}; full rescan required.");
     }
@@ -143,6 +165,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
             if (_disposed) return;
             _disposed = true;
             _watcher.Dispose();
+            Marker("end");
             _stream?.Dispose();
         }
         Console.WriteLine($"[SMB-WATCH] stopped | {_root} | events={Observed} | directories={AffectedDirectories.Length} | errors={Errors} | fullScanRequired={NeedsFullScan}");
