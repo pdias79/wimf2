@@ -85,7 +85,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
         _directories.Add(path);
     }
 
-    private void Remember(string path)
+    private void Remember(string path, string action)
     {
         Interlocked.Increment(ref _events);
         var directory = Path.GetDirectoryName(path);
@@ -96,7 +96,9 @@ public sealed class SmbBackgroundWatcher : IDisposable
             try
             {
                 var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(directory));
-                var bytes = Encoding.UTF8.GetBytes("D\t" + encoded + "\n");
+                var exact = Convert.ToBase64String(Encoding.UTF8.GetBytes(path));
+                var bytes = Encoding.UTF8.GetBytes("D\\t" + encoded + "\\n" +
+                    "E\\t" + action + "\\t" + exact + "\\n");
                 _stream!.Write(bytes);
                 _stream.Flush(flushToDisk: true);
             }
@@ -109,11 +111,12 @@ public sealed class SmbBackgroundWatcher : IDisposable
         }
     }
 
-    private void OnChange(object sender, FileSystemEventArgs e) => Remember(e.FullPath);
+    private void OnChange(object sender, FileSystemEventArgs e) =>
+        Remember(e.FullPath, e.ChangeType.ToString().ToLowerInvariant());
     private void OnRename(object sender, RenamedEventArgs e)
     {
-        Remember(e.OldFullPath);
-        Remember(e.FullPath);
+        Remember(e.OldFullPath, "renamed-from");
+        Remember(e.FullPath, "renamed-to");
     }
 
     private void OnError(object sender, ErrorEventArgs e)
