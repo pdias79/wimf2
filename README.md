@@ -655,3 +655,16 @@ Choisir le catalogue correspondant exactement à la racine SMB : la commande ref
 #### Détailler les chemins sans correspondance
 
 `--incremental-impact` affiche désormais une ligne `[CATALOG-MISSING] CHEMIN` pour chaque chemin supprimé ou renommé (côté source) absent du catalogue. Ceci permet de comprendre les compteurs `unmatched` sans effectuer de modification de fichier. Le test automatisé inclut maintenant un scénario où un chemin n'a jamais figuré dans le catalogue, en complément du scénario de dossier supprimé avec descendant déjà indexé.
+
+
+#### Comparaison avec un scan complet de référence (expérimental)
+
+La commande suivante compare **en lecture seule** le catalogue existant à un scan complet de la racine, construit dans un répertoire temporaire indépendant :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-reference "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue"
+```
+
+Elle affiche les nombres d'entrées précédentes et actuelles, ainsi que les ajouts, suppressions, modifications et entrées inchangées. Le catalogue existant n'est jamais réécrit ; le catalogue de référence temporaire est supprimé à la fin. Ce scan complet peut être long sur SMB.
+
+**Ce jalon ne construit pas encore un catalogue incrémental à partir du journal et ne valide donc pas sa fidélité.** Il établit uniquement une référence mesurable et une base de tests non destructifs pour la future comparaison incrémental/complet. Il peut manquer les exclusions propres à une indexation planifiée ; pour comparer des résultats équivalents, utiliser les mêmes paramètres d'exclusion dans une future validation.
