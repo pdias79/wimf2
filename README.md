@@ -668,3 +668,14 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-refe
 Elle affiche les nombres d'entrées précédentes et actuelles, ainsi que les ajouts, suppressions, modifications et entrées inchangées. Le catalogue existant n'est jamais réécrit ; le catalogue de référence temporaire est supprimé à la fin. Ce scan complet peut être long sur SMB.
 
 **Ce jalon ne construit pas encore un catalogue incrémental à partir du journal et ne valide donc pas sa fidélité.** Il établit uniquement une référence mesurable et une base de tests non destructifs pour la future comparaison incrémental/complet. Il peut manquer les exclusions propres à une indexation planifiée ; pour comparer des résultats équivalents, utiliser les mêmes paramètres d'exclusion dans une future validation.
+
+
+#### Audit de couverture du journal SMB (sans modification de catalogue)
+
+Comparer tous les changements constatés par un **scan complet de référence** aux chemins enregistrés dans le journal :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-audit "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue" --journal "$journal"
+```
+
+La sortie `[INCREMENTAL-UNCOVERED]` affiche les changements réels qui ne sont pas couverts par les chemins notifiés ; `[INCREMENTAL-AUDIT]` récapitule `changes`, `covered`, `uncovered` et `invalid`. L'option diagnostique `--last-records N` est également disponible. Un code de sortie 1 indique des changements non couverts ou des lignes invalides. **Attention :** même si `uncovered=0`, cela ne garantit aucunement que les notifications seront exhaustives lors d'une future déconnexion ni que les catalogues peuvent être mis à jour sans scan complet. La commande ne construit ni ne publie de catalogue incrémental.
