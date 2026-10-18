@@ -630,3 +630,10 @@ Le serveur écrit maintenant dans le même journal `.events` les anciens enregis
 Lorsque des événements `E` figurent dans l'échantillon, les événements de fichiers sont traités individuellement sans parcourir le dossier parent. Les événements qui portent sur un dossier existant peuvent en revanche entraîner un parcours récursif. Les anciens journaux ne contenant que des `D` restent compatibles et peuvent encore sélectionner toute la racine. Les suppressions sont signalées comme éléments absents et nécessitent une réconciliation.
 
 Les compteurs `files` représentent alors les fichiers inspectés, pas les fichiers modifiés. L'historique et le diagnostic ne permettent toujours pas de garantir l'exhaustivité ; aucun catalogue n'est mis à jour.
+
+
+#### Nature des changements et chemins disparus
+
+Après redémarrage du serveur sur cette version, un troisième enregistrement `K` complète les enregistrements historiques `D` et `E` : type d'action (`created`, `changed`, `deleted`, `renamed-from`, `renamed-to`), nature observée (`file`, `directory`, `unknown`), chemin Base64 UTF-8. Ce format reste rétrocompatible pour les prévisualisations des anciens journaux.
+
+Le rapport `--incremental-preview` distingue `[FILE]`, `[DIRECTORY]` et `[UNKNOWN/MISSING]`, ainsi que les compteurs `deletes`, `renames` et `unknown`. Les fichiers et dossiers déjà disparus restent `unknown` si leur nature ne peut plus être déterminée de manière fiable ; un dossier supprimé pourrait contenir des descendants. La commande n'effectue **aucune suppression** dans les catalogues, même avec `skipped=1` ; `fullScanRequired=True` demeure obligatoire.
