@@ -650,3 +650,8 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-impa
 Choisir le catalogue correspondant exactement à la racine SMB : la commande refuse un catalogue d'une autre racine ou contenant des entrées invalides. `[CATALOG-EXACT]` indique les anciennes entrées correspondant au chemin ; `[CATALOG-DESCENDANT]` leurs descendants. `[INCREMENTAL-IMPACT]` fournit les compteurs de chemins et d'entrées concernées. Les formats `E` et `K` du même événement ne sont pas comptés deux fois.
 
 **Limite :** c'est une estimation d'impact basée sur un journal de notifications potentiellement incomplet, pas une instruction de suppression, et le catalogue n'est jamais réécrit. Avant une publication incrémentale fiable, il faudra traiter les changements non observés, interruptions SMB, vérifications d'identité et validations comparatives avec un scan complet.
+
+
+#### Détailler les chemins sans correspondance
+
+`--incremental-impact` affiche désormais une ligne `[CATALOG-MISSING] CHEMIN` pour chaque chemin supprimé ou renommé (côté source) absent du catalogue. Ceci permet de comprendre les compteurs `unmatched` sans effectuer de modification de fichier. Le test automatisé inclut maintenant un scénario où un chemin n'a jamais figuré dans le catalogue, en complément du scénario de dossier supprimé avec descendant déjà indexé.
