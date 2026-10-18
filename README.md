@@ -621,3 +621,12 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-prev
 ```
 
 `--last-records 20` analyse uniquement les 20 dernières lignes du journal persistant, sans modifier ni purger celui-ci. Ce filtrage est **une aide au diagnostic, pas un mécanisme de checkpoint/reprise**, car des modifications plus anciennes pourraient être omises. `fullScanRequired` reste toujours vrai. Le mode par défaut analyse tout le journal.
+
+
+#### Événements SMB précis (version expérimentale)
+
+Le serveur écrit maintenant dans le même journal `.events` les anciens enregistrements `D` (répertoires) **et** les nouveaux enregistrements `E` (action + chemin exact, en Base64 UTF-8). Pour tester, redémarrer le serveur avec la nouvelle version, modifier **un fichier existant** depuis un autre PC, puis arrêter le serveur et lancer `--incremental-preview` avec `--last-records 20`.
+
+Lorsque des événements `E` figurent dans l'échantillon, les événements de fichiers sont traités individuellement sans parcourir le dossier parent. Les événements qui portent sur un dossier existant peuvent en revanche entraîner un parcours récursif. Les anciens journaux ne contenant que des `D` restent compatibles et peuvent encore sélectionner toute la racine. Les suppressions sont signalées comme éléments absents et nécessitent une réconciliation.
+
+Les compteurs `files` représentent alors les fichiers inspectés, pas les fichiers modifiés. L'historique et le diagnostic ne permettent toujours pas de garantir l'exhaustivité ; aucun catalogue n'est mis à jour.
