@@ -608,3 +608,16 @@ dotnet run --project src/Wimf.Server -c Release -- --incremental-preview "\\\\19
 Pour plusieurs `watchRoots`, identifier d'abord le journal correspondant à la racine cible (nom SHA-256 de la racine normalisée). Les compteurs `[INCREMENTAL-PREVIEW]` décrivent uniquement les sous-arbres observés. Les chemins hors racine et enregistrements incorrects sont refusés ; les liens symboliques/reparse points ne sont pas parcourus ; les répertoires disparus ou illisibles sont signalés comme `skipped`. La commande renvoie un code non nul si des chemins sont invalides ou des éléments ignorés.
 
 **Attention :** cette prévisualisation n'est pas encore un moteur d'écriture incrémentale. Les répertoires touchés peuvent être incomplets à cause des interruptions SMB, un fichier supprimé n'est plus énumérable, et `fullScanRequired` reste toujours vrai. Ne jamais utiliser cette sortie pour remplacer un scan complet, décider qu'un catalogue est synchronisé, ou supprimer des entrées existantes.
+
+
+#### Progression et diagnostic des derniers événements
+
+La commande `--incremental-preview` affiche maintenant immédiatement `[INCREMENTAL-PREVIEW-START]`, les répertoires retenus (`[INCREMENTAL-TARGET]`) puis `[INCREMENTAL-PROGRESS]` environ tous les 500 dossiers parcourus, avant le bilan final.
+
+Pour **comparer un échantillon récent** aux anciens événements conservés dans le journal, ajouter :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-preview "\\\\192.168.1.200\\BACKUP_PC_Cecile" --journal "$journal" --last-records 20
+```
+
+`--last-records 20` analyse uniquement les 20 dernières lignes du journal persistant, sans modifier ni purger celui-ci. Ce filtrage est **une aide au diagnostic, pas un mécanisme de checkpoint/reprise**, car des modifications plus anciennes pourraient être omises. `fullScanRequired` reste toujours vrai. Le mode par défaut analyse tout le journal.
