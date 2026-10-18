@@ -517,3 +517,22 @@ Les passages alternent l'ordre des configurations pour limiter les biais liés a
 When one scheduled or manually requested scan completes, Wimf reloads **only that output catalog** into its searchable snapshot. Previously every indexing completion retried all local catalogs and network sources, potentially delaying a fast local indexing job when a disconnected or slow network share was configured. The dedicated reload is serialized with ordinary catalog refreshes, checks the file timestamp before/after parsing, preserves unaffected in-memory catalog instances, and updates the last-refresh timestamp used by the UI's periodic status polling.
 
 The **Actualiser les catalogues** button and `refreshSeconds` timer remain full refresh operations and continue checking all local and network sources. Failure counters for unavailable local catalogs remain tracked individually across both kinds of refresh. There is no configuration change or new UI action.
+
+
+### Indexation incrémentale : conception et garanties (préparation PR #54)
+
+**Situation actuelle.** `LegacyCatalogUpdater.Update` utilise `LegacyCatalogWriter.Build` pour effectuer un scan complet, puis compare l'ancien et le nouveau catalogue. Les compteurs ajoutés/modifiés/supprimés/inchangés ne constituent pas une détection incrémentale. Aucun champ `workers` ne change cette garantie.
+
+**Objectif.** Éviter de parcourir tous les fichiers à chaque actualisation lorsque la source fournit un moyen fiable de détecter les changements, tout en préservant les résultats de recherche et la validité du catalogue après une interruption.
+
+**Stratégie proposée, à réaliser dans des PR distinctes :**
+
+1. Introduire une abstraction de détection des changements et une capacité déclarée par volume (journal fiable, notifications non exhaustives, ou scan complet obligatoire). Une source SMB/Freebox est en mode *scan complet* tant qu'aucun mécanisme de rattrapage fiable n'a été démontré.
+2. Ajouter un état de synchronisation persistant par catalogue : identité de la racine et du volume, curseur du journal lorsqu'il existe, version du schéma et génération du catalogue associé. Ne jamais avancer le curseur avant publication atomique du catalogue.
+3. Sur Windows local NTFS, étudier le journal USN et ses cas d'invalidation (troncature, changement d'identité de volume, droits insuffisants). Ne pas assimiler `FileSystemWatcher` à une source exhaustive de changements.
+4. En cas de premier démarrage, perte de curseur, débordement, indisponibilité ou incohérence, revenir au scan complet, sans annoncer à tort une actualisation incrémentale réussie.
+5. Comparer le contenu et les recherches après une séquence contrôlée : créations, suppressions, renommages/déplacements de dossiers, changements de taille/date, interruptions pendant l'écriture et reconnexions.
+
+**Critères de validation.** Un mode incrémental ne sera activé que lorsque les tests vérifient que le catalogue final correspond à un scan complet de référence (y compris les chemins des descendants de dossiers renommés), et qu'un arrêt/reprise n'entraîne aucune omission silencieuse. Les durées et le nombre d'éléments inspectés doivent être mesurés séparément ; un gain ne doit jamais masquer une perte d'exhaustivité.
+
+**Non-objectifs du premier jalon.** Pas de changement automatique de stratégie pour la Freebox ou les partages SMB ; pas de remplacement de `--update-existing` avant validation. Le parcours complet reste le chemin de référence fiable.
