@@ -3,6 +3,69 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Experimental read-only SMB notification probe. Does not update catalogs.
+if (args.Length > 0 && args[0] == "--watch-root")
+{
+    if (args.Length != 2 || string.IsNullOrWhiteSpace(args[1]))
+    {
+        Console.Error.WriteLine("Usage: --watch-root DIRECTORY (stop with Ctrl+C)");
+        return 2;
+    }
+
+    try
+    {
+        var root = Path.GetFullPath(args[1]);
+        if (!Directory.Exists(root))
+            throw new DirectoryNotFoundException($"Directory not found: {root}");
+        using var watcher = new FileSystemWatcher(root)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                           NotifyFilters.LastWrite | NotifyFilters.Size,
+            InternalBufferSize = 64 * 1024
+        };
+        long observed = 0;
+        long errors = 0;
+        void Record(string action, string path)
+        {
+            Interlocked.Increment(ref observed);
+            Console.WriteLine($"[WATCH] {DateTimeOffset.Now:O} | {action} | {path}");
+        }
+        watcher.Created += (_, e) => Record("created", e.FullPath);
+        watcher.Changed += (_, e) => Record("changed", e.FullPath);
+        watcher.Deleted += (_, e) => Record("deleted", e.FullPath);
+        watcher.Renamed += (_, e) => Record("renamed", $"{e.OldFullPath} => {e.FullPath}");
+        watcher.Error += (_, e) =>
+        {
+            Interlocked.Increment(ref errors);
+            Console.Error.WriteLine($"[WATCH-ERROR] {e.GetException().Message}; notifications may have been lost; a full rescan is required.");
+        };
+        using var shutdown = new CancellationTokenSource();
+        ConsoleCancelEventHandler handler = (_, e) =>
+        {
+            e.Cancel = true;
+            shutdown.Cancel();
+        };
+        Console.CancelKeyPress += handler;
+        try
+        {
+            watcher.EnableRaisingEvents = true;
+            Console.WriteLine($"[WATCH-START] {root} | observer only; no catalog changes; Ctrl+C to stop");
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, shutdown.Token); }
+            catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+            watcher.EnableRaisingEvents = false;
+            Console.WriteLine($"[WATCH-SUMMARY] events={Interlocked.Read(ref observed)} | errors={Interlocked.Read(ref errors)} | no persistence or replay");
+            return Volatile.Read(ref errors) == 0 ? 0 : 1;
+        }
+        finally { Console.CancelKeyPress -= handler; }
+    }
+    catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine("[WATCH-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Isolated comparison: never overwrites a configured production catalog.
 if (args.Length > 0 && args[0] == "--benchmark-root")
 {
