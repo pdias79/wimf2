@@ -3,6 +3,28 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Report watcher session boundaries without treating them as a coverage guarantee.
+if (args.Length > 0 && args[0] == "--smb-sessions")
+{
+    if (args.Length != 2)
+    {
+        Console.Error.WriteLine("Usage: --smb-sessions JOURNAL");
+        return 2;
+    }
+    try
+    {
+        var report = SmbSessionAudit.Analyze(args[1]);
+        Console.WriteLine($"[SMB-SESSIONS] starts={report.Starts} | ends={report.Ends} | errors={report.Errors} | open={report.OpenSessions} | malformed={report.Malformed} | lastStartUtc={report.LastStartUtc ?? "none"} | fullScanRequired={report.FullScanRequired}");
+        Console.WriteLine("[SMB-SESSIONS] Session boundaries do not prove notification completeness.");
+        return report.Errors == 0 && report.OpenSessions == 0 && report.Malformed == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    {
+        Console.Error.WriteLine("[SMB-SESSIONS-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Audit how many real changes are covered by recorded SMB notifications.
 if (args.Length > 0 && args[0] == "--incremental-audit")
 {
