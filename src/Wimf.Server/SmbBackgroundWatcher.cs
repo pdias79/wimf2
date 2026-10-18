@@ -85,7 +85,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
         _directories.Add(path);
     }
 
-    private void Remember(string path, string action)
+    private void Remember(string path, string action, string kind = "unknown")
     {
         Interlocked.Increment(ref _events);
         var directory = Path.GetDirectoryName(path);
@@ -98,7 +98,8 @@ public sealed class SmbBackgroundWatcher : IDisposable
                 var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(directory));
                 var exact = Convert.ToBase64String(Encoding.UTF8.GetBytes(path));
                 var bytes = Encoding.UTF8.GetBytes("D\t" + encoded + "\n" +
-                    "E\t" + action + "\t" + exact + "\n");
+                    "E\t" + action + "\t" + exact + "\n" +
+                    "K\t" + action + "\t" + kind + "\t" + exact + "\n");
                 _stream!.Write(bytes);
                 _stream.Flush(flushToDisk: true);
             }
@@ -111,12 +112,21 @@ public sealed class SmbBackgroundWatcher : IDisposable
         }
     }
 
+    private static string DetectKind(string path)
+    {
+        // A deleted/renamed-away path cannot be reliably typed from the filesystem.
+        if (Directory.Exists(path)) return "directory";
+        if (File.Exists(path)) return "file";
+        return "unknown";
+    }
+
     private void OnChange(object sender, FileSystemEventArgs e) =>
-        Remember(e.FullPath, e.ChangeType.ToString().ToLowerInvariant());
+        Remember(e.FullPath, e.ChangeType.ToString().ToLowerInvariant(),
+            e.ChangeType == WatcherChangeTypes.Deleted ? "unknown" : DetectKind(e.FullPath));
     private void OnRename(object sender, RenamedEventArgs e)
     {
         Remember(e.OldFullPath, "renamed-from");
-        Remember(e.FullPath, "renamed-to");
+        Remember(e.FullPath, "renamed-to", DetectKind(e.FullPath));
     }
 
     private void OnError(object sender, ErrorEventArgs e)
