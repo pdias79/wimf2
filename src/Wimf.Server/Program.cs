@@ -3,6 +3,28 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Experimental targeted enumeration: read-only, never publishes a catalog.
+if (args.Length > 0 && args[0] == "--incremental-preview")
+{
+    if (args.Length != 4 || args[2] != "--journal")
+    {
+        Console.Error.WriteLine("Usage: --incremental-preview ROOT --journal FILE");
+        return 2;
+    }
+    try
+    {
+        var result = IncrementalScanPreview.Analyze(args[1], args[3]);
+        Console.WriteLine($"[INCREMENTAL-PREVIEW] directories={result.Directories} | files={result.Files} | folders={result.Folders} | skipped={result.Skipped} | invalid={result.InvalidRecords} | fullScanRequired={result.FullScanRequired}");
+        Console.WriteLine("[INCREMENTAL-PREVIEW] Read-only experiment. No catalog was modified; a complete scan is still required.");
+        return result.Skipped == 0 && result.InvalidRecords == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-PREVIEW-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Analyze a diagnostic SMB log without treating it as a complete change history.
 if (args.Length > 0 && args[0] == "--watch-report")
 {
