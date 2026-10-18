@@ -3,6 +3,30 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// A disposable baseline -> watch -> audit workflow. Never updates production catalogs.
+if (args.Length > 0 && args[0] == "--smb-controlled-test")
+{
+    if (args.Length != 2)
+    {
+        Console.Error.WriteLine("Usage: --smb-controlled-test ROOT");
+        return 2;
+    }
+    using var experimentStop = new CancellationTokenSource();
+    ConsoleCancelEventHandler experimentCancel = (_, e) => { e.Cancel = true; experimentStop.Cancel(); };
+    Console.CancelKeyPress += experimentCancel;
+    try
+    {
+        return await SmbControlledExperiment.RunAsync(args[1], experimentStop.Token);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException)
+    {
+        Console.Error.WriteLine("[CONTROLLED-ERROR] " + ex.Message);
+        return 2;
+    }
+    finally { Console.CancelKeyPress -= experimentCancel; }
+}
+
 // Report watcher session boundaries without treating them as a coverage guarantee.
 if (args.Length > 0 && args[0] == "--smb-sessions")
 {
