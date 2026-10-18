@@ -89,6 +89,8 @@ public static class IncrementalCatalogImpact
                 }
             }
         }
+        foreach (var missing in candidates.Where(path => !matched.Contains(path)).OrderBy(path => path, comparer))
+            onImpact?.Invoke($"[CATALOG-MISSING] {missing}");
         return new Result(candidates.Count, entries, exact, descendants,
             candidates.Count - matched.Count, invalid);
     }
