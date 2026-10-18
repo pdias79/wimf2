@@ -546,3 +546,16 @@ Modifier un fichier depuis un autre poste, puis arrêter par `Ctrl+C`. Les ligne
 **Critères de validation.** Un mode incrémental ne sera activé que lorsque les tests vérifient que le catalogue final correspond à un scan complet de référence (y compris les chemins des descendants de dossiers renommés), et qu'un arrêt/reprise n'entraîne aucune omission silencieuse. Les durées et le nombre d'éléments inspectés doivent être mesurés séparément ; un gain ne doit jamais masquer une perte d'exhaustivité.
 
 **Non-objectifs du premier jalon.** Pas de changement automatique de stratégie pour la Freebox ou les partages SMB ; pas de remplacement de `--update-existing` avant validation. Le parcours complet reste le chemin de référence fiable.
+
+
+### Journal facultatif des événements SMB (diagnostic)
+
+Le diagnostic `--watch-root` accepte désormais `--watch-log FILE`. Exemple (choisir un chemin **local, en dehors du partage surveillé**) :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release -- --watch-root "\\\\192.168.1.200\\BACKUP_PC_Cecile" --watch-log "C:\\Wimf2\\smb-events.tsv"
+```
+
+Créer le répertoire parent du fichier de journal au préalable. Le journal est ajouté sans écraser les anciennes lignes et contient les **événements bruts**, même ceux regroupés à l'affichage. Chaque ligne contient l'heure UTC ISO 8601, le type d'événement et le chemin codé en Base64 UTF-8 (pour éviter les ambiguïtés de caractères spéciaux), séparés par tabulations. Les marqueurs `session-start`, `session-end` et `error` aident à identifier les périodes de surveillance. Une erreur d'écriture est signalée dans `[WATCH-ERROR]`. Protéger ce journal : il contient les chemins complets des fichiers.
+
+**Limite critique :** ce journal n'offre *aucune* garantie de complétude ou de reprise ; une déconnexion, l'arrêt du processus ou une saturation du tampon peut masquer des modifications. Il ne sert pas d'entrée pour l'indexation et ne supprime jamais la nécessité des scans complets. Le mode sans `--watch-log` reste inchangé.

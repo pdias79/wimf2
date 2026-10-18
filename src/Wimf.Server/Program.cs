@@ -6,9 +6,10 @@ using Wimf.Server;
 // Experimental read-only SMB notification probe. Does not update catalogs.
 if (args.Length > 0 && args[0] == "--watch-root")
 {
-    if (args.Length != 2 || string.IsNullOrWhiteSpace(args[1]))
+    if ((args.Length != 2 && args.Length != 4) || string.IsNullOrWhiteSpace(args[1]) ||
+        (args.Length == 4 && (args[2] != "--watch-log" || string.IsNullOrWhiteSpace(args[3]))))
     {
-        Console.Error.WriteLine("Usage: --watch-root DIRECTORY (stop with Ctrl+C)");
+        Console.Error.WriteLine("Usage: --watch-root DIRECTORY [--watch-log FILE] (stop with Ctrl+C)");
         return 2;
     }
 
@@ -24,9 +25,34 @@ if (args.Length > 0 && args[0] == "--watch-root")
                            NotifyFilters.LastWrite | NotifyFilters.Size,
             InternalBufferSize = 64 * 1024
         };
+        // Optional append-only diagnostic trail; never a complete change journal.
+        using var log = args.Length == 4
+            ? new StreamWriter(new FileStream(Path.GetFullPath(args[3]),
+                FileMode.Append, FileAccess.Write, FileShare.Read, 4096,
+                FileOptions.WriteThrough)) { AutoFlush = true }
+            : null;
+        var logLock = new object();
+        long errors = 0;
+        void Log(string action, string path)
+        {
+            if (log is null) return;
+            lock (logLock)
+            {
+                try
+                {
+                    // Base64 makes arbitrary file paths unambiguous in tab-separated records.
+                    var encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(path));
+                    log.WriteLine($"{DateTimeOffset.UtcNow:O}\t{action}\t{encoded}");
+                }
+                catch (IOException ex)
+                {
+                    Interlocked.Increment(ref errors);
+                    Console.Error.WriteLine($"[WATCH-ERROR] Journal unavailable: {ex.Message}; full rescan required.");
+                }
+            }
+        }
         long observed = 0;
         long retained = 0;
-        long errors = 0;
         // Time-based de-duplication is diagnostic only: it must never be used as
         // proof that no filesystem change happened.
         var recent = new Dictionary<(string Action, string Path), DateTimeOffset>();
@@ -35,6 +61,7 @@ if (args.Length > 0 && args[0] == "--watch-root")
         void Record(string action, string path)
         {
             Interlocked.Increment(ref observed);
+            Log(action, path); // Keep raw notifications, including duplicates.
             var now = DateTimeOffset.UtcNow;
             var shouldPrint = false;
             lock (sync)
@@ -64,6 +91,7 @@ if (args.Length > 0 && args[0] == "--watch-root")
         watcher.Error += (_, e) =>
         {
             Interlocked.Increment(ref errors);
+            Log("error", e.GetException().GetType().Name);
             Console.Error.WriteLine($"[WATCH-ERROR] {e.GetException().Message}; notifications may have been lost; a full rescan is required.");
         };
         using var shutdown = new CancellationTokenSource();
@@ -75,12 +103,14 @@ if (args.Length > 0 && args[0] == "--watch-root")
         Console.CancelKeyPress += handler;
         try
         {
+            Log("session-start", root);
             watcher.EnableRaisingEvents = true;
             Console.WriteLine($"[WATCH-START] {root} | observer only; no catalog changes; Ctrl+C to stop");
             try { await Task.Delay(Timeout.InfiniteTimeSpan, shutdown.Token); }
             catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
             watcher.EnableRaisingEvents = false;
-            Console.WriteLine($"[WATCH-SUMMARY] events={Interlocked.Read(ref observed)} | grouped={Interlocked.Read(ref retained)} | duplicates={Interlocked.Read(ref observed) - Interlocked.Read(ref retained)} | errors={Interlocked.Read(ref errors)} | no persistence or replay");
+            Log("session-end", root);
+            Console.WriteLine($"[WATCH-SUMMARY] events={Interlocked.Read(ref observed)} | grouped={Interlocked.Read(ref retained)} | duplicates={Interlocked.Read(ref observed) - Interlocked.Read(ref retained)} | errors={Interlocked.Read(ref errors)} | optional raw log, no replay");
             return Volatile.Read(ref errors) == 0 ? 0 : 1;
         }
         finally { Console.CancelKeyPress -= handler; }
