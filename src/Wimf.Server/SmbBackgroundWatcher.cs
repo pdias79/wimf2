@@ -1,22 +1,51 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace Wimf.Server;
 
 /// <summary>
-/// Optional in-process SMB change diagnostics. Notifications are hints, not a
-/// complete journal and never trigger catalog updates.
+/// Conservative persistent SMB notification hints. Never proves a share is in sync.
+/// An explicit full-catalog reconciliation is needed to clear rescan requirements.
 /// </summary>
 public sealed class SmbBackgroundWatcher : IDisposable
 {
+    private const int MaxDirectories = 2000;
     private readonly FileSystemWatcher _watcher;
     private readonly string _root;
+    private readonly string _journal;
+    private readonly object _sync = new();
+    private readonly HashSet<string> _directories =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private FileStream? _stream;
     private long _events;
     private long _errors;
+    private bool _needsFullScan = true; // No durable proof of uninterrupted coverage.
     private bool _disposed;
 
-    public SmbBackgroundWatcher(string root)
+    public SmbBackgroundWatcher(string root, string stateDirectory)
     {
         _root = Path.GetFullPath(root);
         if (!Directory.Exists(_root))
             throw new DirectoryNotFoundException($"Watched root unavailable: {_root}");
+        Directory.CreateDirectory(stateDirectory);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_root.ToUpperInvariant())));
+        _journal = Path.Combine(stateDirectory, hash + ".events");
+        if (Path.GetFullPath(_journal).StartsWith(_root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            throw new ArgumentException("The journal must be outside the watched root.", nameof(stateDirectory));
+
+        // Replaying the hints is diagnostic only: a restart always requires full reconciliation.
+        if (File.Exists(_journal))
+        {
+            foreach (var line in File.ReadLines(_journal))
+            {
+                if (!line.StartsWith("D\t", StringComparison.Ordinal)) continue;
+                try { AddDirectory(Encoding.UTF8.GetString(Convert.FromBase64String(line[2..]))); }
+                catch (FormatException) { _errors++; }
+            }
+        }
+        _stream = new FileStream(_journal, FileMode.Append, FileAccess.Write, FileShare.Read,
+            4096, FileOptions.WriteThrough);
         _watcher = new FileSystemWatcher(_root)
         {
             IncludeSubdirectories = true,
@@ -34,34 +63,75 @@ public sealed class SmbBackgroundWatcher : IDisposable
     public string Root => _root;
     public long Observed => Interlocked.Read(ref _events);
     public long Errors => Interlocked.Read(ref _errors);
+    public bool NeedsFullScan => _needsFullScan;
+    public string[] AffectedDirectories
+    {
+        get { lock (_sync) return _directories.OrderBy(x => x, StringComparer.Ordinal).ToArray(); }
+    }
 
     public void Start()
     {
         _watcher.EnableRaisingEvents = true;
-        Console.WriteLine($"[SMB-WATCH] started | {_root} | diagnostic only");
+        Console.WriteLine($"[SMB-WATCH] started | {_root} | persisted hints; full rescan required");
     }
 
-    private void OnChange(object sender, FileSystemEventArgs e)
+    private void AddDirectory(string path)
+    {
+        if (_directories.Count >= MaxDirectories && !_directories.Contains(path))
+        {
+            _needsFullScan = true;
+            return;
+        }
+        _directories.Add(path);
+    }
+
+    private void Remember(string path)
     {
         Interlocked.Increment(ref _events);
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory)) directory = _root;
+        lock (_sync)
+        {
+            AddDirectory(directory);
+            try
+            {
+                var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(directory));
+                var bytes = Encoding.UTF8.GetBytes("D\t" + encoded + "\n");
+                _stream!.Write(bytes);
+                _stream.Flush(flushToDisk: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
+            {
+                _needsFullScan = true;
+                Interlocked.Increment(ref _errors);
+                Console.Error.WriteLine($"[SMB-WATCH-ERROR] {_root}: journal write failed: {ex.Message}; full rescan required.");
+            }
+        }
     }
 
+    private void OnChange(object sender, FileSystemEventArgs e) => Remember(e.FullPath);
     private void OnRename(object sender, RenamedEventArgs e)
     {
-        Interlocked.Increment(ref _events);
+        Remember(e.OldFullPath);
+        Remember(e.FullPath);
     }
 
     private void OnError(object sender, ErrorEventArgs e)
     {
+        _needsFullScan = true;
         Interlocked.Increment(ref _errors);
         Console.Error.WriteLine($"[SMB-WATCH-ERROR] {_root}: {e.GetException().Message}; full rescan required.");
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        _watcher.Dispose();
-        Console.WriteLine($"[SMB-WATCH] stopped | {_root} | events={Observed} | errors={Errors}");
+        lock (_sync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _watcher.Dispose();
+            _stream?.Dispose();
+        }
+        Console.WriteLine($"[SMB-WATCH] stopped | {_root} | events={Observed} | directories={AffectedDirectories.Length} | errors={Errors} | fullScanRequired={NeedsFullScan}");
     }
 }
