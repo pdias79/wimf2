@@ -594,3 +594,17 @@ Quand `watchRoots` est configuré, le serveur retient les répertoires concerné
 Consulter l'état sur la page `http://127.0.0.1:5080/smb-watch` (actualisation automatique toutes les 2 secondes), ou obtenir les données textuelles ponctuelles à `http://127.0.0.1:5080/api/smb-watch`. Les journaux sont relus au démarrage. Une limite de 2 000 répertoires distincts s'applique en mémoire à chaque racine ; au-delà, il faut procéder à un scan complet. Cette première version conserve un historique append-only qui peut grossir au fil du temps ; ne pas l'utiliser comme catalogue d'événements garanti.
 
 **Important :** `fullScanRequired=True` est volontaire et ne s'efface pas automatiquement : une écoute SMB (même persistée) ne couvre pas les arrêts ou déconnexions et ne prouve jamais l'exhaustivité. Cette PR ne modifie ni les catalogues ni le planificateur de scans complets ; une future PR définira la réconciliation et la remise à zéro contrôlée de cet état.
+
+
+### Prévisualisation d'un scan incrémental (prototype non destructif)
+
+La commande suivante relit les indications persistantes de la surveillance SMB, élimine les sous-répertoires déjà couverts par un parent, puis énumère les fichiers des répertoires indiqués **sans écrire ni remplacer de catalogue** :
+
+```powershell
+$journal = (Get-ChildItem "$env:LOCALAPPDATA\Wimf2\smb-watch\*.events" | Select-Object -First 1).FullName
+dotnet run --project src/Wimf.Server -c Release -- --incremental-preview "\\\\192.168.1.200\BACKUP_PC_Cecile" --journal "$journal"
+```
+
+Pour plusieurs `watchRoots`, identifier d'abord le journal correspondant à la racine cible (nom SHA-256 de la racine normalisée). Les compteurs `[INCREMENTAL-PREVIEW]` décrivent uniquement les sous-arbres observés. Les chemins hors racine et enregistrements incorrects sont refusés ; les liens symboliques/reparse points ne sont pas parcourus ; les répertoires disparus ou illisibles sont signalés comme `skipped`. La commande renvoie un code non nul si des chemins sont invalides ou des éléments ignorés.
+
+**Attention :** cette prévisualisation n'est pas encore un moteur d'écriture incrémentale. Les répertoires touchés peuvent être incomplets à cause des interruptions SMB, un fichier supprimé n'est plus énumérable, et `fullScanRequired` reste toujours vrai. Ne jamais utiliser cette sortie pour remplacer un scan complet, décider qu'un catalogue est synchronisé, ou supprimer des entrées existantes.
