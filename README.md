@@ -517,3 +517,14 @@ Les passages alternent l'ordre des configurations pour limiter les biais liés a
 When one scheduled or manually requested scan completes, Wimf reloads **only that output catalog** into its searchable snapshot. Previously every indexing completion retried all local catalogs and network sources, potentially delaying a fast local indexing job when a disconnected or slow network share was configured. The dedicated reload is serialized with ordinary catalog refreshes, checks the file timestamp before/after parsing, preserves unaffected in-memory catalog instances, and updates the last-refresh timestamp used by the UI's periodic status polling.
 
 The **Actualiser les catalogues** button and `refreshSeconds` timer remain full refresh operations and continue checking all local and network sources. Failure counters for unavailable local catalogs remain tracked individually across both kinds of refresh. There is no configuration change or new UI action.
+
+
+### Diagnostic expérimental des notifications SMB
+
+Pour vérifier sur un partage que les créations, modifications, suppressions et renommages provenant d'autres machines sont reçus par Windows, lancer ce diagnostic **en lecture seule**, sans démarrer le serveur ni écrire de catalogue :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release -- --watch-root "\\\\192.168.1.200\\BACKUP_PC_Cecile"
+```
+
+Modifier un fichier depuis un autre poste, puis arrêter par `Ctrl+C`. Les lignes `[WATCH]` consignent les notifications observées, `[WATCH-ERROR]` une erreur de surveillance et `[WATCH-SUMMARY]` les compteurs. Les événements peuvent être multiples pour une seule modification. **Ne pas confondre absence de notification et absence de changements :** une déconnexion, un débordement du tampon ou une interruption peut faire perdre des événements, sans possibilité de rattrapage. Ce diagnostic est volontairement non persistant et ne déclenche aucune indexation ; la mise à jour fiable des catalogues continue à utiliser les scans complets. Éviter de le laisser actif sur des partages sensibles : les chemins sont affichés dans la console.
