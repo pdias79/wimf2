@@ -3,6 +3,180 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Compare an in-memory incremental projection against a disposable full scan.
+if (args.Length > 0 && args[0] == "--incremental-candidate")
+{
+    if (args.Length != 6 || args[2] != "--catalog" || args[4] != "--journal")
+    {
+        Console.Error.WriteLine("Usage: --incremental-candidate ROOT --catalog CATALOG --journal FILE");
+        return 2;
+    }
+    try
+    {
+        Console.WriteLine("[CANDIDATE-START] Projecting journal hints and building a disposable full reference.");
+        var report = IncrementalCandidateComparison.Compare(args[1], args[3], args[5],
+            onMismatch: Console.WriteLine);
+        Console.WriteLine($"[CANDIDATE-RESULT] candidate={report.Candidate} | reference={report.Reference} | missing={report.Missing} | extra={report.Extra} | different={report.Different} | invalid={report.Invalid} | hints={report.Hints} | equal={report.Equal} | fullScanRequired={report.FullScanRequired}");
+        Console.WriteLine("[CANDIDATE-RESULT] Read-only prototype. Equality does not certify future SMB notification completeness.");
+        return report.Equal ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException or FormatException or OverflowException)
+    {
+        Console.Error.WriteLine("[CANDIDATE-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
+// A disposable baseline -> watch -> audit workflow. Never updates production catalogs.
+if (args.Length > 0 && args[0] == "--smb-controlled-test")
+{
+    if (args.Length != 2)
+    {
+        Console.Error.WriteLine("Usage: --smb-controlled-test ROOT");
+        return 2;
+    }
+    using var experimentStop = new CancellationTokenSource();
+    ConsoleCancelEventHandler experimentCancel = (_, e) => { e.Cancel = true; experimentStop.Cancel(); };
+    Console.CancelKeyPress += experimentCancel;
+    try
+    {
+        return await SmbControlledExperiment.RunAsync(args[1], experimentStop.Token);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException)
+    {
+        Console.Error.WriteLine("[CONTROLLED-ERROR] " + ex.Message);
+        return 2;
+    }
+    finally { Console.CancelKeyPress -= experimentCancel; }
+}
+
+// Report watcher session boundaries without treating them as a coverage guarantee.
+if (args.Length > 0 && args[0] == "--smb-sessions")
+{
+    if (args.Length != 2)
+    {
+        Console.Error.WriteLine("Usage: --smb-sessions JOURNAL");
+        return 2;
+    }
+    try
+    {
+        var report = SmbSessionAudit.Analyze(args[1]);
+        Console.WriteLine($"[SMB-SESSIONS] starts={report.Starts} | ends={report.Ends} | errors={report.Errors} | open={report.OpenSessions} | malformed={report.Malformed} | lastStartUtc={report.LastStartUtc ?? "none"} | fullScanRequired={report.FullScanRequired}");
+        Console.WriteLine("[SMB-SESSIONS] Session boundaries do not prove notification completeness.");
+        return report.Errors == 0 && report.OpenSessions == 0 && report.Malformed == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    {
+        Console.Error.WriteLine("[SMB-SESSIONS-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
+// Audit how many real changes are covered by recorded SMB notifications.
+if (args.Length > 0 && args[0] == "--incremental-audit")
+{
+    if ((args.Length != 6 && args.Length != 8) || args[2] != "--catalog" ||
+        args[4] != "--journal" || (args.Length == 8 && args[6] != "--last-records"))
+    {
+        Console.Error.WriteLine("Usage: --incremental-audit ROOT --catalog CATALOG --journal FILE [--last-records N]");
+        return 2;
+    }
+    try
+    {
+        Console.WriteLine("[INCREMENTAL-AUDIT-START] Running full reference scan; catalogs remain untouched.");
+        var last = args.Length == 8 ? int.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture) : 0;
+        var report = IncrementalCoverageAudit.Analyze(args[1], args[3], args[5], last,
+            onUncovered: path => Console.WriteLine($"[INCREMENTAL-UNCOVERED] {path}"));
+        Console.WriteLine($"[INCREMENTAL-AUDIT] changes={report.Changes} | covered={report.Covered} | uncovered={report.Uncovered} | invalid={report.InvalidRecords} | fullScanRequired={report.FullScanRequired}");
+        Console.WriteLine("[INCREMENTAL-AUDIT] Diagnostic only. SMB change notifications are not a reliable publication source.");
+        return report.Uncovered == 0 && report.InvalidRecords == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException or FormatException or OverflowException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-AUDIT-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
+// Compare an existing catalog against a disposable full-scan reference.
+if (args.Length > 0 && args[0] == "--incremental-reference")
+{
+    if (args.Length != 4 || args[2] != "--catalog")
+    {
+        Console.Error.WriteLine("Usage: --incremental-reference ROOT --catalog CATALOG");
+        return 2;
+    }
+    try
+    {
+        Console.WriteLine("[INCREMENTAL-REFERENCE-START] Building disposable full-scan reference; production catalog is read-only.");
+        var result = IncrementalReferenceComparison.Compare(args[1], args[3]);
+        Console.WriteLine($"[INCREMENTAL-REFERENCE] previous={result.Previous} | reference={result.Reference} | added={result.Added} | removed={result.Removed} | modified={result.Modified} | unchanged={result.Unchanged} | fullScanRequired={result.FullScanRequired}");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or InvalidDataException or OverflowException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-REFERENCE-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
+// Read-only comparison of deleted/renamed paths with an existing catalog.
+if (args.Length > 0 && args[0] == "--incremental-impact")
+{
+    if ((args.Length != 6 && args.Length != 8) || args[2] != "--journal" ||
+        args[4] != "--catalog" || (args.Length == 8 && args[6] != "--last-records"))
+    {
+        Console.Error.WriteLine("Usage: --incremental-impact ROOT --journal FILE --catalog CATALOG [--last-records N]");
+        return 2;
+    }
+    try
+    {
+        var last = args.Length == 8 ? int.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture) : 0;
+        var report = IncrementalCatalogImpact.Analyze(args[1], args[3], args[5], last,
+            onImpact: Console.WriteLine);
+        Console.WriteLine($"[INCREMENTAL-IMPACT] paths={report.Paths} | catalogEntries={report.CatalogEntries} | exact={report.ExactMatches} | descendants={report.DescendantMatches} | unmatched={report.Unmatched} | invalid={report.InvalidRecords} | fullScanRequired=True");
+        Console.WriteLine("[INCREMENTAL-IMPACT] Read-only. No catalog changed; event history is not exhaustive.");
+        return report.InvalidRecords == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or FormatException or OverflowException or InvalidDataException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-IMPACT-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
+// Experimental targeted enumeration: read-only, never publishes a catalog.
+if (args.Length > 0 && args[0] == "--incremental-preview")
+{
+    if ((args.Length != 4 && args.Length != 6) || args[2] != "--journal" ||
+        (args.Length == 6 && args[4] != "--last-records"))
+    {
+        Console.Error.WriteLine("Usage: --incremental-preview ROOT --journal FILE [--last-records N]");
+        return 2;
+    }
+    try
+    {
+        var lastRecords = args.Length == 6 ? int.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture) : 0;
+        Console.WriteLine($"[INCREMENTAL-PREVIEW-START] root={args[1]} | lastRecords={(lastRecords == 0 ? "all" : lastRecords.ToString())}");
+        var result = IncrementalScanPreview.Analyze(args[1], args[3], lastRecords,
+            onTarget: target => Console.WriteLine($"[INCREMENTAL-TARGET] {target}"),
+            onProgress: (files, folders) => Console.WriteLine($"[INCREMENTAL-PROGRESS] files={files} | folders={folders}"));
+        Console.WriteLine($"[INCREMENTAL-PREVIEW] directories={result.Directories} | files={result.Files} | folders={result.Folders} | skipped={result.Skipped} | invalid={result.InvalidRecords} | deletes={result.Deletes} | renames={result.Renames} | unknown={result.Unknown} | fullScanRequired={result.FullScanRequired}");
+        Console.WriteLine("[INCREMENTAL-PREVIEW] Read-only experiment. No catalog was modified; a complete scan is still required.");
+        return result.Skipped == 0 && result.InvalidRecords == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or FormatException or OverflowException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-PREVIEW-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Analyze a diagnostic SMB log without treating it as a complete change history.
 if (args.Length > 0 && args[0] == "--watch-report")
 {

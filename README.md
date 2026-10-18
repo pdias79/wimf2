@@ -594,3 +594,123 @@ Quand `watchRoots` est configuré, le serveur retient les répertoires concerné
 Consulter l'état sur la page `http://127.0.0.1:5080/smb-watch` (actualisation automatique toutes les 2 secondes), ou obtenir les données textuelles ponctuelles à `http://127.0.0.1:5080/api/smb-watch`. Les journaux sont relus au démarrage. Une limite de 2 000 répertoires distincts s'applique en mémoire à chaque racine ; au-delà, il faut procéder à un scan complet. Cette première version conserve un historique append-only qui peut grossir au fil du temps ; ne pas l'utiliser comme catalogue d'événements garanti.
 
 **Important :** `fullScanRequired=True` est volontaire et ne s'efface pas automatiquement : une écoute SMB (même persistée) ne couvre pas les arrêts ou déconnexions et ne prouve jamais l'exhaustivité. Cette PR ne modifie ni les catalogues ni le planificateur de scans complets ; une future PR définira la réconciliation et la remise à zéro contrôlée de cet état.
+
+
+### Prévisualisation d'un scan incrémental (prototype non destructif)
+
+La commande suivante relit les indications persistantes de la surveillance SMB, élimine les sous-répertoires déjà couverts par un parent, puis énumère les fichiers des répertoires indiqués **sans écrire ni remplacer de catalogue** :
+
+```powershell
+$journal = (Get-ChildItem "$env:LOCALAPPDATA\Wimf2\smb-watch\*.events" | Select-Object -First 1).FullName
+dotnet run --project src/Wimf.Server -c Release -- --incremental-preview "\\\\192.168.1.200\BACKUP_PC_Cecile" --journal "$journal"
+```
+
+Pour plusieurs `watchRoots`, identifier d'abord le journal correspondant à la racine cible (nom SHA-256 de la racine normalisée). Les compteurs `[INCREMENTAL-PREVIEW]` décrivent uniquement les sous-arbres observés. Les chemins hors racine et enregistrements incorrects sont refusés ; les liens symboliques/reparse points ne sont pas parcourus ; les répertoires disparus ou illisibles sont signalés comme `skipped`. La commande renvoie un code non nul si des chemins sont invalides ou des éléments ignorés.
+
+**Attention :** cette prévisualisation n'est pas encore un moteur d'écriture incrémentale. Les répertoires touchés peuvent être incomplets à cause des interruptions SMB, un fichier supprimé n'est plus énumérable, et `fullScanRequired` reste toujours vrai. Ne jamais utiliser cette sortie pour remplacer un scan complet, décider qu'un catalogue est synchronisé, ou supprimer des entrées existantes.
+
+
+#### Progression et diagnostic des derniers événements
+
+La commande `--incremental-preview` affiche maintenant immédiatement `[INCREMENTAL-PREVIEW-START]`, les répertoires retenus (`[INCREMENTAL-TARGET]`) puis `[INCREMENTAL-PROGRESS]` environ tous les 500 dossiers parcourus, avant le bilan final.
+
+Pour **comparer un échantillon récent** aux anciens événements conservés dans le journal, ajouter :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-preview "\\\\192.168.1.200\\BACKUP_PC_Cecile" --journal "$journal" --last-records 20
+```
+
+`--last-records 20` analyse uniquement les 20 dernières lignes du journal persistant, sans modifier ni purger celui-ci. Ce filtrage est **une aide au diagnostic, pas un mécanisme de checkpoint/reprise**, car des modifications plus anciennes pourraient être omises. `fullScanRequired` reste toujours vrai. Le mode par défaut analyse tout le journal.
+
+
+#### Événements SMB précis (version expérimentale)
+
+Le serveur écrit maintenant dans le même journal `.events` les anciens enregistrements `D` (répertoires) **et** les nouveaux enregistrements `E` (action + chemin exact, en Base64 UTF-8). Pour tester, redémarrer le serveur avec la nouvelle version, modifier **un fichier existant** depuis un autre PC, puis arrêter le serveur et lancer `--incremental-preview` avec `--last-records 20`.
+
+Lorsque des événements `E` figurent dans l'échantillon, les événements de fichiers sont traités individuellement sans parcourir le dossier parent. Les événements qui portent sur un dossier existant peuvent en revanche entraîner un parcours récursif. Les anciens journaux ne contenant que des `D` restent compatibles et peuvent encore sélectionner toute la racine. Les suppressions sont signalées comme éléments absents et nécessitent une réconciliation.
+
+Les compteurs `files` représentent alors les fichiers inspectés, pas les fichiers modifiés. L'historique et le diagnostic ne permettent toujours pas de garantir l'exhaustivité ; aucun catalogue n'est mis à jour.
+
+
+#### Nature des changements et chemins disparus
+
+Après redémarrage du serveur sur cette version, un troisième enregistrement `K` complète les enregistrements historiques `D` et `E` : type d'action (`created`, `changed`, `deleted`, `renamed-from`, `renamed-to`), nature observée (`file`, `directory`, `unknown`), chemin Base64 UTF-8. Ce format reste rétrocompatible pour les prévisualisations des anciens journaux.
+
+Le rapport `--incremental-preview` distingue `[FILE]`, `[DIRECTORY]` et `[UNKNOWN/MISSING]`, ainsi que les compteurs `deletes`, `renames` et `unknown`. Les fichiers et dossiers déjà disparus restent `unknown` si leur nature ne peut plus être déterminée de manière fiable ; un dossier supprimé pourrait contenir des descendants. La commande n'effectue **aucune suppression** dans les catalogues, même avec `skipped=1` ; `fullScanRequired=True` demeure obligatoire.
+
+
+#### Comparaison des suppressions et déplacements avec un catalogue existant
+
+La commande expérimentale `--incremental-impact` lit le journal SMB et un catalogue WIMF existant **sans modification** pour trouver les entrées affectées par un chemin supprimé ou renommé (côté source), y compris les descendants d'un dossier :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-impact "\\\\192.168.1.200\\BACKUP_PC_Cecile" --journal "$journal" --catalog "CHEMIN_VERS_LE_CATALOGUE.txt.gz" --last-records 30
+```
+
+Choisir le catalogue correspondant exactement à la racine SMB : la commande refuse un catalogue d'une autre racine ou contenant des entrées invalides. `[CATALOG-EXACT]` indique les anciennes entrées correspondant au chemin ; `[CATALOG-DESCENDANT]` leurs descendants. `[INCREMENTAL-IMPACT]` fournit les compteurs de chemins et d'entrées concernées. Les formats `E` et `K` du même événement ne sont pas comptés deux fois.
+
+**Limite :** c'est une estimation d'impact basée sur un journal de notifications potentiellement incomplet, pas une instruction de suppression, et le catalogue n'est jamais réécrit. Avant une publication incrémentale fiable, il faudra traiter les changements non observés, interruptions SMB, vérifications d'identité et validations comparatives avec un scan complet.
+
+
+#### Détailler les chemins sans correspondance
+
+`--incremental-impact` affiche désormais une ligne `[CATALOG-MISSING] CHEMIN` pour chaque chemin supprimé ou renommé (côté source) absent du catalogue. Ceci permet de comprendre les compteurs `unmatched` sans effectuer de modification de fichier. Le test automatisé inclut maintenant un scénario où un chemin n'a jamais figuré dans le catalogue, en complément du scénario de dossier supprimé avec descendant déjà indexé.
+
+
+#### Comparaison avec un scan complet de référence (expérimental)
+
+La commande suivante compare **en lecture seule** le catalogue existant à un scan complet de la racine, construit dans un répertoire temporaire indépendant :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-reference "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue"
+```
+
+Elle affiche les nombres d'entrées précédentes et actuelles, ainsi que les ajouts, suppressions, modifications et entrées inchangées. Le catalogue existant n'est jamais réécrit ; le catalogue de référence temporaire est supprimé à la fin. Ce scan complet peut être long sur SMB.
+
+**Ce jalon ne construit pas encore un catalogue incrémental à partir du journal et ne valide donc pas sa fidélité.** Il établit uniquement une référence mesurable et une base de tests non destructifs pour la future comparaison incrémental/complet. Il peut manquer les exclusions propres à une indexation planifiée ; pour comparer des résultats équivalents, utiliser les mêmes paramètres d'exclusion dans une future validation.
+
+
+#### Audit de couverture du journal SMB (sans modification de catalogue)
+
+Comparer tous les changements constatés par un **scan complet de référence** aux chemins enregistrés dans le journal :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-audit "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue" --journal "$journal"
+```
+
+La sortie `[INCREMENTAL-UNCOVERED]` affiche les changements réels qui ne sont pas couverts par les chemins notifiés ; `[INCREMENTAL-AUDIT]` récapitule `changes`, `covered`, `uncovered` et `invalid`. L'option diagnostique `--last-records N` est également disponible. Un code de sortie 1 indique des changements non couverts ou des lignes invalides. **Attention :** même si `uncovered=0`, cela ne garantit aucunement que les notifications seront exhaustives lors d'une future déconnexion ni que les catalogues peuvent être mis à jour sans scan complet. La commande ne construit ni ne publie de catalogue incrémental.
+
+
+#### Sessions SMB et protocole d'essai contrôlé
+
+Le serveur ajoute désormais au journal `.events` des marqueurs `S` de début (`start`), d'arrêt (`end`) et d'erreur (`error`), horodatés en UTC. La commande suivante en donne le bilan :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --smb-sessions "$journal"
+```
+
+Pour comparer une période maîtrisée : (1) créer un catalogue de référence de test **avant** les modifications, avec les mêmes exclusions que la configuration, (2) démarrer le serveur et vérifier le marqueur `start`, (3) effectuer des modifications depuis un autre PC, (4) arrêter proprement le serveur et vérifier `end`, (5) exécuter `--incremental-audit` avec ce catalogue témoin et le journal. **Ne pas utiliser un ancien catalogue de production comme référence temporelle de la session :** ses écarts peuvent provenir de périodes antérieures. Les arrêts/reprises restent des trous de couverture, et une session start/end sans erreur ne prouve pas l'exhaustivité des notifications. Aucun catalogue de production n'est modifié par ces outils.
+
+
+#### Test SMB contrôlé en une seule commande
+
+La commande expérimentale suivante réalise un scan complet témoin **avant** de commencer la surveillance, puis attend des modifications effectuées depuis un autre PC. Lorsque `[CONTROLLED-READY]` apparaît, effectuer les opérations de test ; arrêter ensuite avec `Ctrl+C`. Un second scan complet compare les résultats au journal recueilli **pendant cette session uniquement** :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --smb-controlled-test "\\\\192.168.1.200\\BACKUP_PC_Cecile"
+```
+
+La sortie `[CONTROLLED-RESULT]` fournit `changes`, `covered`, `uncovered`, `invalid` et `watcherErrors`. Le test ne modifie pas les catalogues de production : son catalogue témoin et son journal sont temporaires et supprimés à la fin. **Ne modifier aucun fichier du partage avant `[CONTROLLED-READY]`**, sinon les différences peuvent ne pas être couvertes par le journal. Ne pas lancer en parallèle un autre processus WIMF2 utilisant la même racine pour un benchmark comparable. La surveillance SMB ne garantit toujours pas la réception des changements ; même avec `uncovered=0`, `fullScanRequired=True` reste obligatoire.
+
+
+#### Comparaison d'un candidat incrémental en mémoire avec le scan complet
+
+Cette commande expérimentale projette les chemins du journal SMB sur les entrées du catalogue existant **en mémoire**, examine les fichiers et sous-arbres concernés, et compare ensuite chaque chemin, extension, taille et jour de modification à un catalogue complet temporaire :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-candidate "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue" --journal "$journal"
+```
+
+La sortie `[CANDIDATE-RESULT]` indique `candidate`, `reference`, `missing`, `extra`, `different`, `invalid`, `hints` et `equal`. Le code de sortie vaut 1 si la comparaison échoue. Ce prototype ne produit **pas** de catalogue incrémental sérialisé et ne modifie pas le catalogue de production. Il ne tient pas encore compte des exclusions de l'indexation planifiée et les modifications faites pendant la comparaison peuvent créer des écarts. Des liens/reparse points, fichiers illisibles et dossiers devenus indisponibles entraînent une erreur ou demandent un scan complet.
+
+**Même `equal=True` n'autorise aucune publication :** les notifications SMB peuvent être incomplètes et l'état `fullScanRequired=True` reste obligatoire.
