@@ -519,6 +519,16 @@ When one scheduled or manually requested scan completes, Wimf reloads **only tha
 The **Actualiser les catalogues** button and `refreshSeconds` timer remain full refresh operations and continue checking all local and network sources. Failure counters for unavailable local catalogs remain tracked individually across both kinds of refresh. There is no configuration change or new UI action.
 
 
+### Diagnostic expérimental des notifications SMB
+
+Pour vérifier sur un partage que les créations, modifications, suppressions et renommages provenant d'autres machines sont reçus par Windows, lancer ce diagnostic **en lecture seule**, sans démarrer le serveur ni écrire de catalogue :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release -- --watch-root "\\\\192.168.1.200\\BACKUP_PC_Cecile"
+```
+
+Modifier un fichier depuis un autre poste, puis arrêter par `Ctrl+C`. Les lignes `[WATCH]` consignent les notifications observées, `[WATCH-ERROR]` une erreur de surveillance et `[WATCH-SUMMARY]` les compteurs. Les événements bruts sont regroupés par type et chemin sur une fenêtre de 500 ms : `[WATCH-SUMMARY]` indique `events` (notifications reçues), `grouped` (notifications retenues) et `duplicates` (notifications masquées). Cette déduplication sert uniquement au diagnostic, sans supposer qu'un événement retenu correspond à une seule modification réelle. Les événements peuvent être multiples pour une seule modification. **Ne pas confondre absence de notification et absence de changements :** une déconnexion, un débordement du tampon ou une interruption peut faire perdre des événements, sans possibilité de rattrapage. Ce diagnostic est volontairement non persistant et ne déclenche aucune indexation ; la mise à jour fiable des catalogues continue à utiliser les scans complets. Éviter de le laisser actif sur des partages sensibles : les chemins sont affichés dans la console.
+
 ### Indexation incrémentale : conception et garanties (préparation PR #54)
 
 **Situation actuelle.** `LegacyCatalogUpdater.Update` utilise `LegacyCatalogWriter.Build` pour effectuer un scan complet, puis compare l'ancien et le nouveau catalogue. Les compteurs ajoutés/modifiés/supprimés/inchangés ne constituent pas une détection incrémentale. Aucun champ `workers` ne change cette garantie.
