@@ -3,19 +3,62 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Select validated incremental candidate or a complete fallback, always to a NEW output.
+if (args.Length > 0 && args[0] == "--incremental-safe-refresh")
+{
+    if (args.Length != 8 || args[2] != "--catalog" || args[4] != "--journal" || args[6] != "--output")
+    {
+        Console.Error.WriteLine("Usage: --incremental-safe-refresh ROOT --catalog ORIGINAL --journal FILE --output NEW_FILE");
+        return 2;
+    }
+    try
+    {
+        var result = IncrementalSafeRefresh.Run(args[1], args[3], args[5], args[7]);
+        Console.WriteLine($"[INCREMENTAL-SAFE-REFRESH] mode={result.Mode} | entries={result.Entries} | output={result.Output} | productionUnchanged=True");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-SAFE-REFRESH-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
+// Safe fallback output for a full scan; never overwrites the source catalog.
+if (args.Length > 0 && args[0] == "--incremental-fallback")
+{
+    if (args.Length != 6 || args[2] != "--catalog" || args[4] != "--output")
+    {
+        Console.Error.WriteLine("Usage: --incremental-fallback ROOT --catalog ORIGINAL --output NEW_FILE");
+        return 2;
+    }
+    try
+    {
+        var result = IncrementalFallback.BuildFull(args[1], args[3], args[5]);
+        Console.WriteLine($"[INCREMENTAL-FALLBACK] mode={result.Mode} | entries={result.Entries} | output={result.Output} | productionUnchanged=True");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-FALLBACK-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Compare an in-memory incremental projection against a disposable full scan.
 if (args.Length > 0 && args[0] == "--incremental-candidate")
 {
-    if (args.Length != 6 || args[2] != "--catalog" || args[4] != "--journal")
+    if ((args.Length != 6 && args.Length != 8) || args[2] != "--catalog" || args[4] != "--journal" ||
+        (args.Length == 8 && args[6] != "--candidate-output"))
     {
-        Console.Error.WriteLine("Usage: --incremental-candidate ROOT --catalog CATALOG --journal FILE");
+        Console.Error.WriteLine("Usage: --incremental-candidate ROOT --catalog CATALOG --journal FILE [--candidate-output NEW_FILE]");
         return 2;
     }
     try
     {
         Console.WriteLine("[CANDIDATE-START] Projecting journal hints and building a disposable full reference.");
         var report = IncrementalCandidateComparison.Compare(args[1], args[3], args[5],
-            onMismatch: Console.WriteLine);
+            onMismatch: Console.WriteLine, candidateOutput: args.Length == 8 ? args[7] : null);
         Console.WriteLine($"[CANDIDATE-RESULT] candidate={report.Candidate} | reference={report.Reference} | missing={report.Missing} | extra={report.Extra} | different={report.Different} | invalid={report.Invalid} | hints={report.Hints} | equal={report.Equal} | fullScanRequired={report.FullScanRequired}");
         Console.WriteLine("[CANDIDATE-RESULT] Read-only prototype. Equality does not certify future SMB notification completeness.");
         return report.Equal ? 0 : 1;

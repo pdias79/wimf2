@@ -27,7 +27,10 @@ public class IncrementalCandidateComparisonTests
             static string Event(string action, string path) => "E\t" + action + "\t" +
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(path));
             File.WriteAllLines(journal, [Event("deleted", old), Event("created", added)]);
-            var result = IncrementalCandidateComparison.Compare(root, catalog, journal);
+            var output = Path.Combine(temp, "candidate.txt.gz");
+            var result = IncrementalCandidateComparison.Compare(root, catalog, journal, candidateOutput: output);
+            Assert.True(File.Exists(output));
+            Assert.Empty(LegacyCatalogReader.ReadFile(output).Diagnostics);
             Assert.True(result.Equal);
             Assert.Equal(0, result.Missing);
             Assert.Equal(0, result.Extra);
@@ -50,6 +53,9 @@ public class IncrementalCandidateComparisonTests
             LegacyCatalogWriter.Build(root, catalog);
             File.WriteAllText(Path.Combine(root, "missed.txt"), "new");
             File.WriteAllText(journal, "");
+            var output = Path.Combine(temp, "rejected.txt.gz");
+            Assert.Throws<InvalidDataException>(() => IncrementalCandidateComparison.Compare(root, catalog, journal, candidateOutput: output));
+            Assert.False(File.Exists(output));
             var result = IncrementalCandidateComparison.Compare(root, catalog, journal);
             Assert.False(result.Equal);
             Assert.Equal(1, result.Missing);
