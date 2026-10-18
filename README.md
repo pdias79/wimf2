@@ -637,3 +637,16 @@ Les compteurs `files` représentent alors les fichiers inspectés, pas les fichi
 Après redémarrage du serveur sur cette version, un troisième enregistrement `K` complète les enregistrements historiques `D` et `E` : type d'action (`created`, `changed`, `deleted`, `renamed-from`, `renamed-to`), nature observée (`file`, `directory`, `unknown`), chemin Base64 UTF-8. Ce format reste rétrocompatible pour les prévisualisations des anciens journaux.
 
 Le rapport `--incremental-preview` distingue `[FILE]`, `[DIRECTORY]` et `[UNKNOWN/MISSING]`, ainsi que les compteurs `deletes`, `renames` et `unknown`. Les fichiers et dossiers déjà disparus restent `unknown` si leur nature ne peut plus être déterminée de manière fiable ; un dossier supprimé pourrait contenir des descendants. La commande n'effectue **aucune suppression** dans les catalogues, même avec `skipped=1` ; `fullScanRequired=True` demeure obligatoire.
+
+
+#### Comparaison des suppressions et déplacements avec un catalogue existant
+
+La commande expérimentale `--incremental-impact` lit le journal SMB et un catalogue WIMF existant **sans modification** pour trouver les entrées affectées par un chemin supprimé ou renommé (côté source), y compris les descendants d'un dossier :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-impact "\\\\192.168.1.200\\BACKUP_PC_Cecile" --journal "$journal" --catalog "CHEMIN_VERS_LE_CATALOGUE.txt.gz" --last-records 30
+```
+
+Choisir le catalogue correspondant exactement à la racine SMB : la commande refuse un catalogue d'une autre racine ou contenant des entrées invalides. `[CATALOG-EXACT]` indique les anciennes entrées correspondant au chemin ; `[CATALOG-DESCENDANT]` leurs descendants. `[INCREMENTAL-IMPACT]` fournit les compteurs de chemins et d'entrées concernées. Les formats `E` et `K` du même événement ne sont pas comptés deux fois.
+
+**Limite :** c'est une estimation d'impact basée sur un journal de notifications potentiellement incomplet, pas une instruction de suppression, et le catalogue n'est jamais réécrit. Avant une publication incrémentale fiable, il faudra traiter les changements non observés, interruptions SMB, vérifications d'identité et validations comparatives avec un scan complet.
