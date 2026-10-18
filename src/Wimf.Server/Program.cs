@@ -6,19 +6,24 @@ using Wimf.Server;
 // Experimental targeted enumeration: read-only, never publishes a catalog.
 if (args.Length > 0 && args[0] == "--incremental-preview")
 {
-    if (args.Length != 4 || args[2] != "--journal")
+    if ((args.Length != 4 && args.Length != 6) || args[2] != "--journal" ||
+        (args.Length == 6 && args[4] != "--last-records"))
     {
-        Console.Error.WriteLine("Usage: --incremental-preview ROOT --journal FILE");
+        Console.Error.WriteLine("Usage: --incremental-preview ROOT --journal FILE [--last-records N]");
         return 2;
     }
     try
     {
-        var result = IncrementalScanPreview.Analyze(args[1], args[3]);
+        var lastRecords = args.Length == 6 ? int.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture) : 0;
+        Console.WriteLine($"[INCREMENTAL-PREVIEW-START] root={args[1]} | lastRecords={(lastRecords == 0 ? "all" : lastRecords.ToString())}");
+        var result = IncrementalScanPreview.Analyze(args[1], args[3], lastRecords,
+            onTarget: target => Console.WriteLine($"[INCREMENTAL-TARGET] {target}"),
+            onProgress: (files, folders) => Console.WriteLine($"[INCREMENTAL-PROGRESS] files={files} | folders={folders}"));
         Console.WriteLine($"[INCREMENTAL-PREVIEW] directories={result.Directories} | files={result.Files} | folders={result.Folders} | skipped={result.Skipped} | invalid={result.InvalidRecords} | fullScanRequired={result.FullScanRequired}");
         Console.WriteLine("[INCREMENTAL-PREVIEW] Read-only experiment. No catalog was modified; a complete scan is still required.");
         return result.Skipped == 0 && result.InvalidRecords == 0 ? 0 : 1;
     }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or FormatException or OverflowException)
     {
         Console.Error.WriteLine("[INCREMENTAL-PREVIEW-ERROR] " + ex.Message);
         return 2;
