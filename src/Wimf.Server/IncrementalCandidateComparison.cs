@@ -12,7 +12,7 @@ public static class IncrementalCandidateComparison
         int Different, int Invalid, int Hints, bool Equal, bool FullScanRequired);
 
     public static Result Compare(string rootPath, string catalogPath, string journalPath,
-        Action<string>? onMismatch = null)
+        Action<string>? onMismatch = null, string? candidateOutput = null)
     {
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -82,6 +82,16 @@ public static class IncrementalCandidateComparison
         }
 
         var candidateSize = candidate.Count;
+        if (candidateOutput is not null)
+        {
+            var entries = candidate.ToDictionary(kv => kv.Key,
+                kv => new IncrementalCatalogSerializer.Entry(kv.Value.Extension, kv.Value.Size, kv.Value.Day),
+                comparer);
+            IncrementalCatalogSerializer.Write(root, previous.Header.Name, entries, candidateOutput);
+            var roundTrip = LegacyCatalogReader.ReadFile(candidateOutput);
+            if (roundTrip.Diagnostics.Count != 0 || roundTrip.EnumerateEntries().Count() != candidateSize)
+                throw new InvalidDataException("Candidate output failed validation.");
+        }
         var temp = Path.Combine(Path.GetTempPath(), "wimf-candidate-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         try
