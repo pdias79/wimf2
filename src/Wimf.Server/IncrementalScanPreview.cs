@@ -11,7 +11,8 @@ public static class IncrementalScanPreview
     public sealed record Result(int Directories, long Files, long Folders, long Skipped,
         long InvalidRecords, bool FullScanRequired);
 
-    public static Result Analyze(string rootPath, string journalPath)
+    public static Result Analyze(string rootPath, string journalPath, int lastRecords = 0,
+        Action<string>? onTarget = null, Action<long, long>? onProgress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(journalPath);
@@ -22,8 +23,14 @@ public static class IncrementalScanPreview
         var comparer = OperatingSystem.IsWindows()
             ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var dirty = new HashSet<string>(comparer);
+        if (lastRecords < 0 || lastRecords > 1_000_000)
+            throw new ArgumentOutOfRangeException(nameof(lastRecords));
         long invalid = 0;
-        foreach (var line in File.ReadLines(journalPath))
+        // Tail sampling is diagnostic only: older changes may be omitted.
+        var selectedLines = lastRecords == 0
+            ? File.ReadLines(journalPath)
+            : File.ReadLines(journalPath).TakeLast(lastRecords);
+        foreach (var line in selectedLines)
         {
             if (!line.StartsWith("D\t", StringComparison.Ordinal))
             {
@@ -66,6 +73,7 @@ public static class IncrementalScanPreview
         long files = 0, folders = 0, skipped = 0;
         foreach (var target in targets)
         {
+            onTarget?.Invoke(target);
             if (!Directory.Exists(target))
             {
                 skipped++; // Could be a deletion/rename; a full reconciliation remains necessary.
@@ -77,6 +85,7 @@ public static class IncrementalScanPreview
             {
                 var directory = stack.Pop();
                 folders++;
+                if (folders % 500 == 0) onProgress?.Invoke(files, folders);
                 try
                 {
                     foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
@@ -101,6 +110,7 @@ public static class IncrementalScanPreview
                 }
             }
         }
+        onProgress?.Invoke(files, folders);
         return new Result(targets.Count, files, folders, skipped, invalid,
             FullScanRequired: true);
     }
