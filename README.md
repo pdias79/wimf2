@@ -570,3 +570,18 @@ dotnet run --project src/Wimf.Server -c Release -- --watch-report "C:\\Wimf2\\sm
 ```
 
 `[WATCH-REPORT]` indique le nombre de notifications brutes, chemins distincts, répertoires concernés, débuts et fins de session, erreurs et lignes malformées. Jusqu'à 20 répertoires les plus concernés sont affichés sous `[WATCH-DIR]`. Un renommage peut concerner deux dossiers. Un nombre de débuts/fins différent ou une erreur rend le diagnostic suspect (code de sortie 1). **Même sans erreur et avec des sessions équilibrées, les notifications ne sont pas exhaustives** : ce rapport ne lance aucune actualisation de catalogue et ne remplace pas un scan complet.
+
+
+### Surveillance SMB intégrée au serveur (expérimental)
+
+Ajouter facultativement `watchRoots` à `wimf.json` pour surveiller des partages pendant que le serveur Web reste actif :
+
+```json
+{
+  "watchRoots": ["\\\\192.168.1.200\\BACKUP_PC_Cecile"]
+}
+```
+
+Il s'agit d'un exemple de propriété à intégrer dans la configuration existante, **pas** d'un fichier complet à substituer à `wimf.json`. Le chemin JSON doit contenir des antislashs échappés (`\\\\`). Après redémarrage du serveur, des lignes `[SMB-WATCH]` signalent les surveillances démarrées et leur bilan à l'arrêt ; `[SMB-WATCH-ERROR]` indique les erreurs, notamment les pertes possibles d'événements. Un partage indisponible au démarrage est ignoré pour la surveillance, sans empêcher le serveur de démarrer.
+
+**Sécurité et fiabilité :** cette fonction est opt-in, ne journalise pas les chemins individuels, ne met pas à jour les catalogues, ne persiste pas les notifications et ne remplace pas le scan complet. Un `FileSystemWatcher` sur SMB ne garantit ni la réception de toutes les notifications ni leur rattrapage après déconnexion. Désactiver en supprimant `watchRoots` ou en utilisant `[]`.
