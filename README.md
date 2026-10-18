@@ -714,3 +714,14 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-cand
 La sortie `[CANDIDATE-RESULT]` indique `candidate`, `reference`, `missing`, `extra`, `different`, `invalid`, `hints` et `equal`. Le code de sortie vaut 1 si la comparaison échoue. Ce prototype ne produit **pas** de catalogue incrémental sérialisé et ne modifie pas le catalogue de production. Il ne tient pas encore compte des exclusions de l'indexation planifiée et les modifications faites pendant la comparaison peuvent créer des écarts. Des liens/reparse points, fichiers illisibles et dossiers devenus indisponibles entraînent une erreur ou demandent un scan complet.
 
 **Même `equal=True` n'autorise aucune publication :** les notifications SMB peuvent être incomplètes et l'état `fullScanRequired=True` reste obligatoire.
+
+
+#### Générer un catalogue candidat incrémental (PR #61, expérimental)
+
+Avec un catalogue existant et un journal SMB, il est possible de matérialiser la projection dans un **nouveau** fichier, puis de la comparer avec un scan complet de référence :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-candidate "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue" --journal "$journal" --candidate-output "$env:TEMP\\wimf-candidat-test.txt.gz"
+```
+
+Le fichier candidat est refusé s'il existe déjà, s'il se trouve dans la racine indexée ou si sa structure est incohérente. Cette commande ne publie pas le résultat dans le catalogue de production : `equal=False` signale des écarts et l'obligation de réconciliation reste active. Éliminer manuellement le fichier temporaire de test lorsqu'il n'est plus utile.
