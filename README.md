@@ -736,3 +736,8 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-safe
 ```
 
 Le mode `candidate-validated` est utilisé uniquement si la projection correspond à la référence complète. Si des entrées diffèrent, le mode `full-fallback` génère automatiquement un catalogue complet dans le nouveau fichier de sortie. Le fichier de sortie **ne doit pas déjà exister** et n'est jamais publié à la place du catalogue initial. Le scan complet reste requis pour valider le candidat ; cette version privilégie la sûreté, sans prétendre accélérer le temps total d'actualisation. Les modifications concurrentes pendant les deux scans peuvent encore affecter la cohérence ; la gestion transactionnelle de ces cas reste un chantier.
+
+
+#### Publication sécurisée des indexations planifiées (PR #62)
+
+Les actualisations du planificateur (manuelles et planifiées) construisent désormais un **scan complet dans un fichier de staging à côté du catalogue cible**. Le fichier est relu et son nombre d'entrées vérifié avant un renommage de remplacement sur le même volume. En cas d'annulation, d'erreur ou d'entrées ignorées, le catalogue précédent est préservé et le staging supprimé. Les notifications SMB restent diagnostiques : aucune publication incrémentale sans garanties de continuité, et aucun gain de temps de scan complet n'est revendiqué à ce stade.
