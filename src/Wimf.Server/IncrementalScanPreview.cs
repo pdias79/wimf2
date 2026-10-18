@@ -25,7 +25,11 @@ public static class IncrementalScanPreview
         var dirty = new HashSet<string>(comparer);
         var exact = new HashSet<string>(comparer);
         var kinds = new Dictionary<string, string>(comparer);
-        long deletes = 0, renames = 0, unknown = 0;
+        long unknown = 0;
+        // E and K describe the same observation in the new journal format.
+        // Count unique action/path pairs, not both representations.
+        var deletedEvents = new HashSet<string>(comparer);
+        var renamedEvents = new HashSet<string>(comparer);
         var legacy = new HashSet<string>(comparer);
         if (lastRecords < 0 || lastRecords > 1_000_000)
             throw new ArgumentOutOfRangeException(nameof(lastRecords));
@@ -85,8 +89,9 @@ public static class IncrementalScanPreview
                     }
                     exact.Add(canonical);
                     // A typed directory is structural, including when no longer present.
-                    if (parts[1] == "deleted") deletes++;
-                    if (parts[1].StartsWith("renamed-", StringComparison.Ordinal)) renames++;
+                    if (parts[1] == "deleted") deletedEvents.Add(canonical);
+                    if (parts[1].StartsWith("renamed-", StringComparison.Ordinal))
+                        renamedEvents.Add(parts[1] + "\t" + canonical);
                     if (isTyped && parts[2] == "unknown") unknown++;
                     if ((isTyped && parts[2] == "directory") ||
                         (!kinds.ContainsKey(canonical) && Directory.Exists(canonical)))
@@ -173,6 +178,6 @@ public static class IncrementalScanPreview
         }
         onProgress?.Invoke(files, folders);
         return new Result(targets.Count, files, folders, skipped, invalid,
-            FullScanRequired: true, Deletes: deletes, Renames: renames, Unknown: unknown);
+            FullScanRequired: true, Deletes: deletedEvents.Count, Renames: renamedEvents.Count, Unknown: unknown);
     }
 }
