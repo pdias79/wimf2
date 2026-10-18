@@ -690,3 +690,14 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --smb-sessions "$j
 ```
 
 Pour comparer une période maîtrisée : (1) créer un catalogue de référence de test **avant** les modifications, avec les mêmes exclusions que la configuration, (2) démarrer le serveur et vérifier le marqueur `start`, (3) effectuer des modifications depuis un autre PC, (4) arrêter proprement le serveur et vérifier `end`, (5) exécuter `--incremental-audit` avec ce catalogue témoin et le journal. **Ne pas utiliser un ancien catalogue de production comme référence temporelle de la session :** ses écarts peuvent provenir de périodes antérieures. Les arrêts/reprises restent des trous de couverture, et une session start/end sans erreur ne prouve pas l'exhaustivité des notifications. Aucun catalogue de production n'est modifié par ces outils.
+
+
+#### Test SMB contrôlé en une seule commande
+
+La commande expérimentale suivante réalise un scan complet témoin **avant** de commencer la surveillance, puis attend des modifications effectuées depuis un autre PC. Lorsque `[CONTROLLED-READY]` apparaît, effectuer les opérations de test ; arrêter ensuite avec `Ctrl+C`. Un second scan complet compare les résultats au journal recueilli **pendant cette session uniquement** :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --smb-controlled-test "\\\\192.168.1.200\\BACKUP_PC_Cecile"
+```
+
+La sortie `[CONTROLLED-RESULT]` fournit `changes`, `covered`, `uncovered`, `invalid` et `watcherErrors`. Le test ne modifie pas les catalogues de production : son catalogue témoin et son journal sont temporaires et supprimés à la fin. **Ne modifier aucun fichier du partage avant `[CONTROLLED-READY]`**, sinon les différences peuvent ne pas être couvertes par le journal. Ne pas lancer en parallèle un autre processus WIMF2 utilisant la même racine pour un benchmark comparable. La surveillance SMB ne garantit toujours pas la réception des changements ; même avec `uncovered=0`, `fullScanRequired=True` reste obligatoire.
