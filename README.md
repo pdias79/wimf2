@@ -727,3 +727,12 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-cand
 Le fichier candidat est refusé s'il existe déjà, s'il se trouve dans la racine indexée ou si sa structure est incohérente. Cette commande ne publie pas le résultat dans le catalogue de production : `equal=False` signale des écarts et l'obligation de réconciliation reste active. Éliminer manuellement le fichier temporaire de test lorsqu'il n'est plus utile.
 
 **Sécurité renforcée PR #61 :** si le catalogue candidat diffère du scan complet (`missing`, `extra`, `different` ou `invalid` non nuls), `--candidate-output` refuse désormais de créer un fichier. Cela évite de conserver un candidat connu comme incohérent. Le résultat n'est pas pour autant une autorisation de publication automatique : la complétude des événements SMB et les modifications concurrentes restent à traiter.
+
+
+#### Actualisation sûre vers un nouveau catalogue (expérimental)
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-safe-refresh "\\\\192.168.1.200\\BACKUP_PC_Cecile" --catalog "$catalogue" --journal "$journal" --output "$env:TEMP\\wimf-safe-refresh.txt.gz"
+```
+
+Le mode `candidate-validated` est utilisé uniquement si la projection correspond à la référence complète. Si des entrées diffèrent, le mode `full-fallback` génère automatiquement un catalogue complet dans le nouveau fichier de sortie. Le fichier de sortie **ne doit pas déjà exister** et n'est jamais publié à la place du catalogue initial. Le scan complet reste requis pour valider le candidat ; cette version privilégie la sûreté, sans prétendre accélérer le temps total d'actualisation. Les modifications concurrentes pendant les deux scans peuvent encore affecter la cohérence ; la gestion transactionnelle de ces cas reste un chantier.
