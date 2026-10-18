@@ -554,6 +554,26 @@ if (options.Indexing is { Length: > 0 })
     Console.WriteLine($"Scheduled indexing configured for {options.Indexing.Length} catalog(s).");
 }
 
+// Monitoring is opt-in and observational: indexing continues to use full scans.
+var smbWatchers = new List<SmbBackgroundWatcher>();
+foreach (var root in options.WatchRoots ?? [])
+{
+    try
+    {
+        var watcher = new SmbBackgroundWatcher(root);
+        watcher.Start();
+        smbWatchers.Add(watcher);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    {
+        Console.Error.WriteLine($"[SMB-WATCH-ERROR] Cannot monitor '{root}': {ex.Message}; full scans remain enabled.");
+    }
+}
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    foreach (var watcher in smbWatchers) watcher.Dispose();
+});
+
 Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");
 if (enableFileActions) Console.WriteLine("Local file actions enabled (requires an interactive desktop session).");
 await app.RunAsync();
