@@ -576,9 +576,47 @@ app.Lifetime.ApplicationStopping.Register(() =>
     foreach (var watcher in smbWatchers) watcher.Dispose();
 });
 
-app.MapGet("/api/smb-watch", () => Results.Text(string.Join("\\n",
-    smbWatchers.Select(w => $"root={w.Root} | events={w.Observed} | directories={w.AffectedDirectories.Length} | errors={w.Errors} | fullScanRequired={w.NeedsFullScan}")),
-    "text/plain; charset=utf-8"));
+app.MapGet("/api/smb-watch", () =>
+{
+    var lines = smbWatchers.Select(w =>
+        $"root={w.Root} | events={w.Observed} | directories={w.AffectedDirectories.Length} | errors={w.Errors} | fullScanRequired={w.NeedsFullScan}");
+    return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
+});
+
+// Lightweight auto-refreshing diagnostic page. No indexing actions exposed.
+app.MapGet("/smb-watch", () => Results.Content("""
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WIMF2 — Surveillance SMB</title>
+<style>
+body { font: 16px system-ui, sans-serif; max-width: 950px; margin: 3rem auto; padding: 0 1rem; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f3f4f6; padding: 1rem; border-radius: 8px; }
+small { color: #555; } .error { color: #a00; }
+</style></head>
+<body>
+<h1>Surveillance SMB</h1>
+<p>État de diagnostic : les notifications ne garantissent pas l’exhaustivité. Un scan complet reste nécessaire.</p>
+<pre id="state" role="status" aria-live="polite">Chargement…</pre>
+<small id="updated">Actualisation toutes les 2 secondes</small>
+<script>
+async function refresh() {
+  try {
+    const response = await fetch('/api/smb-watch', { cache: 'no-store' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const body = await response.text();
+    document.getElementById('state').textContent = body || 'Aucune racine surveillée.';
+    document.getElementById('state').className = '';
+    document.getElementById('updated').textContent = 'Dernière actualisation : ' + new Date().toLocaleTimeString('fr-FR');
+  } catch (error) {
+    document.getElementById('state').className = 'error';
+    document.getElementById('updated').textContent = 'Actualisation impossible : ' + error.message;
+  }
+}
+refresh();
+setInterval(refresh, 2000);
+</script></body></html>
+""", "text/html; charset=utf-8"));
 
 Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");
 if (enableFileActions) Console.WriteLine("Local file actions enabled (requires an interactive desktop session).");
