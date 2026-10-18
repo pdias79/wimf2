@@ -82,16 +82,7 @@ public static class IncrementalCandidateComparison
         }
 
         var candidateSize = candidate.Count;
-        if (candidateOutput is not null)
-        {
-            var entries = candidate.ToDictionary(kv => kv.Key,
-                kv => new IncrementalCatalogSerializer.Entry(kv.Value.Extension, kv.Value.Size, kv.Value.Day),
-                comparer);
-            IncrementalCatalogSerializer.Write(root, previous.Header.Name, entries, candidateOutput);
-            var roundTrip = LegacyCatalogReader.ReadFile(candidateOutput);
-            if (roundTrip.Diagnostics.Count != 0 || roundTrip.EnumerateEntries().Count() != candidateSize)
-                throw new InvalidDataException("Candidate output failed validation.");
-        }
+        var validatedCandidate = candidateOutput is null ? null : new Dictionary<string, State>(candidate, comparer);
         var temp = Path.Combine(Path.GetTempPath(), "wimf-candidate-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
         try
@@ -113,9 +104,25 @@ public static class IncrementalCandidateComparison
             extra = candidate.Count;
             foreach (var path in candidate.Keys.Take(30))
                 onMismatch?.Invoke("[CANDIDATE-EXTRA] " + path);
+            var equal = missing == 0 && extra == 0 && different == 0 && invalid == 0;
+            if (candidateOutput is not null)
+            {
+                if (!equal)
+                    throw new InvalidDataException("Candidate differs from full reference; no candidate file was published.");
+                var entries = validatedCandidate.ToDictionary(kv => kv.Key,
+                    kv => new IncrementalCatalogSerializer.Entry(kv.Value.Extension, kv.Value.Size, kv.Value.Day),
+                    comparer);
+                IncrementalCatalogSerializer.Write(root, previous.Header.Name, entries, candidateOutput);
+                var roundTrip = LegacyCatalogReader.ReadFile(candidateOutput);
+                if (roundTrip.Diagnostics.Count != 0 || roundTrip.EnumerateEntries().Count() != candidateSize)
+                {
+                    File.Delete(candidateOutput);
+                    throw new InvalidDataException("Candidate roundtrip validation failed.");
+                }
+            }
             var referenceCount = reference.EnumerateEntries().Count();
             return new Result(candidateSize, referenceCount, missing, extra, different,
-                invalid, hints.Count, missing == 0 && extra == 0 && different == 0 && invalid == 0, true);
+                invalid, hints.Count, equal, true);
         }
         finally { Directory.Delete(temp, recursive: true); }
     }
