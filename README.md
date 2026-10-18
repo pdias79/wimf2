@@ -510,3 +510,10 @@ Les passages alternent l'ordre des configurations pour limiter les biais liés a
 #### Recommandation du nombre de workers
 
 À la fin de `--benchmark-root`, la ligne `[BENCH-RECOMMENDATION]` indique le plus petit nombre de workers testé dont la médiane ne dépasse pas 105 % de la meilleure médiane. Le choix évite d'augmenter la concurrence pour un gain marginal. Il s'agit d'une **suggestion**, jamais d'une modification automatique de `wimf.json`. Si le nombre d'éléments varie entre les passages, le benchmark signale `[BENCH-WARNING]`, termine avec le code 1 et ne formule pas de recommandation : stabiliser l'arborescence puis recommencer. Des décomptes identiques ne garantissent toutefois pas que les fichiers sont restés identiques.
+
+
+### Targeted refresh after indexing (PR #34)
+
+When one scheduled or manually requested scan completes, Wimf reloads **only that output catalog** into its searchable snapshot. Previously every indexing completion retried all local catalogs and network sources, potentially delaying a fast local indexing job when a disconnected or slow network share was configured. The dedicated reload is serialized with ordinary catalog refreshes, checks the file timestamp before/after parsing, preserves unaffected in-memory catalog instances, and updates the last-refresh timestamp used by the UI's periodic status polling.
+
+The **Actualiser les catalogues** button and `refreshSeconds` timer remain full refresh operations and continue checking all local and network sources. Failure counters for unavailable local catalogs remain tracked individually across both kinds of refresh. There is no configuration change or new UI action.

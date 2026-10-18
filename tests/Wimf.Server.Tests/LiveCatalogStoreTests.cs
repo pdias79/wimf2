@@ -302,4 +302,68 @@ public class LiveCatalogStoreTests
         finally { Directory.Delete(root, true); }
     }
 
+    [Fact]
+    public async Task TargetedRefreshPublishesOnlyRequestedCatalogAndPreservesNetworkSnapshot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-target-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var first = Path.Combine(root, "first.txt");
+            var second = Path.Combine(root, "second.txt");
+            var source = Path.Combine(root, "remote.txt");
+            File.WriteAllText(first, Fixture("First"));
+            File.WriteAllText(second, Fixture("Second"));
+            File.WriteAllText(source, Fixture("Remote"));
+            var store = new LiveCatalogStore([first, second], [source],
+                Path.Combine(root, "cache"), loadLocalFiles: true);
+            await store.RefreshAsync();
+            var oldSecond = store.Snapshot[1];
+            var oldRemote = store.Snapshot[2];
+
+            File.WriteAllText(first, Fixture("Updated"));
+            File.SetLastWriteTimeUtc(first, DateTime.UtcNow.AddMinutes(2));
+            File.WriteAllText(second, Fixture("Unreloaded"));
+            File.SetLastWriteTimeUtc(second, DateTime.UtcNow.AddMinutes(2));
+            File.Delete(source);
+            var result = await store.RefreshLocalCatalogAsync(first);
+            Assert.Equal(3, result.CatalogCount);
+            Assert.Equal("Updated", store.Snapshot[0].Header.Name);
+            Assert.Same(oldSecond, store.Snapshot[1]);
+            Assert.Same(oldRemote, store.Snapshot[2]);
+            Assert.Equal(0, result.FailedSources);
+            Assert.Equal(0, result.FailedLocalCatalogs);
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                store.RefreshLocalCatalogAsync(Path.Combine(root, "unconfigured.txt")));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task TargetedRefreshUpdatesFailureCountsWithoutClearingOtherFailures()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-target-fail-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var unavailable = Path.Combine(root, "unavailable.txt");
+            var generated = Path.Combine(root, "generated.txt");
+            var store = new LiveCatalogStore([unavailable, generated], [], null,
+                loadLocalFiles: true, tolerateUnavailableCatalogs: true);
+            var initial = await store.RefreshAsync();
+            Assert.Equal(2, initial.FailedLocalCatalogs);
+            File.WriteAllText(generated, Fixture("Generated"));
+            var refreshed = await store.RefreshLocalCatalogAsync(generated);
+            Assert.Equal(1, refreshed.FailedLocalCatalogs);
+            Assert.Single(store.Snapshot);
+            var snapshot = store.Snapshot;
+            File.WriteAllText(generated, "bad content");
+            File.SetLastWriteTimeUtc(generated, DateTime.UtcNow.AddMinutes(3));
+            var failed = await store.RefreshLocalCatalogAsync(generated);
+            Assert.Equal(2, failed.FailedLocalCatalogs);
+            Assert.Same(snapshot, store.Snapshot);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
 }

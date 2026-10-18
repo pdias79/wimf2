@@ -10,6 +10,7 @@ public sealed class LiveCatalogStore
     private FileCatalog?[] _localCatalogs;
     private readonly string[] _localPaths;
     private (long Ticks, long Length)[] _localStamps;
+    private bool[] _localFailures;
     private readonly string[] _sources;
     private readonly string? _cacheDirectory;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
@@ -23,6 +24,7 @@ public sealed class LiveCatalogStore
         _localCatalogs = fixedCatalogs.Cast<FileCatalog?>().ToArray();
         _localPaths = [];
         _localStamps = [];
+        _localFailures = [];
         _sources = sources.ToArray();
         _cacheDirectory = cacheDirectory;
         if (_sources.Length > 0 && string.IsNullOrWhiteSpace(cacheDirectory))
@@ -45,6 +47,7 @@ public sealed class LiveCatalogStore
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var allowedMissing = new HashSet<string>(allowMissingCatalogs ?? [], comparer);
         _localStamps = new (long, long)[_localPaths.Length];
+        _localFailures = new bool[_localPaths.Length];
         for (var i = 0; i < _localPaths.Length; i++)
         {
             try
@@ -52,6 +55,7 @@ public sealed class LiveCatalogStore
                 if (!File.Exists(_localPaths[i]) &&
                     (tolerateUnavailableCatalogs || allowedMissing.Contains(Path.GetFullPath(_localPaths[i]))))
                 {
+                    _localFailures[i] = true;
                     Console.Error.WriteLine($"Catalog unavailable at startup; will retry: '{_localPaths[i]}'.");
                     continue;
                 }
@@ -63,6 +67,7 @@ public sealed class LiveCatalogStore
                  (ex is IOException && ex is not InvalidDataException)))
             {
                 // An offline share must not block searches in other catalogs.
+                _localFailures[i] = true;
                 Console.Error.WriteLine($"Catalog unavailable at startup; will retry '{_localPaths[i]}': {ex.Message}");
             }
         }
@@ -93,6 +98,63 @@ public sealed class LiveCatalogStore
     }
 
 
+    /// <summary>Reload one generated local catalog without contacting unrelated sources.</summary>
+    public async Task<RefreshSummary> RefreshLocalCatalogAsync(string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var fullPath = Path.GetFullPath(path);
+        var index = Array.FindIndex(_localPaths, configured => comparer.Equals(configured, fullPath));
+        if (index < 0) throw new ArgumentException("Catalog is not configured as a local catalog.", nameof(path));
+
+        await _refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var next = (FileCatalog?[])_localCatalogs.Clone();
+            var stamps = ((long Ticks, long Length)[])_localStamps.Clone();
+            var localFailures = (bool[])_localFailures.Clone();
+            try
+            {
+                var stamp = GetStamp(fullPath);
+                if (next[index] is null || stamps[index] != stamp)
+                {
+                    var loaded = LegacyCatalogReader.ReadFile(fullPath);
+                    if (GetStamp(fullPath) != stamp)
+                        throw new IOException("Local catalog changed while loading.");
+                    next[index] = loaded;
+                    stamps[index] = stamp;
+                }
+                localFailures[index] = false;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                       InvalidDataException or ArgumentException or
+                                       System.Text.DecoderFallbackException)
+            {
+                localFailures[index] = true;
+                Console.Error.WriteLine($"Unable to refresh local catalog '{fullPath}': {ex.Message}");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _localCatalogs = next;
+            _localStamps = stamps;
+            _localFailures = localFailures;
+            var snapshot = next.OfType<FileCatalog>().Concat(_sourceCatalogs.OfType<FileCatalog>()).ToArray();
+            var previous = Volatile.Read(ref _snapshot);
+            if (!previous.AsSpan().SequenceEqual(snapshot))
+                Volatile.Write(ref _snapshot, snapshot);
+
+            // Preserve unrelated failure indicators: those sources were not retried here.
+            var preceding = Volatile.Read(ref _lastSummary);
+            var summary = new RefreshSummary(snapshot.Length, _sources.Length,
+                preceding?.FailedSources ?? 0, DateTimeOffset.UtcNow, localFailures.Count(failed => failed));
+            Volatile.Write(ref _lastSummary, summary);
+            return summary;
+        }
+        finally { _refreshLock.Release(); }
+    }
+
     /// <summary>Serializes updates; leaves working source entries intact if refresh fails.</summary>
     public async Task<RefreshSummary> RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -101,26 +163,31 @@ public sealed class LiveCatalogStore
         {
             var nextLocal = (FileCatalog?[])_localCatalogs.Clone();
             var nextStamps = ((long Ticks, long Length)[])_localStamps.Clone();
-            var localFailures = 0;
+            var localFailures = (bool[])_localFailures.Clone();
             for (var i = 0; i < _localPaths.Length; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
                     var stamp = GetStamp(_localPaths[i]);
-                    if (nextLocal[i] is not null && stamp == nextStamps[i]) continue;
+                    if (nextLocal[i] is not null && stamp == nextStamps[i])
+                    {
+                        localFailures[i] = false;
+                        continue;
+                    }
                     var loaded = LegacyCatalogReader.ReadFile(_localPaths[i]);
                     // A writer replacing the file during read must not publish a partial view.
                     if (GetStamp(_localPaths[i]) != stamp)
                         throw new IOException("Local catalog changed while loading.");
                     nextLocal[i] = loaded;
                     nextStamps[i] = stamp;
+                    localFailures[i] = false;
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
                                            InvalidDataException or ArgumentException or
                                            System.Text.DecoderFallbackException)
                 {
-                    localFailures++;
+                    localFailures[i] = true;
                     Console.Error.WriteLine($"Unable to refresh local catalog '{_localPaths[i]}': {ex.Message}");
                 }
             }
@@ -149,12 +216,13 @@ public sealed class LiveCatalogStore
             cancellationToken.ThrowIfCancellationRequested();
             _localCatalogs = nextLocal;
             _localStamps = nextStamps;
+            _localFailures = localFailures;
             _sourceCatalogs = next;
             // No need to publish a new array if all catalog instances are unchanged.
             var previous = Volatile.Read(ref _snapshot);
             if (!previous.AsSpan().SequenceEqual(snapshot))
                 Volatile.Write(ref _snapshot, snapshot);
-            var summary = new RefreshSummary(snapshot.Length, _sources.Length, failures, DateTimeOffset.UtcNow, localFailures);
+            var summary = new RefreshSummary(snapshot.Length, _sources.Length, failures, DateTimeOffset.UtcNow, localFailures.Count(failed => failed));
             Volatile.Write(ref _lastSummary, summary);
             return summary;
         }
