@@ -3,6 +3,32 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Read-only comparison of deleted/renamed paths with an existing catalog.
+if (args.Length > 0 && args[0] == "--incremental-impact")
+{
+    if ((args.Length != 6 && args.Length != 8) || args[2] != "--journal" ||
+        args[4] != "--catalog" || (args.Length == 8 && args[6] != "--last-records"))
+    {
+        Console.Error.WriteLine("Usage: --incremental-impact ROOT --journal FILE --catalog CATALOG [--last-records N]");
+        return 2;
+    }
+    try
+    {
+        var last = args.Length == 8 ? int.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture) : 0;
+        var report = IncrementalCatalogImpact.Analyze(args[1], args[3], args[5], last,
+            onImpact: Console.WriteLine);
+        Console.WriteLine($"[INCREMENTAL-IMPACT] paths={report.Paths} | catalogEntries={report.CatalogEntries} | exact={report.ExactMatches} | descendants={report.DescendantMatches} | unmatched={report.Unmatched} | invalid={report.InvalidRecords} | fullScanRequired=True");
+        Console.WriteLine("[INCREMENTAL-IMPACT] Read-only. No catalog changed; event history is not exhaustive.");
+        return report.InvalidRecords == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+                               or FormatException or OverflowException or InvalidDataException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-IMPACT-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Experimental targeted enumeration: read-only, never publishes a catalog.
 if (args.Length > 0 && args[0] == "--incremental-preview")
 {
