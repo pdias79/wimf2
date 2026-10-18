@@ -679,3 +679,14 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-audi
 ```
 
 La sortie `[INCREMENTAL-UNCOVERED]` affiche les changements réels qui ne sont pas couverts par les chemins notifiés ; `[INCREMENTAL-AUDIT]` récapitule `changes`, `covered`, `uncovered` et `invalid`. L'option diagnostique `--last-records N` est également disponible. Un code de sortie 1 indique des changements non couverts ou des lignes invalides. **Attention :** même si `uncovered=0`, cela ne garantit aucunement que les notifications seront exhaustives lors d'une future déconnexion ni que les catalogues peuvent être mis à jour sans scan complet. La commande ne construit ni ne publie de catalogue incrémental.
+
+
+#### Sessions SMB et protocole d'essai contrôlé
+
+Le serveur ajoute désormais au journal `.events` des marqueurs `S` de début (`start`), d'arrêt (`end`) et d'erreur (`error`), horodatés en UTC. La commande suivante en donne le bilan :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release --no-build -- --smb-sessions "$journal"
+```
+
+Pour comparer une période maîtrisée : (1) créer un catalogue de référence de test **avant** les modifications, avec les mêmes exclusions que la configuration, (2) démarrer le serveur et vérifier le marqueur `start`, (3) effectuer des modifications depuis un autre PC, (4) arrêter proprement le serveur et vérifier `end`, (5) exécuter `--incremental-audit` avec ce catalogue témoin et le journal. **Ne pas utiliser un ancien catalogue de production comme référence temporelle de la session :** ses écarts peuvent provenir de périodes antérieures. Les arrêts/reprises restent des trous de couverture, et une session start/end sans erreur ne prouve pas l'exhaustivité des notifications. Aucun catalogue de production n'est modifié par ces outils.
