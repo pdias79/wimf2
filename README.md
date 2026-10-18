@@ -528,3 +528,21 @@ dotnet run --project src/Wimf.Server -c Release -- --watch-root "\\\\192.168.1.2
 ```
 
 Modifier un fichier depuis un autre poste, puis arrêter par `Ctrl+C`. Les lignes `[WATCH]` consignent les notifications observées, `[WATCH-ERROR]` une erreur de surveillance et `[WATCH-SUMMARY]` les compteurs. Les événements bruts sont regroupés par type et chemin sur une fenêtre de 500 ms : `[WATCH-SUMMARY]` indique `events` (notifications reçues), `grouped` (notifications retenues) et `duplicates` (notifications masquées). Cette déduplication sert uniquement au diagnostic, sans supposer qu'un événement retenu correspond à une seule modification réelle. Les événements peuvent être multiples pour une seule modification. **Ne pas confondre absence de notification et absence de changements :** une déconnexion, un débordement du tampon ou une interruption peut faire perdre des événements, sans possibilité de rattrapage. Ce diagnostic est volontairement non persistant et ne déclenche aucune indexation ; la mise à jour fiable des catalogues continue à utiliser les scans complets. Éviter de le laisser actif sur des partages sensibles : les chemins sont affichés dans la console.
+
+### Indexation incrémentale : conception et garanties (préparation PR #54)
+
+**Situation actuelle.** `LegacyCatalogUpdater.Update` utilise `LegacyCatalogWriter.Build` pour effectuer un scan complet, puis compare l'ancien et le nouveau catalogue. Les compteurs ajoutés/modifiés/supprimés/inchangés ne constituent pas une détection incrémentale. Aucun champ `workers` ne change cette garantie.
+
+**Objectif.** Éviter de parcourir tous les fichiers à chaque actualisation lorsque la source fournit un moyen fiable de détecter les changements, tout en préservant les résultats de recherche et la validité du catalogue après une interruption.
+
+**Stratégie proposée, à réaliser dans des PR distinctes :**
+
+1. Introduire une abstraction de détection des changements et une capacité déclarée par volume (journal fiable, notifications non exhaustives, ou scan complet obligatoire). Une source SMB/Freebox est en mode *scan complet* tant qu'aucun mécanisme de rattrapage fiable n'a été démontré.
+2. Ajouter un état de synchronisation persistant par catalogue : identité de la racine et du volume, curseur du journal lorsqu'il existe, version du schéma et génération du catalogue associé. Ne jamais avancer le curseur avant publication atomique du catalogue.
+3. Sur Windows local NTFS, étudier le journal USN et ses cas d'invalidation (troncature, changement d'identité de volume, droits insuffisants). Ne pas assimiler `FileSystemWatcher` à une source exhaustive de changements.
+4. En cas de premier démarrage, perte de curseur, débordement, indisponibilité ou incohérence, revenir au scan complet, sans annoncer à tort une actualisation incrémentale réussie.
+5. Comparer le contenu et les recherches après une séquence contrôlée : créations, suppressions, renommages/déplacements de dossiers, changements de taille/date, interruptions pendant l'écriture et reconnexions.
+
+**Critères de validation.** Un mode incrémental ne sera activé que lorsque les tests vérifient que le catalogue final correspond à un scan complet de référence (y compris les chemins des descendants de dossiers renommés), et qu'un arrêt/reprise n'entraîne aucune omission silencieuse. Les durées et le nombre d'éléments inspectés doivent être mesurés séparément ; un gain ne doit jamais masquer une perte d'exhaustivité.
+
+**Non-objectifs du premier jalon.** Pas de changement automatique de stratégie pour la Freebox ou les partages SMB ; pas de remplacement de `--update-existing` avant validation. Le parcours complet reste le chemin de référence fiable.
