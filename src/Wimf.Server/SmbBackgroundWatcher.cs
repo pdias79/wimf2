@@ -97,8 +97,8 @@ public sealed class SmbBackgroundWatcher : IDisposable
             {
                 var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(directory));
                 var exact = Convert.ToBase64String(Encoding.UTF8.GetBytes(path));
-                var bytes = Encoding.UTF8.GetBytes("D\\t" + encoded + "\\n" +
-                    "E\\t" + action + "\\t" + exact + "\\n");
+                var bytes = Encoding.UTF8.GetBytes("D\t" + encoded + "\n" +
+                    "E\t" + action + "\t" + exact + "\n");
                 _stream!.Write(bytes);
                 _stream.Flush(flushToDisk: true);
             }
