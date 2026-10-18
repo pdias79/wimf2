@@ -23,6 +23,8 @@ public static class IncrementalScanPreview
         var comparer = OperatingSystem.IsWindows()
             ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var dirty = new HashSet<string>(comparer);
+        var exact = new HashSet<string>(comparer);
+        var legacy = new HashSet<string>(comparer);
         if (lastRecords < 0 || lastRecords > 1_000_000)
             throw new ArgumentOutOfRangeException(nameof(lastRecords));
         long invalid = 0;
@@ -32,14 +34,23 @@ public static class IncrementalScanPreview
             : File.ReadLines(journalPath).TakeLast(lastRecords);
         foreach (var line in selectedLines)
         {
-            if (!line.StartsWith("D\t", StringComparison.Ordinal))
+            if (!line.StartsWith("D\t", StringComparison.Ordinal) &&
+                !line.StartsWith("E\t", StringComparison.Ordinal))
             {
                 invalid++;
                 continue;
             }
             try
             {
-                var path = new UTF8Encoding(false, true).GetString(Convert.FromBase64String(line[2..]));
+                var parts = line.Split('\t');
+                var isExact = parts[0] == "E";
+                if ((!isExact && parts.Length != 2) || (isExact && parts.Length != 3))
+                {
+                    invalid++;
+                    continue;
+                }
+                var path = new UTF8Encoding(false, true).GetString(
+                    Convert.FromBase64String(parts[isExact ? 2 : 1]));
                 if (path.Length == 0 || !Path.IsPathFullyQualified(path))
                 {
                     invalid++;
@@ -52,7 +63,18 @@ public static class IncrementalScanPreview
                     invalid++;
                     continue;
                 }
-                dirty.Add(canonical);
+                if (isExact)
+                {
+                    if (parts[1] is not ("created" or "changed" or "deleted" or "renamed-from" or "renamed-to"))
+                    {
+                        invalid++;
+                        continue;
+                    }
+                    exact.Add(canonical);
+                    // Directory structural changes require subtree analysis.
+                    if (Directory.Exists(canonical)) dirty.Add(canonical);
+                }
+                else legacy.Add(canonical);
             }
             catch (Exception ex) when (ex is FormatException or DecoderFallbackException or ArgumentException
                                        or NotSupportedException or PathTooLongException)
@@ -61,6 +83,10 @@ public static class IncrementalScanPreview
             }
         }
 
+        // Legacy D records are emitted alongside E records in the new format.
+        // Ignore D hints when sampling includes a matching exact event; old
+        // D-only journals remain supported for backward compatibility.
+        if (exact.Count == 0) dirty.UnionWith(legacy);
         // A parent covers all descendants. Keep the smallest safe work set.
         var targets = new List<string>();
         foreach (var path in dirty.OrderBy(p => p.Length).ThenBy(p => p, comparer))
@@ -71,6 +97,17 @@ public static class IncrementalScanPreview
         }
 
         long files = 0, folders = 0, skipped = 0;
+        foreach (var path in exact)
+        {
+            if (targets.Any(parent => path.Equals(parent, comparison) ||
+                                      path.StartsWith(parent + Path.DirectorySeparatorChar, comparison)))
+                continue;
+            onTarget?.Invoke("[FILE] " + path);
+            // Deleted files cannot be inspected; preserve the need for reconciliation.
+            if (!File.Exists(path)) { skipped++; continue; }
+            try { _ = File.GetAttributes(path); files++; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { skipped++; }
+        }
         foreach (var target in targets)
         {
             onTarget?.Invoke(target);
