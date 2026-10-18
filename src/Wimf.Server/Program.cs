@@ -3,6 +3,27 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Select validated incremental candidate or a complete fallback, always to a NEW output.
+if (args.Length > 0 && args[0] == "--incremental-safe-refresh")
+{
+    if (args.Length != 8 || args[2] != "--catalog" || args[4] != "--journal" || args[6] != "--output")
+    {
+        Console.Error.WriteLine("Usage: --incremental-safe-refresh ROOT --catalog ORIGINAL --journal FILE --output NEW_FILE");
+        return 2;
+    }
+    try
+    {
+        var result = IncrementalSafeRefresh.Run(args[1], args[3], args[5], args[7]);
+        Console.WriteLine($"[INCREMENTAL-SAFE-REFRESH] mode={result.Mode} | entries={result.Entries} | output={result.Output} | productionUnchanged=True");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-SAFE-REFRESH-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Safe fallback output for a full scan; never overwrites the source catalog.
 if (args.Length > 0 && args[0] == "--incremental-fallback")
 {
