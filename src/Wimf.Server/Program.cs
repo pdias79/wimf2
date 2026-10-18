@@ -3,6 +3,30 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Analyze a diagnostic SMB log without treating it as a complete change history.
+if (args.Length > 0 && args[0] == "--watch-report")
+{
+    if (args.Length != 2 || string.IsNullOrWhiteSpace(args[1]))
+    {
+        Console.Error.WriteLine("Usage: --watch-report FILE");
+        return 2;
+    }
+    try
+    {
+        var report = SmbJournalReport.Analyze(args[1]);
+        Console.WriteLine($"[WATCH-REPORT] notifications={report.Notifications} | files={report.DistinctPaths} | directories={report.AffectedDirectories} | starts={report.SessionStarts} | ends={report.SessionEnds} | errors={report.Errors} | malformed={report.MalformedLines}");
+        Console.WriteLine("[WATCH-REPORT] Diagnostic only; no completeness guarantee; full scan required for reconciliation.");
+        foreach (var directory in report.DirectoryCounts.OrderByDescending(x => x.Value).ThenBy(x => x.Key, StringComparer.Ordinal).Take(20))
+            Console.WriteLine($"[WATCH-DIR] count={directory.Value} | {directory.Key}");
+        return report.Errors == 0 && report.MalformedLines == 0 && report.SessionStarts == report.SessionEnds ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+    {
+        Console.Error.WriteLine("[WATCH-REPORT-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Experimental read-only SMB notification probe. Does not update catalogs.
 if (args.Length > 0 && args[0] == "--watch-root")
 {

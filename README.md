@@ -559,3 +559,14 @@ dotnet run --project src/Wimf.Server -c Release -- --watch-root "\\\\192.168.1.2
 Créer le répertoire parent du fichier de journal au préalable. Le journal est ajouté sans écraser les anciennes lignes et contient les **événements bruts**, même ceux regroupés à l'affichage. Chaque ligne contient l'heure UTC ISO 8601, le type d'événement et le chemin codé en Base64 UTF-8 (pour éviter les ambiguïtés de caractères spéciaux), séparés par tabulations. Les marqueurs `session-start`, `session-end` et `error` aident à identifier les périodes de surveillance. Une erreur d'écriture est signalée dans `[WATCH-ERROR]`. Protéger ce journal : il contient les chemins complets des fichiers.
 
 **Limite critique :** ce journal n'offre *aucune* garantie de complétude ou de reprise ; une déconnexion, l'arrêt du processus ou une saturation du tampon peut masquer des modifications. Il ne sert pas d'entrée pour l'indexation et ne supprime jamais la nécessité des scans complets. Le mode sans `--watch-log` reste inchangé.
+
+
+### Analyser le journal SMB (expérimental)
+
+Sans ouvrir le partage ni modifier les catalogues, analyser le journal produit par `--watch-log` :
+
+```powershell
+dotnet run --project src/Wimf.Server -c Release -- --watch-report "C:\\Wimf2\\smb-events.tsv"
+```
+
+`[WATCH-REPORT]` indique le nombre de notifications brutes, chemins distincts, répertoires concernés, débuts et fins de session, erreurs et lignes malformées. Jusqu'à 20 répertoires les plus concernés sont affichés sous `[WATCH-DIR]`. Un renommage peut concerner deux dossiers. Un nombre de débuts/fins différent ou une erreur rend le diagnostic suspect (code de sortie 1). **Même sans erreur et avec des sessions équilibrées, les notifications ne sont pas exhaustives** : ce rapport ne lance aucune actualisation de catalogue et ne remplace pas un scan complet.
