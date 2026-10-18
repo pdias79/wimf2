@@ -3,6 +3,27 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Safe fallback output for a full scan; never overwrites the source catalog.
+if (args.Length > 0 && args[0] == "--incremental-fallback")
+{
+    if (args.Length != 6 || args[2] != "--catalog" || args[4] != "--output")
+    {
+        Console.Error.WriteLine("Usage: --incremental-fallback ROOT --catalog ORIGINAL --output NEW_FILE");
+        return 2;
+    }
+    try
+    {
+        var result = IncrementalFallback.BuildFull(args[1], args[3], args[5]);
+        Console.WriteLine($"[INCREMENTAL-FALLBACK] mode={result.Mode} | entries={result.Entries} | output={result.Output} | productionUnchanged=True");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+    {
+        Console.Error.WriteLine("[INCREMENTAL-FALLBACK-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Compare an in-memory incremental projection against a disposable full scan.
 if (args.Length > 0 && args[0] == "--incremental-candidate")
 {
