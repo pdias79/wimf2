@@ -806,3 +806,9 @@ Remove-Item "$demo\source\ajoute.txt"
 ```
 
 Le dossier de démonstration est indépendant de la configuration de production : ne pas remplacer le fichier `wimf.json` habituel. Arrêter le serveur avec Ctrl+C avant de nettoyer `$demo`. Les traces `[INCREMENTAL]` indiquent les traitements avec changements ; l'absence de notification peut également provenir d'un watcher indisponible.
+
+#### Diagnostic de stockage des journaux (PR #67, en brouillon)
+
+Le nouveau point de diagnostic local `GET /api/smb-journal-storage` retourne une ligne par catalogue indexé disposant d'un watcher. Chaque ligne contient la racine en Base64 UTF-8, suivie de la taille totale du journal en octets, des octets acquittés, des octets encore en attente et de la validité du curseur (`valid`, `invalid`, ou `error`). Un curseur manquant ou invalide est traité de manière conservatrice : la totalité du journal est considérée en attente. Ce diagnostic ne lit pas tout le journal et ne modifie aucun fichier.
+
+**Important :** cette première étape prépare la maintenance mais **ne compacte ni ne tronque les journaux**. Une future compaction devra prendre en charge la coordination avec l'écriture des watchers, les catalogues qui pourraient partager un journal, les redémarrages interrompant une rotation et les marqueurs d'acquittement. Aucun scan complet supplémentaire n'est autorisé par cette fonctionnalité.
