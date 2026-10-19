@@ -473,13 +473,13 @@ public static class WebUi
       if (!response.ok) return;
       const pending = new Map();
       for (const line of (await response.text()).split("\n").filter(Boolean)) {
-        const [encoded, events, directories] = line.split("\t");
+        const [encoded, events, directories, health] = line.split("\t");
         if (!encoded || !events) continue;
         try {
           const bytes = atob(encoded);
           const root = decodeURIComponent(Array.from(bytes,
             byte => "%" + byte.charCodeAt(0).toString(16).padStart(2, "0")).join(""));
-          pending.set(root.toLowerCase(), { events: Number(events), directories: Number(directories) });
+          pending.set(root.toLowerCase(), { events: Number(events), directories: Number(directories), health });
         } catch { /* Ignore malformed diagnostics. */ }
       }
       latestPendingByRoot.clear();
@@ -492,7 +492,7 @@ public static class WebUi
         const state = latestPendingByRoot.get(item.dataset.smbRoot.toLowerCase());
         const label = item.querySelector("[data-smb-pending]");
         if (label) label.textContent = state
-          ? (state.events > 0 ? "Événements détectés : " + state.events +
+          ? (state.health === "error" ? "Surveillance indisponible — actualisations complètes uniquement" : state.events > 0 ? "Événements détectés : " + state.events +
             " (dossiers affectés : " + state.directories + ") — en attente de traitement incrémental"
             : "Aucun nouvel événement détecté depuis le démarrage")
           : "";
