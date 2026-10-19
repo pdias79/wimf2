@@ -754,8 +754,10 @@ app.MapPost("/api/indexing/{index:int}/cancel", (HttpContext context, int index)
 });
 
 // Monitoring is opt-in and observational: indexing continues to use full scans.
-var smbWatchers = new List<SmbBackgroundWatcher>();
-var unavailableWatchRoots = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+var smbWatchers = new System.Collections.Concurrent.ConcurrentDictionary<string, SmbBackgroundWatcher>(
+    OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+var unavailableWatchRoots = new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(
+    OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 // Watch every indexed root, including local Windows disks. Explicit watchRoots
 // are retained for roots without a scheduled indexing job.
 var watchComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -788,17 +790,51 @@ foreach (var root in watchedRoots)
         }
         var watcher = new SmbBackgroundWatcher(root, watchStateDirectory);
         watcher.Start();
-        smbWatchers.Add(watcher);
+        smbWatchers.TryAdd(root, watcher);
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
     {
-        unavailableWatchRoots.Add(root);
+        unavailableWatchRoots.TryAdd(root, 0);
         Console.Error.WriteLine($"[SMB-WATCH-ERROR] Cannot monitor '{root}': {ex.Message}; full scans remain enabled.");
     }
 }
 app.Lifetime.ApplicationStopping.Register(() =>
 {
-    foreach (var watcher in smbWatchers) watcher.Dispose();
+    foreach (var watcher in smbWatchers.Values) watcher.Dispose();
+});
+
+// Retry failed or initially unavailable watchers every minute.
+// A recovery only resumes notification recording; full scans keep their JSON cadence.
+_ = Task.Run(async () =>
+{
+    try
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        while (await timer.WaitForNextTickAsync(app.Lifetime.ApplicationStopping))
+        {
+            foreach (var watcher in smbWatchers.Values)
+                watcher.TryRecover();
+            foreach (var root in unavailableWatchRoots.Keys)
+            {
+                try
+                {
+                    var stateDirectory = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Wimf2", "smb-watch");
+                    var watcher = new SmbBackgroundWatcher(root, stateDirectory);
+                    watcher.Start();
+                    if (smbWatchers.TryAdd(root, watcher))
+                        unavailableWatchRoots.TryRemove(root, out _);
+                    else watcher.Dispose();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+                {
+                    Console.Error.WriteLine($"[SMB-WATCH-RETRY] {root}: {ex.Message}");
+                }
+            }
+        }
+    }
+    catch (OperationCanceledException) when (app.Lifetime.ApplicationStopping.IsCancellationRequested) { }
 });
 
 if (options.Indexing is { Length: > 0 })
@@ -807,18 +843,18 @@ if (options.Indexing is { Length: > 0 })
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         beforeFull: job =>
         {
-            var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
+            var watcher = smbWatchers.Values.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
             return watcher is null ? 0 : IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
         },
         afterFull: (job, boundary) =>
         {
-            var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
+            var watcher = smbWatchers.Values.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
             if (watcher is not null)
                 IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary);
         },
         incremental: async (job, token) =>
         {
-            var watcher = smbWatchers.FirstOrDefault(w =>
+            var watcher = smbWatchers.Values.FirstOrDefault(w =>
                 watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
             if (watcher is null || !File.Exists(job.Output)) return false;
             // The current serializer intentionally refuses a staging file inside
@@ -854,7 +890,7 @@ if (options.Indexing is { Length: > 0 })
 // Pending notification hints, not yet acknowledged by an incremental publisher.
 app.MapGet("/api/smb-pending", () =>
 {
-    var lines = smbWatchers.Select(w =>
+    var lines = smbWatchers.Values.Select(w =>
     {
         var job = options.Indexing?.FirstOrDefault(j => watchComparer.Equals(j.Root, w.Root));
         try
@@ -871,7 +907,7 @@ app.MapGet("/api/smb-pending", () =>
             return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t0\t0\terror";
         }
     })
-        .Concat(unavailableWatchRoots.Select(root =>
+        .Concat(unavailableWatchRoots.Keys.Select(root =>
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(root)) + "\t0\t0\terror"));
     return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
 });
@@ -879,7 +915,7 @@ app.MapGet("/api/smb-pending", () =>
 // Read-only size and acknowledgement diagnostics; no journal contents are modified.
 app.MapGet("/api/smb-journal-storage", () =>
 {
-    var lines = smbWatchers.Select(w =>
+    var lines = smbWatchers.Values.Select(w =>
     {
         var job = options.Indexing?.FirstOrDefault(j => watchComparer.Equals(j.Root, w.Root));
         if (job is null) return null;
@@ -901,7 +937,7 @@ app.MapGet("/api/smb-journal-storage", () =>
 
 app.MapGet("/api/smb-watch", () =>
 {
-    var lines = smbWatchers.Select(w =>
+    var lines = smbWatchers.Values.Select(w =>
         $"root={w.Root} | events={w.Observed} | directories={w.AffectedDirectories.Length} | errors={w.Errors} | fullScanRequired={w.NeedsFullScan}");
     return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
 });
