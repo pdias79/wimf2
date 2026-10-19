@@ -184,4 +184,40 @@ public class IncrementalJournalPublisherTests
             Convert.ToBase64String(Encoding.UTF8.GetBytes(path)) + (char)10;
     }
 
+    [Fact]
+    public void CompletePrefixIsPublishedWhileTrailingRecordRemainsPending()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-journal-prefix-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "catalog.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var journal = Path.Combine(temp, "events");
+            var first = Path.Combine(root, "first.txt");
+            var second = Path.Combine(root, "second.txt");
+            File.WriteAllText(first, "first");
+            File.WriteAllText(second, "second");
+            static string Event(string path) => "E" + (char)9 + "created" + (char)9 +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(path)) + (char)10;
+            var firstRecord = Event(first);
+            var secondRecord = Event(second);
+            File.WriteAllText(journal, firstRecord + secondRecord[..^1]);
+            Assert.Equal(Encoding.UTF8.GetByteCount(firstRecord),
+                IncrementalJournalPublisher.SnapshotLength(journal));
+            var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
+            Assert.True(result.Changed);
+            Assert.Equal(Encoding.UTF8.GetByteCount(firstRecord), result.AcknowledgedBytes);
+            var published = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(published.EnumerateEntries(), e => published.GetFullPath(e.Id) == first);
+            Assert.DoesNotContain(published.EnumerateEntries(), e => published.GetFullPath(e.Id) == second);
+            File.AppendAllText(journal, Environment.NewLine);
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            published = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(published.EnumerateEntries(), e => published.GetFullPath(e.Id) == second);
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
 }
