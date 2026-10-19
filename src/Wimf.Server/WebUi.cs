@@ -277,6 +277,11 @@ public static class WebUi
     for (const catalog of catalogs) {
       const item = document.createElement("div");
       item.className = "indexing-item";
+      item.dataset.smbRoot = catalog.root || "";
+      const smbPending = document.createElement("div");
+      smbPending.className = "catalog-details";
+      smbPending.setAttribute("data-smb-pending", "");
+      item.appendChild(smbPending);
       const heading = document.createElement("div");
       const name = document.createElement("strong");
       name.textContent = catalog.name || catalog.path || "Catalogue";
@@ -461,6 +466,32 @@ public static class WebUi
     }
     indexingList.appendChild(fragment);
   }
+  async function pollSmbPending() {
+    try {
+      const response = await fetch("/api/smb-pending", { cache: "no-store" });
+      if (!response.ok) return;
+      const pending = new Map();
+      for (const line of (await response.text()).split("\n").filter(Boolean)) {
+        const [encoded, events, directories] = line.split("\t");
+        if (!encoded || !events) continue;
+        try {
+          const bytes = atob(encoded);
+          const root = decodeURIComponent(Array.from(bytes,
+            byte => "%" + byte.charCodeAt(0).toString(16).padStart(2, "0")).join(""));
+          pending.set(root.toLowerCase(), { events: Number(events), directories: Number(directories) });
+        } catch { /* Ignore malformed diagnostics. */ }
+      }
+      for (const item of indexingList.querySelectorAll("[data-smb-root]")) {
+        const state = pending.get(item.dataset.smbRoot.toLowerCase());
+        const label = item.querySelector("[data-smb-pending]");
+        if (label) label.textContent = state
+          ? (state.events > 0 ? "Événements SMB détectés : " + state.events +
+            " (dossiers affectés : " + state.directories + ") — en attente de traitement incrémental"
+            : "Aucun nouvel événement SMB depuis le démarrage")
+          : "";
+      }
+    } catch { /* SMB watcher is optional. */ }
+  }
   async function pollIndexingStatus() {
     if (indexingCheckInProgress || document.hidden) return;
     indexingCheckInProgress = true;
@@ -470,6 +501,7 @@ public static class WebUi
       const catalogs = await response.json();
       if (!Array.isArray(catalogs)) throw new Error("Réponse des catalogues invalide.");
       renderIndexingStatus(catalogs);
+      await pollSmbPending();
       // Keep history aligned with the catalog status refresh when the panel is visible.
       if (!indexingPanel.hidden) pollIndexingHistory();
     } catch {
