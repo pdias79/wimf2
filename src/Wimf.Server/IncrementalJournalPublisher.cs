@@ -101,7 +101,7 @@ public static class IncrementalJournalPublisher
             stream.Position = cursor;
             stream.ReadExactly(buffer.AsSpan(0, count));
             for (var i = 0; i < count; i++)
-                if (buffer[i] == (byte)'\\n') lastComplete = cursor + i + 1;
+                if (buffer[i] == (byte)'\n') lastComplete = cursor + i + 1;
             cursor += count;
         }
         if (lastComplete == start)
