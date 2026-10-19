@@ -131,6 +131,7 @@ public sealed record DaemonOptions(
                     throw new ArgumentException("Each indexing job requires a full scan interval.");
                 var root = Resolve(baseDirectory, job.Root);
                 var output = Resolve(baseDirectory, job.Output);
+                // An omitted exclude property defaults to an empty array; explicit null remains invalid.
                 if (job.Exclude is null) throw new ArgumentException("indexing.exclude must be an array.");
                 _ = new Wimf.Catalog.CatalogPathExclusions(root, job.Exclude);
                 var workers = job.Workers ?? 1;
