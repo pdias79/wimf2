@@ -172,7 +172,11 @@ public class IncrementalJournalPublisherTests
             Assert.Single(firstCatalog.EnumerateEntries());
             Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
-            Assert.Equal(2, LegacyCatalogReader.ReadFile(catalog).EnumerateEntries().Count());
+            var finalCatalog = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(finalCatalog.EnumerateEntries(),
+                e => finalCatalog.GetFullPath(e.Id) == first);
+            Assert.Contains(finalCatalog.EnumerateEntries(),
+                e => finalCatalog.GetFullPath(e.Id) == second);
         }
         finally { Directory.Delete(temp, recursive: true); }
 
