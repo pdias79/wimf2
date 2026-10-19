@@ -72,7 +72,8 @@ public static class IncrementalJournalPublisher
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 
-    public static Result Publish(string root, string catalog, string journal, CancellationToken token = default)
+    public static Result Publish(string root, string catalog, string journal, CancellationToken token = default,
+        IEnumerable<string>? exclusions = null)
     {
         if (!File.Exists(catalog) || !File.Exists(journal))
             return new(0, 0, 0, false);
@@ -102,7 +103,7 @@ public static class IncrementalJournalPublisher
             (target.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? ".txt.gz" : ".txt"));
         try
         {
-            var result = JournalIncrementalRefresh.Run(root, target, journal, staging, position, end, token);
+            var result = JournalIncrementalRefresh.Run(root, target, journal, staging, position, end, token, exclusions);
             token.ThrowIfCancellationRequested();
             EnsureRootAccessible(root);
             if (result.Hints == 0)
