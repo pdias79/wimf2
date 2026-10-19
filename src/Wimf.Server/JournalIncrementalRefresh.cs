@@ -1,0 +1,103 @@
+using System.Text;
+using Wimf.Catalog;
+
+namespace Wimf.Server;
+
+/// <summary>Best-effort journal-based update. Missed notifications are corrected by periodic full scans.</summary>
+public static class JournalIncrementalRefresh
+{
+    public sealed record Result(int Entries, int Hints, string Output);
+
+    public static Result Run(string rootPath, string catalogPath, string journalPath,
+        string outputPath, long fromOffset = 0, long? untilOffset = null,
+        CancellationToken cancellationToken = default)
+    {
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        var cmp = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var source = LegacyCatalogReader.ReadFile(catalogPath);
+        if (source.Diagnostics.Count != 0 ||
+            !string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(source.Header.RootPath)), root, comparison))
+            throw new InvalidDataException("Incremental catalog root mismatch or invalid catalog.");
+        var entries = source.EnumerateEntries().ToDictionary(
+            e => source.GetFullPath(e.Id),
+            e => new IncrementalCatalogSerializer.Entry(e.Extension, e.Size,
+                e.ModifiedAt.ToUnixTimeSeconds() / 86400), cmp);
+        var hints = new HashSet<string>(cmp);
+        using (var stream = new FileStream(journalPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            var end = untilOffset ?? stream.Length;
+            if (fromOffset < 0 || end > stream.Length || end < fromOffset)
+                throw new InvalidDataException("Invalid journal range.");
+            stream.Position = fromOffset;
+            using var reader = new StreamReader(stream, new UTF8Encoding(false, true), false, 4096, true);
+            while (stream.Position < end)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var line = reader.ReadLine();
+                if (line is null) break;
+                var parts = line.Split('\t');
+                if (parts[0] != "E") continue; // K duplicates E, D is a directory hint.
+                if (parts.Length != 3) throw new InvalidDataException("Invalid journal record.");
+                string path;
+                try { path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
+                    new UTF8Encoding(false, true).GetString(Convert.FromBase64String(parts[2])))); }
+                catch (Exception ex) when (ex is FormatException or DecoderFallbackException or ArgumentException)
+                { throw new InvalidDataException("Invalid journal path.", ex); }
+                if (!path.Equals(root, comparison) &&
+                    !path.StartsWith(root + Path.DirectorySeparatorChar, comparison))
+                    throw new InvalidDataException("Journal path outside configured root.");
+                if (!path.Equals(root, comparison)) hints.Add(path);
+            }
+        }
+        foreach (var path in hints.OrderBy(p => p.Length))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var stale in entries.Keys.Where(p => p.Equals(path, comparison) ||
+                p.StartsWith(path + Path.DirectorySeparatorChar, comparison)).ToArray())
+                entries.Remove(stale);
+            if (File.Exists(path))
+            {
+                TryAddFile(path);
+            }
+            else if (Directory.Exists(path))
+            {
+                var stack = new Stack<string>();
+                stack.Push(path);
+                while (stack.TryPop(out var directory))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!directory.Equals(root, comparison))
+                        entries[directory] = new("folder", 0, Day(Directory.GetLastWriteTimeUtc(directory)));
+                    foreach (var child in Directory.EnumerateFileSystemEntries(directory))
+                    {
+                        var attributes = File.GetAttributes(child);
+                        if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+                        if ((attributes & FileAttributes.Directory) != 0) stack.Push(child);
+                        else TryAddFile(child);
+                    }
+                }
+            }
+        }
+        // The staged output is a sibling of production; never publish it before validation.
+        var output = Path.GetFullPath(outputPath);
+        var count = IncrementalCatalogSerializer.Write(root, source.Header.Name, entries, output);
+        var check = LegacyCatalogReader.ReadFile(output);
+        if (check.Diagnostics.Count != 0 || check.EnumerateEntries().Count() != count)
+        {
+            File.Delete(output);
+            throw new InvalidDataException("Incremental round-trip validation failed.");
+        }
+        return new(count, hints.Count, output);
+
+        void TryAddFile(string path)
+        {
+            var name = Path.GetFileName(path);
+            if (name.IndexOfAny([';', '\n', '\r']) >= 0) return;
+            var info = new FileInfo(path);
+            entries[path] = new(info.Extension.TrimStart('.'), checked((ulong)info.Length),
+                Day(info.LastWriteTimeUtc));
+        }
+    }
+    private static long Day(DateTime time) => new DateTimeOffset(time, TimeSpan.Zero).ToUnixTimeSeconds() / 86400;
+}
