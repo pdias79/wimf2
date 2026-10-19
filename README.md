@@ -764,6 +764,13 @@ Chaque entrée `indexing` accepte exactement une unité parmi `fullScanIntervalM
 
 **PR #65 (en validation)** : l'exécution incrémentale utilise maintenant les événements journalisés et le planificateur dispose de deux cadences indépendantes. Le nombre d'événements en attente est calculé après le curseur de journal acquitté. Un scan complet manuel demeure un scan complet. Les notifications restent indicatives : une interruption de surveillance peut produire des événements manquants, corrigés par les scans complets périodiques, sans déclenchement immédiat. Un partage ne supportant pas `FileSystemWatcher` continue d'utiliser les scans complets. La sortie du catalogue doit se trouver hors de la racine surveillée pour bénéficier de la publication incrémentale.
 
+
+#### Respect strict de la période des scans complets (PR #66)
+
+La durée `fullScanIntervalMinutes`, `fullScanIntervalHours` ou `fullScanIntervalDays` est le **délai minimal entre les scans complets planifiés**. Une erreur du `FileSystemWatcher`, une déconnexion SMB, un redémarrage du serveur ou une erreur d'actualisation incrémentale ne déclenchent **jamais** de scan complet anticipé. Le bouton manuel reste une exception explicitement demandée par l'utilisateur. Un catalogue peut donc être temporairement obsolète, ce qui est préférable à un scan complet non prévu sur un très gros partage réseau.
+
+Un watcher en échec désactive les actualisations incrémentales reposant sur lui ; l'indexation complète continue selon la cadence JSON. Les notifications SMB ne prouvent pas l'exhaustivité des changements. Les tests protègent le respect de la cadence en présence d'erreurs incrémentales.
+
 #### Essai fonctionnel isolé sous Windows (PR #65)
 
 Depuis PowerShell, dans le dépôt, créer un jeu de données provisoire sous `$env:TEMP` :
