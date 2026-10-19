@@ -19,6 +19,8 @@ public sealed class CatalogIndexScheduler
 {
     private readonly IndexingJob[] _jobs;
     private readonly Func<IndexingJob, CancellationToken, Task<bool>>? _incremental;
+    private readonly Func<IndexingJob, long>? _beforeFull;
+    private readonly Action<IndexingJob, long>? _afterFull;
     private readonly DateTimeOffset[] _incrementalAttempt;
     private readonly DateTimeOffset[] _lastFull;
     private readonly DateTimeOffset[] _retryNotBefore;
@@ -53,10 +55,14 @@ public sealed class CatalogIndexScheduler
     public CatalogIndexScheduler(IEnumerable<IndexingJob> jobs,
         Func<IndexingJob, CancellationToken, Task>? execute = null,
         Func<IndexingJob, CancellationToken, Task>? afterSuccess = null,
-        Func<IndexingJob, CancellationToken, Task<bool>>? incremental = null)
+        Func<IndexingJob, CancellationToken, Task<bool>>? incremental = null,
+        Func<IndexingJob, long>? beforeFull = null,
+        Action<IndexingJob, long>? afterFull = null)
     {
         _jobs = jobs.ToArray();
         _incremental = incremental;
+        _beforeFull = beforeFull;
+        _afterFull = afterFull;
         _incrementalAttempt = new DateTimeOffset[_jobs.Length];
         _lastFull = _jobs.Select(job =>
         {
@@ -272,7 +278,9 @@ public sealed class CatalogIndexScheduler
                 State = "running", LastError = null, QueuedAt = null, ScanMetrics = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
                 StartedAt = DateTimeOffset.UtcNow
             });
+            var fullBoundary = _beforeFull?.Invoke(job) ?? 0;
             await _execute(job, token);
+            _afterFull?.Invoke(job, fullBoundary);
             Volatile.Write(ref _statuses[i], _statuses[i] with
             {
                 State = "completed", LastSuccess = DateTimeOffset.UtcNow, LastError = null
