@@ -57,4 +57,40 @@ public class JournalIncrementalRefreshTests
         finally { Directory.Delete(temp, recursive: true); }
     }
 
+    [Fact]
+    public void RenameDirectoryAndDeleteFileRemoveStaleCatalogPaths()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-delta-rename-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        var oldDir = Path.Combine(root, "old");
+        Directory.CreateDirectory(oldDir);
+        try
+        {
+            var oldFile = Path.Combine(oldDir, "nested.txt");
+            var removed = Path.Combine(root, "removed.txt");
+            File.WriteAllText(oldFile, "nested");
+            File.WriteAllText(removed, "removed");
+            var original = Path.Combine(temp, "original.txt.gz");
+            LegacyCatalogWriter.Build(root, original);
+            var newDir = Path.Combine(root, "new");
+            Directory.Move(oldDir, newDir);
+            File.Delete(removed);
+            var journal = Path.Combine(temp, "events");
+            File.WriteAllLines(journal, new[] { oldDir, newDir, removed }
+                .Select(path => "E\tchanged\t" +
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes(path))));
+            var result = JournalIncrementalRefresh.Run(root, original, journal,
+                Path.Combine(temp, "updated.txt.gz"));
+            var catalog = LegacyCatalogReader.ReadFile(result.Output);
+            var paths = catalog.EnumerateEntries().Select(e => catalog.GetFullPath(e.Id)).ToArray();
+            Assert.Equal(2, paths.Length);
+            Assert.Contains(newDir, paths);
+            Assert.Contains(Path.Combine(newDir, "nested.txt"), paths);
+            Assert.DoesNotContain(oldDir, paths);
+            Assert.DoesNotContain(oldFile, paths);
+            Assert.DoesNotContain(removed, paths);
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
 }
