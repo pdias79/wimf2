@@ -204,11 +204,16 @@ public sealed class SmbBackgroundWatcher : IDisposable
 
     private void OnError(object sender, ErrorEventArgs e)
     {
-        _watchFailed = true;
-        _needsFullScan = true;
-        Marker("error");
-        Interlocked.Increment(ref _errors);
-        Console.Error.WriteLine($"[SMB-WATCH-ERROR] {_root}: {e.GetException().Message}; full rescan required.");
+        lock (_sync)
+        {
+            // Ignore callbacks from a watcher already superseded by recovery.
+            if (_disposed || !ReferenceEquals(sender, _watcher)) return;
+            _watchFailed = true;
+            _needsFullScan = true;
+            Marker("error");
+            Interlocked.Increment(ref _errors);
+            Console.Error.WriteLine($"[SMB-WATCH-ERROR] {_root}: {e.GetException().Message}; next periodic full scan will reconcile missed events.");
+        }
     }
 
     public void Dispose()
