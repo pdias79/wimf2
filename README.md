@@ -824,3 +824,7 @@ Lorsqu'un `FileSystemWatcher` signale une erreur, WIMF2 conserve le journal exis
 #### Indexations incrémentales sur journaux volumineux (PR #70)
 
 Les actualisations incrémentales lisent désormais un **lot d'au plus 8 Mio par tentative**, arrêté à une fin de ligne complète du journal. Seuls les octets publiés avec succès (ou vérifiés sans changement de catalogue) sont acquittés ; les événements suivants restent disponibles pour les prochains passages incrémentaux. Le comptage des notifications en attente parcourt tous les lots, sans allouer un tampon proportionnel à la taille totale du journal. Un enregistrement unique dépassant la limite est refusé sans déplacer le curseur. Le serveur n'accélère **jamais** les scans complets en raison de journaux volumineux : la cadence JSON demeure inchangée.
+
+#### Déduplication et mesures incrémentales (PR #71)
+
+WIMF2 regroupe les notifications répétées pour un même chemin et, lorsqu'un dossier parent figure parmi les chemins notifiés, évite de re-parcourir ses descendants séparément. Le journal et son acquittement restent inchangés. Les logs `[INCREMENTAL]` indiquent désormais le nombre d'événements lus (`events`), les chemins distincts (`distinct`), les chemins effectivement traités (`paths`) et la durée (`elapsed`). Aucune lecture exhaustive ni aucun scan complet anticipé n'est ajouté : les mises à jour restent strictement guidées par les notifications Windows/SMB.
