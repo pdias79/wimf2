@@ -77,6 +77,9 @@ public static class IncrementalJournalPublisher
     {
         if (!File.Exists(catalog) || !File.Exists(journal))
             return new(0, 0, 0, false);
+        // Do not even start projecting deletions when a share has disconnected.
+        // A successful full or incremental publication must observe an accessible root.
+        EnsureRootAccessible(root);
         var target = Path.GetFullPath(catalog);
         var marker = Path.Combine(Path.GetDirectoryName(target)!,
             "." + Path.GetFileName(target) + ".incremental-cursor");
@@ -132,7 +135,7 @@ public static class IncrementalJournalPublisher
             _ = iterator.MoveNext();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                   or System.Security.SecurityException)
+                                   or DirectoryNotFoundException or System.Security.SecurityException)
         {
             throw new InvalidDataException("Root became inaccessible; incremental publication refused.", ex);
         }
