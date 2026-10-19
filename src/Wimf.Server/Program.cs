@@ -766,9 +766,27 @@ foreach (var root in watchedRoots)
 {
     try
     {
-        var watcher = new SmbBackgroundWatcher(root,
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Wimf2", "smb-watch"));
+        var watchStateDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Wimf2", "smb-watch");
+        // Only compact before the watcher opens the journal. A root shared by
+        // multiple configured catalogs is left untouched because their cursor
+        // positions may differ.
+        var consumers = options.Indexing?.Where(j => watchComparer.Equals(j.Root, root)).ToArray() ?? [];
+        if (consumers.Length == 1)
+        {
+            var journal = SmbBackgroundWatcher.GetJournalPath(root, watchStateDirectory);
+            try
+            {
+                if (OfflineJournalCompaction.TryCompact(consumers[0].Output, journal))
+                    Console.WriteLine($"[JOURNAL-COMPACT] {root} | acknowledged prefix removed");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"[JOURNAL-COMPACT-ERROR] {root}: {ex.Message}");
+            }
+        }
+        var watcher = new SmbBackgroundWatcher(root, watchStateDirectory);
         watcher.Start();
         smbWatchers.Add(watcher);
     }
