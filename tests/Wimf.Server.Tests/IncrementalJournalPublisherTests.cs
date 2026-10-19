@@ -39,4 +39,32 @@ public class IncrementalJournalPublisherTests
         }
         finally { Directory.Delete(temp, true); }
     }
+    [Fact]
+    public void FullScanAcknowledgesOnlyEventsPresentBeforeItStarted()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "wimf-full-boundary-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(directory, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(directory, "catalog.txt.gz");
+            var journal = Path.Combine(directory, "events");
+            var first = Path.Combine(root, "first.txt");
+            var second = Path.Combine(root, "second.txt");
+            File.WriteAllText(first, "first");
+            File.WriteAllText(journal, "E\tchanged\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(first)) + "\n");
+            var boundary = IncrementalJournalPublisher.SnapshotLength(journal);
+            File.WriteAllText(second, "second");
+            File.AppendAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(second)) + "\n");
+            LegacyCatalogWriter.Build(root, catalog);
+            IncrementalJournalPublisher.AcknowledgeFullScan(catalog, journal, boundary);
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            Assert.False(IncrementalJournalPublisher.Publish(root, catalog, journal).Hints == 0);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
 }
