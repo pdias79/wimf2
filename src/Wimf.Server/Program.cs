@@ -787,6 +787,8 @@ if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
+        reconciliationRequired: job => smbWatchers.Any(w =>
+            watchComparer.Equals(w.Root, job.Root) && w.NeedsFullScan),
         beforeFull: job =>
         {
             var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
@@ -796,12 +798,15 @@ if (options.Indexing is { Length: > 0 })
         {
             var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
             if (watcher is not null)
+            {
                 IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary);
+                watcher.MarkFullScanCompleted();
+            }
         },
         incremental: async (job, token) =>
         {
             var watcher = smbWatchers.FirstOrDefault(w =>
-                watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
+                watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed && !w.NeedsFullScan);
             if (watcher is null || !File.Exists(job.Output)) return false;
             // The current serializer intentionally refuses a staging file inside
             // the indexed root (notably C:\\). Keep periodic full scans there.
