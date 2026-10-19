@@ -34,27 +34,27 @@ public static class IncrementalJournalPublisher
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         if (offset > stream.Length) offset = 0;
-        var end = CompleteBoundary(stream, offset);
-        if (end - offset > MaxBatchBytes)
-            end = BatchBoundary(stream, offset, end);
-        if (offset == end) return new(0, 0);
-        // Count only complete records. Never display an unfinished append as pending.
-        // A bounded snapshot also prevents StreamReader from reading beyond the boundary.
-        if (end - offset > 128 * 1024 * 1024)
-            throw new InvalidDataException("Pending journal window is too large.");
-        stream.Position = offset;
-        var snapshot = new byte[checked((int)(end - offset))];
-        stream.ReadExactly(snapshot);
-        using var bounded = new MemoryStream(snapshot, writable: false);
+        var completeEnd = CompleteBoundary(stream, offset);
+        if (offset == completeEnd) return new(0, 0);
         var directories = new HashSet<string>(OperatingSystem.IsWindows() ?
             StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var events = 0;
-        using var reader = new StreamReader(bounded, Encoding.UTF8);
-        while (reader.ReadLine() is { } line)
+        while (offset < completeEnd)
         {
-            if (line.StartsWith("E\t", StringComparison.Ordinal)) events++;
-            if (line.StartsWith("D\t", StringComparison.Ordinal))
-                directories.Add(line[2..]);
+            var batchEnd = completeEnd - offset > MaxBatchBytes
+                ? BatchBoundary(stream, offset, completeEnd) : completeEnd;
+            stream.Position = offset;
+            var snapshot = new byte[checked((int)(batchEnd - offset))];
+            stream.ReadExactly(snapshot);
+            using var bounded = new MemoryStream(snapshot, writable: false);
+            using var reader = new StreamReader(bounded, Encoding.UTF8);
+            while (reader.ReadLine() is { } line)
+            {
+                if (line.StartsWith("E\\t", StringComparison.Ordinal)) events++;
+                if (line.StartsWith("D\\t", StringComparison.Ordinal))
+                    directories.Add(line[2..]);
+            }
+            offset = batchEnd;
         }
         return new(events, directories.Count);
     }
