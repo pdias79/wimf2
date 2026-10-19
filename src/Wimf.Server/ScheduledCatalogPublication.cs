@@ -20,15 +20,15 @@ public static class ScheduledCatalogPublication
         Directory.CreateDirectory(directory);
         var suffix = target.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? ".txt.gz" : ".txt";
         var staging = Path.Combine(directory, ".wimf-staging-" + Guid.NewGuid().ToString("N") + suffix);
-        var skipped = 0;
+        var inaccessible = 0;
         try
         {
             var count = LegacyCatalogWriter.Build(root, staging, name, cancellationToken,
-                message => { skipped++; onSkipped?.Invoke(message); }, exclusions, onProgress,
+                message => { if (message.StartsWith("Skipped inaccessible ", StringComparison.Ordinal)) inaccessible++; onSkipped?.Invoke(message); }, exclusions, onProgress,
                 onMetrics, directoryPrefetch, onDirectoriesEnumerated);
             cancellationToken.ThrowIfCancellationRequested();
-            if (skipped != 0)
-                throw new InvalidDataException($"Full reconciliation skipped {skipped} entries; existing catalog preserved.");
+            if (inaccessible != 0)
+                throw new InvalidDataException($"Full reconciliation encountered {inaccessible} inaccessible entries; existing catalog preserved.");
             var catalog = LegacyCatalogReader.ReadFile(staging);
             if (catalog.Diagnostics.Count != 0 || catalog.EnumerateEntries().Count() != count)
                 throw new InvalidDataException("Staged catalog validation failed; existing catalog preserved.");
