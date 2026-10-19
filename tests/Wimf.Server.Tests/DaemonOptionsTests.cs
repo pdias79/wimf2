@@ -6,6 +6,23 @@ namespace Wimf.Server.Tests;
 
 public sealed class DaemonOptionsTests
 {
+    [Fact]
+    public void IndexingExcludeIsOptionalAndDefaultsToEmpty()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "wimf-exclude-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var config = Path.Combine(dir, "wimf.json");
+            File.WriteAllText(config, """
+                {"catalogs":["catalog.gz"],"indexing":[{"root":"files","output":"catalog.gz","intervalHours":1}]}
+                """);
+            var options = DaemonOptions.Parse(["--config", config]);
+            Assert.Empty(Assert.Single(options.Indexing!).Exclude);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
     [Theory]
     [InlineData(null, 1)]
     [InlineData(1, 1)]

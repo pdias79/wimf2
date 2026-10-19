@@ -6,6 +6,17 @@ namespace Wimf.Server.Tests;
 public class WebUiTests
 {
     [Fact]
+    public void CompactSearchAndBulkIndexControlsArePresent()
+    {
+        Assert.Contains("id=\"search-options-panel\"", WebUi.Html);
+        Assert.Contains("<summary>Options et filtres</summary>", WebUi.Html);
+        Assert.Contains("Recharger les catalogues", WebUi.Html);
+        Assert.Contains("id=\"reindex-all\"", WebUi.Html);
+        Assert.Contains("/api/indexing/start-all", WebUi.Html);
+        Assert.DoesNotContain("Prochaine tentative incrémentale : chargement", WebUi.Html);
+    }
+
+    [Fact]
     public void PageHasAccessibleSearchAndCatalogDisplay()
     {
         Assert.Contains("lang=\"fr\"", WebUi.Html);
@@ -189,7 +200,7 @@ public class WebUiTests
         Assert.Contains("if (!indexingPanel.hidden) { pollIndexingStatus(); pollIndexingHistory(); }", WebUi.Html);
         Assert.Contains("Catalogues et actualisation", WebUi.Html);
         Assert.Contains("id=\"refresh\" type=\"button\"", WebUi.Html);
-        Assert.Contains("Actualiser les catalogues", WebUi.Html);
+        Assert.Contains("Recharger les catalogues", WebUi.Html);
         Assert.Contains("refreshButton.addEventListener(\"click\"", WebUi.Html);
         Assert.DoesNotContain("<details id=\"indexing-panel\"", WebUi.Html);
         Assert.Contains("<section class=\"panel\" aria-label=\"Résultats\">", WebUi.Html);

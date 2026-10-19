@@ -844,3 +844,7 @@ Le panneau « Catalogues et actualisation » utilise l'historique conservé des 
 #### Diagnostics des indexations (PR #75)
 
 L'historique dans « Catalogues et actualisation » peut être filtré par catalogue et par type de scan. Chaque groupe affiche la durée de la dernière opération, la moyenne des opérations réussies et le taux de réussite. Une actualisation est signalée comme anormalement longue lorsque sa durée dépasse deux fois la moyenne des précédentes actualisations réussies du même groupe, sous réserve d'un historique de référence disponible. L'ensemble reste en lecture seule et n'influence pas la planification JSON.
+
+#### Corrections interface et configuration (PR #76)
+
+Le champ `indexing.exclude` peut être omis (équivalent à `[]`). L'historique JSON utilise les métadonnées de sérialisation générées pour éviter les avertissements de trimming/AOT. L'interface de recherche masque par défaut les options et filtres sous un volet déroulant sans effacer leurs valeurs. Le bouton « Recharger les catalogues » recharge les catalogues dans la recherche ; « Réindexer tous les catalogues » demande, après confirmation, un scan complet manuel de chaque tâche configurée via la file d'attente existante (sans changer les cadences automatiques). L'échéance incrémentale reste affichée entre deux mises à jour.

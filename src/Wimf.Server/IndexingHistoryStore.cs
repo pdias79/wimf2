@@ -14,7 +14,7 @@ public sealed class IndexingHistoryStore
         if (!File.Exists(_path)) return [];
         try
         {
-            var records = JsonSerializer.Deserialize<IndexingRunHistoryEntry[]>(File.ReadAllText(_path));
+            var records = JsonSerializer.Deserialize(File.ReadAllText(_path), WimfJsonContext.Default.IndexingRunHistoryEntryArray);
             if (records is null) return [];
             return records.Where(record => record is not null &&
                 !string.IsNullOrWhiteSpace(record.Name) &&
@@ -38,7 +38,8 @@ public sealed class IndexingHistoryStore
         {
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                JsonSerializer.Serialize(stream, entries.Take(Limit).ToArray());
+                JsonSerializer.Serialize(stream, entries.Take(Limit).ToArray(),
+                    WimfJsonContext.Default.IndexingRunHistoryEntryArray);
                 stream.Flush(flushToDisk: true);
             }
             File.Move(temporary, _path, overwrite: true);

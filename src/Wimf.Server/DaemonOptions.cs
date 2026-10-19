@@ -21,7 +21,7 @@ public sealed class IndexingJobConfiguration
     public string Root { get; init; } = "";
     public string Output { get; init; } = "";
     public string? Name { get; init; }
-    public string[] Exclude { get; init; } = [];
+    public string[]? Exclude { get; init; }
     public int? IntervalMinutes { get; init; }
     public int? IntervalHours { get; init; }
     public int? IntervalDays { get; init; }
@@ -131,12 +131,14 @@ public sealed record DaemonOptions(
                     throw new ArgumentException("Each indexing job requires a full scan interval.");
                 var root = Resolve(baseDirectory, job.Root);
                 var output = Resolve(baseDirectory, job.Output);
-                if (job.Exclude is null) throw new ArgumentException("indexing.exclude must be an array.");
-                _ = new Wimf.Catalog.CatalogPathExclusions(root, job.Exclude);
+                // An omitted exclude property defaults to an empty array; explicit null remains invalid.
+                // Missing exclude means no exclusions; explicit null is likewise empty.
+                var exclusions = job.Exclude ?? [];
+                _ = new Wimf.Catalog.CatalogPathExclusions(root, exclusions);
                 var workers = job.Workers ?? 1;
                 if (workers is < 1 or > 50)
                     throw new ArgumentException("indexing.workers must be between 1 and 50.");
-                indexing.Add(new IndexingJob(root, output, job.Name, job.Exclude,
+                indexing.Add(new IndexingJob(root, output, job.Name, exclusions,
                     fullInterval, workers, incremental));
             }
         }

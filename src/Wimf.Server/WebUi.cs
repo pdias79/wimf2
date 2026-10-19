@@ -92,7 +92,7 @@ public static class WebUi
 <main>
   <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button><span id="health" class="status" role="status">Connexion…</span></div></header>
   <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
-    <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Actualiser les catalogues</button></div>
+    <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
     <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
     <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
@@ -108,6 +108,7 @@ public static class WebUi
       <input id="query" type="search" maxlength="1024" placeholder="Nom de fichier ou mots à rechercher" aria-label="Nom du fichier" autofocus>
       <button id="submit" type="submit">Rechercher</button>
     </form>
+    <details id="search-options-panel"><summary>Options et filtres</summary>
     <div class="options">
       <label for="extensions">Extensions <input id="extensions" placeholder="pdf, docx" aria-label="Extensions (séparées par virgules)"></label>
       <label for="max-results">Max <input id="max-results" type="number" min="1" max="1000" value="100"></label>
@@ -126,6 +127,7 @@ public static class WebUi
         <span id="catalog-selection-count" class="status" role="status"></span>
       </div>
       <div id="catalog-list" class="catalog-list" aria-label="Catalogues disponibles"></div>
+    </details>
     </details>
     <details id="saved-search-panel" class="advanced">
       <summary>Historique et favoris de recherche</summary>
@@ -349,13 +351,13 @@ public static class WebUi
     pending: "Non démarrée", queued: "En file d’attente", running: "En cours",
     completed: "Terminée", failed: "Échec", cancelled: "Annulée"
   };
+  const lastNextIncrementalByJob = new Map();
   function renderIndexingStatus(catalogs) {
     const expandedPaths = new Set(Array.from(indexingList.querySelectorAll("details[data-catalog-path]"))
       .filter(details => details.open).map(details => details.dataset.catalogPath));
     const expandedExclusions = new Set(Array.from(indexingList.querySelectorAll("details[data-exclusion-path]"))
       .filter(details => details.open).map(details => details.dataset.exclusionPath));
     indexingList.replaceChildren();
-    indexingError.textContent = "";
     const runningCatalog = catalogs.find(c => c.state === "running");
     const active = catalogs.filter(c => c.state === "running").length;
     const errors = catalogs.filter(c => c.state === "failed").length;
@@ -530,7 +532,8 @@ public static class WebUi
         const incrementalTime = document.createElement("div");
         incrementalTime.className = "catalog-details";
         incrementalTime.setAttribute("data-next-incremental", "");
-        incrementalTime.textContent = "Prochaine tentative incrémentale : chargement…";
+        incrementalTime.textContent = lastNextIncrementalByJob.get(catalog.indexingJobIndex) ||
+          "Prochaine tentative incrémentale : non configurée";
         item.append(schedule, incrementalTime, start);
         if (catalog.state === "queued" || catalog.state === "running") {
           const cancel = document.createElement("button");
@@ -632,7 +635,7 @@ public static class WebUi
             ", en attente : " + formatBytes(storage.pending) + ")" +
             (storage.validity !== "valid" ? " · Curseur non validé" : "") : "";
           label.textContent = health + usage;
-          label.classList.toggle("error", !!state && state.health === "error");
+          label.classList.toggle("error", !!state && state.health === "error" && state.errors > 0);
         }
       }
   }
@@ -664,9 +667,11 @@ public static class WebUi
         const job = jobs[Number(item.dataset.indexingJob)];
         const label = item.querySelector("[data-next-incremental]");
         if (!label) continue;
-        label.textContent = "Prochaine tentative incrémentale : " +
+        const text = "Prochaine tentative incrémentale : " +
           (job?.nextIncremental ? new Date(job.nextIncremental).toLocaleString("fr-FR")
             : "Non configurée");
+        lastNextIncrementalByJob.set(Number(item.dataset.indexingJob), text);
+        if (label.textContent !== text) label.textContent = text;
       }
     } catch { /* Optional monitoring must not interfere with indexing. */ }
   }
@@ -861,6 +866,27 @@ public static class WebUi
     renderSavedSearches();
   });
   renderSavedSearches();
+
+  byId("reindex-all").addEventListener("click", async event => {
+    if (!confirm("Lancer une indexation complète de tous les catalogues configurés ? " +
+      "Cela peut être long sur les partages SMB.")) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/indexing/start-all", {
+        method: "POST", headers: { "Content-Type": "application/json" }
+      });
+      if (!response.ok) throw new Error("Impossible de demander la réindexation globale.");
+      const result = await response.json();
+      indexingError.classList.remove("error");
+      indexingError.textContent = result.accepted + " catalogue(s) mis en file d'attente sur " +
+        result.total + " configuré(s).";
+      await pollIncrementalSchedule();
+    } catch (error) {
+      indexingError.classList.add("error");
+      indexingError.textContent = error.message || "Erreur réseau.";
+    } finally { button.disabled = false; }
+  });
 
   refreshButton.addEventListener("click", async () => {
     refreshButton.disabled = true;

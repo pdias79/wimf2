@@ -740,6 +740,23 @@ app.MapPost("/api/indexing/{index:int}/start", (HttpContext context, int index) 
         ? Results.StatusCode(202) : Results.StatusCode(409);
 });
 
+// Explicit user action only: queue each configured full scan through the existing scheduler.
+app.MapPost("/api/indexing/start-all", (HttpContext context) =>
+{
+    if (indexingScheduler is null) return Results.NotFound();
+    var origin = context.Request.Headers.Origin.ToString();
+    var site = context.Request.Headers["Sec-Fetch-Site"].ToString();
+    if (!string.Equals(origin, "http://127.0.0.1:5080", StringComparison.Ordinal) ||
+        !string.Equals(context.Request.Host.Value, "127.0.0.1:5080", StringComparison.OrdinalIgnoreCase) ||
+        (site.Length > 0 && site != "same-origin"))
+        return Results.StatusCode(403);
+    var accepted = 0;
+    for (var i = 0; i < indexingScheduler.Status.Length; i++)
+        if (indexingScheduler.TryQueueManual(i, app.Lifetime.ApplicationStopping))
+            accepted++;
+    return Results.Text($"{{\"accepted\":{accepted},\"total\":{indexingScheduler.Status.Length}}}", "application/json");
+});
+
 app.MapPost("/api/indexing/{index:int}/cancel", (HttpContext context, int index) =>
 {
     if (indexingScheduler is null || index < 0 || index >= indexingScheduler.Status.Length)
