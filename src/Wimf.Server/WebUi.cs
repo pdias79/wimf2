@@ -16,8 +16,9 @@ public static class WebUi
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, sans-serif; color-scheme: light dark; }
     body { margin: 0; background: Canvas; color: CanvasText; }
-    main { max-width: 1100px; margin: auto; padding: 28px 22px 48px; }
-    header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+    main { max-width: 1600px; margin: auto; padding: 28px 22px 48px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 24px; }
+    .header-controls { transform: translateY(-10px); }
     h1 { margin: 0; font-size: 1.75rem; }
     .sub { color: GrayText; margin: 6px 0 22px; }
     .panel { border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas);
@@ -37,19 +38,20 @@ public static class WebUi
     #toast { position: fixed; bottom: 20px; right: 20px; max-width: min(440px, calc(100vw - 40px)); padding: 12px 16px; border: 1px solid GrayText; border-radius: 8px; background: Canvas; color: CanvasText; box-shadow: 0 3px 12px #0003; z-index: 20; }
     #toast.error { color: #ba3636; }
     #toast-close { margin-left: 12px; }
-    .advanced { border-top: 1px solid color-mix(in srgb, CanvasText 15%, Canvas); padding-top: 12px; }
+    .advanced { padding-top: 12px; }
     .advanced label { font-size: .9rem; }
     .status { font-size: .9rem; color: GrayText; }
     .status.error { color: #ba3636; }
     .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .catalog-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: .92rem; }
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, Canvas); }
-    td.name { font-weight: 600; max-width: 340px; }
-    .file-name { display: block; width: 100%; max-width: 340px; padding: 0; border: 0;
+    td.name { font-weight: 600; width: 100%; min-width: 0; max-width: 0; }
+    .file-name { display: block; width: 100%; min-width: 0; padding: 0; border: 0;
                  background: transparent; color: #155bbc; text-align: left;
                  font: inherit; font-weight: 600; text-decoration: underline;
-                 overflow-wrap: anywhere; cursor: pointer; }
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
     .file-name:hover, .file-name:focus-visible { text-decoration-thickness: 2px; }
     th { color: GrayText; font-size: .82rem; }
     tbody tr:hover { background: color-mix(in srgb, CanvasText 6%, Canvas); }
@@ -96,7 +98,7 @@ public static class WebUi
 <main>
   <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
   <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
-    <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div>
+    <div class="bar"><h2>Catalogues et actualisation</h2><div class="catalog-buttons"><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
     <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
     <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
@@ -642,7 +644,7 @@ public static class WebUi
             ", en attente : " + formatBytes(storage.pending) + ")" +
             (storage.validity !== "valid" ? " · Curseur non validé" : "") : "";
           label.textContent = health + usage;
-          label.classList.toggle("error", !!state && state.health === "error" && state.errors > 0);
+          label.classList.remove("error");
         }
       }
   }
@@ -805,8 +807,9 @@ public static class WebUi
     const keys = new Set(entry.catalogKeys);
     catalogSelection = new Set(loadedCatalogs.filter(c => keys.has(catalogKey(c))).map(c => c.index));
     renderSelectionCheckboxes();
-    byId("saved-status").textContent = "Critères restaurés. Lancez la recherche pour les appliquer.";
-    byId("query").focus();
+    byId("saved-status").textContent = "";
+    byId("saved-search-panel").open = false;
+    form.requestSubmit();
   }
   function renderSavedList(containerId, entries, isFavorite) {
     const container = byId(containerId);
