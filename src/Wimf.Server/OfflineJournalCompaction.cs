@@ -19,7 +19,7 @@ public static class OfflineJournalCompaction
         var journalPath = Path.GetFullPath(journal);
         var staging = journalPath + "." + Guid.NewGuid().ToString("N") + ".compact-tmp";
         // A competing writer must never be allowed to append while we copy.
-        using (var source = new FileStream(journalPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        using (var source = new FileStream(journalPath, FileMode.Open, FileAccess.Read, FileShare.Delete))
         {
             // Re-check under exclusive ownership: the journal could have changed
             // after the first observation.
@@ -34,10 +34,10 @@ public static class OfflineJournalCompaction
             // Invalidate the old byte offset BEFORE replacing the journal.
             // A crash at any point can only cause reprocessing, not lost hints.
             File.Delete(marker);
+            // Keep ownership of the old journal until replacement completes.
+            // FileShare.Delete permits atomic replacement but excludes writers.
+            File.Replace(staging, journalPath, null);
         }
-        // Atomic same-volume replacement; never truncate the only copy.
-        // Invoke before watcher startup, with exclusive ownership of the journal.
-        File.Move(staging, journalPath, overwrite: true);
         return true;
     }
 }
