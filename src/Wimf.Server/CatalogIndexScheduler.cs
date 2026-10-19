@@ -112,10 +112,20 @@ public sealed class CatalogIndexScheduler
             };
             // Scheduled publications remain full scans until SMB continuity is proven.
             // Stage and verify before replacing a live catalog.
-            entryCount = ScheduledCatalogPublication.Refresh(job.Root, job.Output, job.Name,
-                cancellationToken: token, onSkipped: skipped, exclusions: job.Exclude,
-                onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch,
-                onDirectoriesEnumerated: enumerated);
+            try
+            {
+                entryCount = ScheduledCatalogPublication.Refresh(job.Root, job.Output, job.Name,
+                    cancellationToken: token, onSkipped: skipped, exclusions: job.Exclude,
+                    onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch,
+                    onDirectoriesEnumerated: enumerated);
+            }
+            finally
+            {
+                // Keep the complete skipped report even when publication is refused.
+                report.WriteLine();
+                report.WriteLine("Total ignore : " +
+                    (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
+            }
             bench.Stop();
             if (scanResult is not null)
                 Console.WriteLine($"[BENCH] {job.Root} | prefetch={prefetch} | total={bench.ElapsedMilliseconds} ms | " +
@@ -125,8 +135,6 @@ public sealed class CatalogIndexScheduler
                     $"tri={scanResult.DirectorySortMilliseconds} ms | metadonnees={scanResult.MetadataMilliseconds} ms | " +
                     $"autres/ecriture={(scanResult.OutputMilliseconds is long outputMs ? $"{outputMs} ms" : "n/a")} | ignores=" +
                     (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
-            report.WriteLine();
-            report.WriteLine("Total ignore : " + (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
         }, token));
     }
 
