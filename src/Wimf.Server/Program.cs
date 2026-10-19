@@ -899,7 +899,7 @@ app.MapGet("/api/smb-pending", () =>
             return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
                 (pending?.Events ?? w.Observed).ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
                 (pending?.Directories ?? w.AffectedDirectories.Length).ToString(System.Globalization.CultureInfo.InvariantCulture) +
-                "\t" + (w.WatchFailed ? "error" : "active") + "\t" + w.Errors;
+                "\t" + (w.WatchFailed ? "error" : w.Recovered ? "recovered" : "active") + "\t" + w.Errors;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
