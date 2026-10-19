@@ -741,3 +741,7 @@ Le mode `candidate-validated` est utilisé uniquement si la projection correspon
 #### Publication sécurisée des indexations planifiées (PR #62)
 
 Les actualisations du planificateur (manuelles et planifiées) construisent désormais un **scan complet dans un fichier de staging à côté du catalogue cible**. Le fichier est relu et son nombre d'entrées vérifié avant un renommage de remplacement sur le même volume. En cas d'annulation, d'erreur ou d'entrées ignorées, le catalogue précédent est préservé et le staging supprimé. Les notifications SMB restent diagnostiques : aucune publication incrémentale sans garanties de continuité, et aucun gain de temps de scan complet n'est revendiqué à ce stade.
+
+#### Fichiers ignorés et sécurité des indexations planifiées
+
+Les noms contenant `;` ou un retour à la ligne ne sont pas représentables dans le format historique WIMF. Ils sont consignés dans le rapport `.skipped-report.txt`, mais ne bloquent plus la publication des entrées représentables (comportement compatible avec les scans historiques). En revanche, une erreur d'accès à un dossier ou fichier (`Skipped inaccessible ...`) bloque la publication et préserve le catalogue précédent. Le rapport reste accessible dans le panneau même après un échec. Pour déterminer pourquoi une indexation a été rejetée, consulter ce rapport associé au catalogue.
