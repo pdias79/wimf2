@@ -278,6 +278,7 @@ public static class WebUi
       const item = document.createElement("div");
       item.className = "indexing-item";
       item.dataset.smbRoot = catalog.root || "";
+      if (catalog.indexingJobIndex !== null) item.dataset.indexingJob = catalog.indexingJobIndex;
       const smbPending = document.createElement("div");
       smbPending.className = "catalog-details";
       smbPending.setAttribute("data-smb-pending", "");
@@ -429,7 +430,11 @@ public static class WebUi
             indexingError.classList.add("error");
           } finally { start.disabled = false; }
         });
-        item.append(schedule, start);
+        const incrementalTime = document.createElement("div");
+        incrementalTime.className = "catalog-details";
+        incrementalTime.setAttribute("data-next-incremental", "");
+        incrementalTime.textContent = "Prochaine tentative incrémentale : chargement…";
+        item.append(schedule, incrementalTime, start);
         if (catalog.state === "queued" || catalog.state === "running") {
           const cancel = document.createElement("button");
           cancel.type = "button";
@@ -473,29 +478,65 @@ public static class WebUi
       if (!response.ok) return;
       const pending = new Map();
       for (const line of (await response.text()).split("\n").filter(Boolean)) {
-        const [encoded, events, directories, health] = line.split("\t");
+        const [encoded, events, directories, health, errors] = line.split("\t");
         if (!encoded || !events) continue;
         try {
           const bytes = atob(encoded);
           const root = decodeURIComponent(Array.from(bytes,
             byte => "%" + byte.charCodeAt(0).toString(16).padStart(2, "0")).join(""));
-          pending.set(root.toLowerCase(), { events: Number(events), directories: Number(directories), health });
+          pending.set(root.toLowerCase(), { events: Number(events), directories: Number(directories), health, errors: Number(errors || 0) });
         } catch { /* Ignore malformed diagnostics. */ }
       }
       latestPendingByRoot.clear();
       for (const [root, data] of pending) latestPendingByRoot.set(root, data);
+      await pollJournalStorage();
       applyPendingIndicators();
     } catch { /* SMB watcher is optional. */ }
+  }
+  const latestJournalByRoot = new Map();
+  const decodeRoot = encoded => {
+    const bytes = atob(encoded);
+    return decodeURIComponent(Array.from(bytes,
+      byte => "%" + byte.charCodeAt(0).toString(16).padStart(2, "0")).join("")).toLowerCase();
+  };
+  const formatBytes = bytes => Number.isFinite(bytes)
+    ? (bytes / (1024 * 1024)).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " Mio"
+    : "—";
+  async function pollJournalStorage() {
+    try {
+      const response = await fetch("/api/smb-journal-storage", { cache: "no-store" });
+      if (!response.ok) return;
+      const result = new Map();
+      for (const line of (await response.text()).split("\n").filter(Boolean)) {
+        const [encoded, total, acknowledged, pending, validity] = line.split("\t");
+        try {
+          result.set(decodeRoot(encoded), {
+            total: Number(total), acknowledged: Number(acknowledged),
+            pending: Number(pending), validity
+          });
+        } catch { /* Ignore malformed entries. */ }
+      }
+      latestJournalByRoot.clear();
+      for (const [root, value] of result) latestJournalByRoot.set(root, value);
+    } catch { /* Diagnostic is optional. */ }
   }
   function applyPendingIndicators() {
       for (const item of indexingList.querySelectorAll("[data-smb-root]")) {
         const state = latestPendingByRoot.get(item.dataset.smbRoot.toLowerCase());
         const label = item.querySelector("[data-smb-pending]");
-        if (label) label.textContent = state
-          ? (state.health === "error" ? "Surveillance indisponible — actualisations complètes uniquement" : state.events > 0 ? "Événements détectés : " + state.events +
-            " (dossiers affectés : " + state.directories + ") — en attente de traitement incrémental"
-            : "Aucun nouvel événement détecté depuis le démarrage")
-          : "";
+        const storage = latestJournalByRoot.get(item.dataset.smbRoot.toLowerCase());
+        if (label) {
+          const health = state ? (state.health === "error" ? "Surveillance indisponible" :
+            "Surveillance active") + " · Événements en attente : " + state.events +
+            " · Dossiers affectés : " + state.directories +
+            " · Erreurs observées : " + state.errors : "Surveillance non disponible";
+          const usage = storage ? " · Journal : " + formatBytes(storage.total) +
+            " (acquitté : " + formatBytes(storage.acknowledged) +
+            ", en attente : " + formatBytes(storage.pending) + ")" +
+            (storage.validity !== "valid" ? " · Curseur non validé" : "") : "";
+          label.textContent = health + usage;
+          label.classList.toggle("error", !!state && state.health === "error");
+        }
       }
   }
   async function pollIndexingStatus() {
@@ -507,6 +548,7 @@ public static class WebUi
       const catalogs = await response.json();
       if (!Array.isArray(catalogs)) throw new Error("Réponse des catalogues invalide.");
       renderIndexingStatus(catalogs);
+      await pollIncrementalSchedule();
       await pollSmbPending();
       // Keep history aligned with the catalog status refresh when the panel is visible.
       if (!indexingPanel.hidden) pollIndexingHistory();
@@ -514,6 +556,22 @@ public static class WebUi
       indexingError.textContent = "État des catalogues indisponible : vérifiez la version du serveur.";
       indexingError.classList.add("error");
     } finally { indexingCheckInProgress = false; }
+  }
+  async function pollIncrementalSchedule() {
+    try {
+      const response = await fetch("/api/indexing-status", { cache: "no-store" });
+      if (!response.ok) return;
+      const jobs = await response.json();
+      if (!Array.isArray(jobs)) return;
+      for (const item of indexingList.querySelectorAll("[data-indexing-job]")) {
+        const job = jobs[Number(item.dataset.indexingJob)];
+        const label = item.querySelector("[data-next-incremental]");
+        if (!label) continue;
+        label.textContent = "Prochaine tentative incrémentale : " +
+          (job?.nextIncremental ? new Date(job.nextIncremental).toLocaleString("fr-FR")
+            : "Non configurée");
+      }
+    } catch { /* Optional monitoring must not interfere with indexing. */ }
   }
   let lastObservedRefresh = null;
   let refreshCheckInProgress = false;
