@@ -34,13 +34,13 @@ public static class JournalIncrementalRefresh
                 throw new InvalidDataException("Journal batch is too large.");
             var bytes = new byte[checked((int)(end - fromOffset))];
             stream.ReadExactly(bytes);
-            if (bytes.Length > 0 && bytes[^1] != (byte)'\\n')
+            if (bytes.Length > 0 && bytes[^1] != (byte)'\n')
                 throw new InvalidDataException("Journal boundary is not a complete line.");
-            foreach (var line in new UTF8Encoding(false, true).GetString(bytes).Split('\\n',
+            foreach (var line in new UTF8Encoding(false, true).GetString(bytes).Split('\n',
                 StringSplitOptions.RemoveEmptyEntries))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var parts = line.TrimEnd('\\r').Split('\\t');
+                var parts = line.TrimEnd('\r').Split('\t');
                 if (parts[0] != "E") continue;
                 if (parts.Length != 3) throw new InvalidDataException("Invalid journal record.");
                 string path;
