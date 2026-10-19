@@ -18,13 +18,25 @@ public class SequentialSearchEngineTests
     }
 
     [Fact]
-    public void MatchesAllWordsIgnoringCaseAndOrderAndSkipsDirectories()
+    public void MatchesAllWordsIgnoringCaseAndOrderIncludingDirectories()
     {
         var catalog = Read("REPORT annual;folder;0;0;1\nAnnual Report.PDF;PDF;10;1;2\nreport.txt;txt;20;0;3\n");
-        var result = Assert.Single(_engine.Search([catalog], new() { Text = " report\tANNUAL " }));
+        var matches = _engine.Search([catalog], new() { Text = " report\tANNUAL " });
+        Assert.Equal(2, matches.Count);
+        Assert.True(matches[0].Entry.IsDirectory);
+        var result = matches[1];
         Assert.Equal(2, result.Entry.Id);
         Assert.Same(catalog, result.Catalog);
         Assert.Equal(@"C:\Fixture\REPORT annual\Annual Report.PDF", result.FullPath);
+    }
+
+    [Fact]
+    public void DirectoryNamesAreSearchableUnlessExtensionFilterIsActive()
+    {
+        var catalog = Read("Vacation Photos;folder;0;0;2\nphoto.jpg;jpg;10;1;2\nnotes.txt;txt;5;0;2\n");
+        var dirs = _engine.Search([catalog], new() { Text = "Vacation" });
+        Assert.True(Assert.Single(dirs).Entry.IsDirectory);
+        Assert.Empty(_engine.Search([catalog], new() { Text = "Vacation", Extensions = ["jpg"] }));
     }
 
     [Fact]

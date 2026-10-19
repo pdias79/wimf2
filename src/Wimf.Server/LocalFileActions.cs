@@ -15,7 +15,7 @@ public static class LocalFileActions
             throw new ArgumentException("Unknown catalog or missing path.");
 
         var catalog = snapshot[catalogIndex];
-        if (!catalog.TryGetEntryData(id, out var entry) || entry.IsDirectory)
+        if (!catalog.TryGetEntryData(id, out var entry))
             throw new ArgumentException("Unknown file record.");
 
         // A path supplied by the browser is never used as an operation target.
@@ -40,7 +40,7 @@ public static class LocalFileActions
             relative == ".")
             throw new InvalidDataException("File path is outside its catalog root.");
 
-        if (!File.Exists(absolutePath))
+        if (entry.IsDirectory ? !Directory.Exists(absolutePath) : !File.Exists(absolutePath))
             throw new FileNotFoundException("File is absent or inaccessible.", absolutePath);
         return absolutePath;
     }

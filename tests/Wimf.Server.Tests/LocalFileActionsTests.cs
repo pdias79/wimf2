@@ -39,14 +39,15 @@ public sealed class LocalFileActionsTests
     }
 
     [Fact]
-    public void ResolveRejectsDirectoryAndUnsafeCatalogNames()
+    public void ResolveAllowsExistingDirectoryAndRejectsUnsafeCatalogNames()
     {
         var root = Path.Combine(Path.GetTempPath(), "wimf-action-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             var catalog = Catalog(root, "folder;folder;0;0;2\n../escape.txt;txt;1;0;2\n");
-            Assert.Throws<ArgumentException>(() => LocalFileActions.Resolve([catalog], 0, 1, catalog.GetFullPath(1)));
+            Directory.CreateDirectory(Path.Combine(root, "folder"));
+            Assert.Equal(Path.Combine(root, "folder"), LocalFileActions.Resolve([catalog], 0, 1, catalog.GetFullPath(1)));
             Assert.Throws<InvalidDataException>(() => LocalFileActions.Resolve([catalog], 0, 2, catalog.GetFullPath(2)));
         }
         finally { Directory.Delete(root, true); }
