@@ -575,7 +575,7 @@ app.MapGet("/api/catalogs", () =>
 app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellationToken) =>
 {
     if (request.Text is null || request.Text.Length > 1024 ||
-        request.MaxResults < 0 || request.MaxResults > 1000 ||
+        request.MaxResults < 0 || request.MaxResults > 10000 ||
         request.Extensions is { Length: > 100 } ||
         request.CatalogIndices is { Length: > 1000 })
         return Results.Json(new ErrorResponse("Invalid query or result limit."),
