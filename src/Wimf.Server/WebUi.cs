@@ -75,7 +75,12 @@ public static class WebUi
     .skipped-report-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
     .skipped-report-download { display: inline-block; border-radius: 8px; color: white; font-weight: 600; text-decoration: none; cursor: pointer; }
     .skipped-report-download:hover, .skipped-report-download:focus-visible { background: #344052; }
-    .file-actions { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; white-space: nowrap; }
+    .file-actions { position: relative; display: inline-block; }
+    .file-actions > summary { list-style: none; cursor: pointer; padding: 5px 8px; border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas); border-radius: 6px; color: CanvasText; background: color-mix(in srgb, CanvasText 7%, Canvas); line-height: 1; }
+    .file-actions > summary::-webkit-details-marker { display: none; }
+    .file-actions-menu { position: absolute; z-index: 30; right: 0; top: 100%; min-width: 165px; display: grid; gap: 4px; padding: 7px; border-radius: 8px; background: Canvas; border: 1px solid GrayText; box-shadow: 0 3px 12px #0003; }
+    .file-actions:not([open]) .file-actions-menu { display: none; }
+    .file-actions-menu button { width: 100%; text-align: left; white-space: nowrap; }
     #results-table td:last-child, #results-table th:last-child { width: 1%; white-space: nowrap; }
     .name-with-icon { display: flex; align-items: center; min-width: 0; gap: 7px; }
     .file-type-icon { width: 18px; height: 18px; flex: 0 0 18px; object-fit: contain; }
@@ -128,7 +133,7 @@ public static class WebUi
     <details id="search-options-panel"><summary>Options et filtres</summary>
     <div class="options">
       <label for="extensions">Extensions <input id="extensions" placeholder="pdf, docx" aria-label="Extensions (séparées par virgules)"></label>
-      <label for="max-results">Max <input id="max-results" type="number" min="1" max="1000" value="100"></label>
+      <label for="max-results">Max <input id="max-results" type="number" min="1" max="10000" value="100"></label>
       <label for="regex"><input id="regex" type="checkbox"> Expression régulière</label>
     </div>
     <div class="options advanced" aria-label="Filtres supplémentaires">
@@ -183,7 +188,7 @@ public static class WebUi
     </div>
     <div class="table-wrap">
       <table id="results-table" hidden>
-        <thead><tr><th>Fichier</th><th>Taille</th><th>Modifié le</th><th>Catalogue</th><th>Action</th></tr></thead>
+        <thead><tr><th>Fichier</th><th>Taille</th><th>Modifié le</th><th>Catalogue</th><th aria-label="Actions"></th></tr></thead>
         <tbody id="results"></tbody>
       </table>
     </div>
@@ -1020,7 +1025,9 @@ public static class WebUi
       fallback.className = "file-type-fallback";
       fallback.textContent = hit.extension === "folder" ? "📁" : "📄";
       fallback.setAttribute("aria-hidden", "true");
-      const extension = String(hit.extension || "").replace(/^\\./, "").toLowerCase();
+      const dot = hit.name.lastIndexOf(".");
+      const extension = dot > 0 && dot < hit.name.length - 1
+        ? hit.name.slice(dot + 1).toLowerCase() : "";
       if (/^[a-z0-9]{1,16}$/.test(extension) && extension !== "folder") {
         const icon = document.createElement("img");
         icon.className = "file-type-icon";
@@ -1038,8 +1045,19 @@ public static class WebUi
       makeCell(row, dateFormatter.format(new Date(hit.modifiedAt)));
       makeCell(row, hit.catalog);
       const action = document.createElement("td");
-      const actions = document.createElement("div");
+      const actions = document.createElement("details");
       actions.className = "file-actions";
+      const menuToggle = document.createElement("summary");
+      menuToggle.textContent = "☰";
+      menuToggle.setAttribute("aria-label", "Actions pour " + hit.name);
+      actions.appendChild(menuToggle);
+      const menu = document.createElement("div");
+      menu.className = "file-actions-menu";
+      actions.appendChild(menu);
+      actions.addEventListener("mouseleave", () => { actions.open = false; });
+      actions.addEventListener("keydown", event => {
+        if (event.key === "Escape") { actions.open = false; menuToggle.focus(); }
+      });
       function actionButton(label, onClick) {
         const button = document.createElement("button");
         button.type = "button";
@@ -1047,7 +1065,8 @@ public static class WebUi
         button.textContent = label;
         button.setAttribute("aria-label", label + " : " + hit.name);
         button.addEventListener("click", onClick);
-        actions.appendChild(button);
+        button.addEventListener("click", () => { actions.open = false; });
+        menu.appendChild(button);
       }
       actionButton("Copier le chemin", async () => {
         try { await navigator.clipboard.writeText(hit.fullPath); message("Chemin copié en texte."); }
@@ -1128,8 +1147,8 @@ public static class WebUi
       catalogIndices: [...catalogSelection]
     };
     try {
-      if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 1000)
-        throw new Error("Le nombre de résultats doit être compris entre 1 et 1000.");
+      if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 10000)
+        throw new Error("Le nombre de résultats doit être compris entre 1 et 10000.");
       function parseMinSizeKo(value) {
         if (!/^\d+$/.test(value)) throw new Error("La taille minimale doit être un entier positif ou nul en Ko.");
         const kilobytes = Number(value);
