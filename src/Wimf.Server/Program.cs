@@ -786,13 +786,16 @@ app.Lifetime.ApplicationStopping.Register(() =>
 if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
+    var watcherErrorSnapshots = new Dictionary<SmbBackgroundWatcher, long>();
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         reconciliationRequired: job => smbWatchers.Any(w =>
             watchComparer.Equals(w.Root, job.Root) && w.NeedsFullScan),
         beforeFull: job =>
         {
             var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
-            return watcher is null ? 0 : IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
+            if (watcher is null) return 0;
+            watcherErrorSnapshots[watcher] = watcher.Errors;
+            return IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
         },
         afterFull: (job, boundary) =>
         {
@@ -800,7 +803,11 @@ if (options.Indexing is { Length: > 0 })
             if (watcher is not null)
             {
                 IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary);
-                watcher.MarkFullScanCompleted();
+                // Do not clear the request if a notification failure occurred
+                // while the full scan was in progress.
+                if (watcherErrorSnapshots.TryGetValue(watcher, out var errorsBefore) &&
+                    watcher.Errors == errorsBefore)
+                    watcher.MarkFullScanCompleted();
             }
         },
         incremental: async (job, token) =>
