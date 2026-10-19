@@ -840,3 +840,7 @@ Les 50 dernières indexations complètes et tentatives incrémentales sont sauve
 #### Tableau des performances d'indexation (PR #74)
 
 Le panneau « Catalogues et actualisation » utilise l'historique conservé des 50 dernières opérations pour présenter, par catalogue et par type (complet/incrémental), le nombre d'opérations, la durée moyenne des réussites, le nombre d'échecs et le total des événements incrémentaux. Un graphique à barres montre la durée des dix dernières opérations réussies (info-bulle au survol). Les statistiques sont en lecture seule et n'affectent ni les scans ni les intervalles du JSON.
+
+#### Diagnostics des indexations (PR #75)
+
+L'historique dans « Catalogues et actualisation » peut être filtré par catalogue et par type de scan. Chaque groupe affiche la durée de la dernière opération, la moyenne des opérations réussies et le taux de réussite. Une actualisation est signalée comme anormalement longue lorsque sa durée dépasse deux fois la moyenne des précédentes actualisations réussies du même groupe, sous réserve d'un historique de référence disponible. L'ensemble reste en lecture seule et n'influence pas la planification JSON.
