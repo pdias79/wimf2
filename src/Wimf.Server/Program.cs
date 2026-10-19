@@ -773,7 +773,13 @@ if (options.Indexing is { Length: > 0 })
 
 // Monitoring is opt-in and observational: indexing continues to use full scans.
 var smbWatchers = new List<SmbBackgroundWatcher>();
-foreach (var root in options.WatchRoots ?? [])
+// Watch every indexed root, including local Windows disks. Explicit watchRoots
+// are retained for roots without a scheduled indexing job.
+var watchComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+var watchedRoots = (options.WatchRoots ?? [])
+    .Concat(options.Indexing?.Select(job => job.Root) ?? [])
+    .Distinct(watchComparer);
+foreach (var root in watchedRoots)
 {
     try
     {
