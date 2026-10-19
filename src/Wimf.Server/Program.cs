@@ -839,11 +839,19 @@ app.MapGet("/api/smb-pending", () =>
     var lines = smbWatchers.Select(w =>
     {
         var job = options.Indexing?.FirstOrDefault(j => watchComparer.Equals(j.Root, w.Root));
-        var pending = job is null ? null : IncrementalJournalPublisher.Pending(job.Output, w.JournalPath);
-        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
-            (pending?.Events ?? w.Observed).ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
-            (pending?.Directories ?? w.AffectedDirectories.Length).ToString(System.Globalization.CultureInfo.InvariantCulture) +
-            "\t" + (w.WatchFailed ? "error" : "active");
+        try
+        {
+            var pending = job is null ? null : IncrementalJournalPublisher.Pending(job.Output, w.JournalPath);
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
+                (pending?.Events ?? w.Observed).ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
+                (pending?.Directories ?? w.AffectedDirectories.Length).ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                "\t" + (w.WatchFailed ? "error" : "active");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"[SMB-PENDING-ERROR] {w.Root}: {ex.Message}");
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t0\t0\terror";
+        }
     })
         .Concat(unavailableWatchRoots.Select(root =>
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(root)) + "\t0\t0\terror"));
