@@ -764,6 +764,13 @@ Chaque entrée `indexing` accepte exactement une unité parmi `fullScanIntervalM
 
 **PR #65 (en validation)** : l'exécution incrémentale utilise maintenant les événements journalisés et le planificateur dispose de deux cadences indépendantes. Le nombre d'événements en attente est calculé après le curseur de journal acquitté. Un scan complet manuel demeure un scan complet. Les notifications restent indicatives : une interruption de surveillance peut produire des événements manquants, corrigés par les scans complets périodiques, sans déclenchement immédiat. Un partage ne supportant pas `FileSystemWatcher` continue d'utiliser les scans complets. La sortie du catalogue doit se trouver hors de la racine surveillée pour bénéficier de la publication incrémentale.
 
+
+#### Réconciliation prioritaire après interruption de surveillance (PR #66, brouillon)
+
+Un watcher qui vient de démarrer ou qui a perdu des notifications demande désormais au planificateur un **scan complet prioritaire**, indépendamment de la cadence normale `fullScanInterval*`. Le planificateur conserve la sérialisation avec les scans manuels. Si un scan de réconciliation échoue alors que la racine existe, la nouvelle tentative est différée de cinq minutes (une minute lorsque la racine est indisponible) afin d'éviter une boucle serrée. Le catalogue précédent reste conservé grâce à la publication sécurisée.
+
+Après publication complète réussie, le besoin de réconciliation est acquitté uniquement si le watcher n'a signalé aucune nouvelle erreur pendant le scan. L'actualisation incrémentale est suspendue tant que le besoin de réconciliation subsiste ; un watcher définitivement en échec reste exclu des mises à jour incrémentales et les scans complets périodiques demeurent indispensables. Après un redémarrage, le watcher exige de nouveau une réconciliation : aucune continuité des notifications n'est présumée à travers l'arrêt du processus.
+
 #### Essai fonctionnel isolé sous Windows (PR #65)
 
 Depuis PowerShell, dans le dépôt, créer un jeu de données provisoire sous `$env:TEMP` :
