@@ -18,8 +18,11 @@ public static class WebUi
     body { margin: 0; background: Canvas; color: CanvasText; }
     main { max-width: 1600px; margin: auto; padding: 28px 22px 48px; }
     header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 24px; }
-    .header-controls { transform: translateY(-10px); }
     h1 { margin: 0; font-size: 1.75rem; }
+    .wimf-brand { display: inline-flex; align-items: baseline; gap: 0; }
+    .wimf-meaning { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; vertical-align: baseline; transition: max-width .45s ease, opacity .3s ease, margin .45s ease; font-size: .56em; font-weight: 400; }
+    .wimf-brand:hover .wimf-meaning, .wimf-brand:focus-within .wimf-meaning { max-width: 260px; opacity: 1; margin-left: 9px; }
+    @media (prefers-reduced-motion: reduce) { .wimf-meaning, #toast { transition: none !important; } }
     .sub { color: GrayText; margin: 6px 0 22px; }
     .panel { border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas);
              border-radius: 12px; padding: 20px; margin-bottom: 18px; }
@@ -36,15 +39,19 @@ public static class WebUi
     .options input[type=date] { width: 148px; }
     #search-options-panel:not([open]) { border: none; }
     #toast { position: fixed; bottom: 20px; right: 20px; max-width: min(440px, calc(100vw - 40px)); padding: 12px 16px; border: 1px solid GrayText; border-radius: 8px; background: Canvas; color: CanvasText; box-shadow: 0 3px 12px #0003; z-index: 20; }
+    #toast { transition: opacity .45s ease, transform .45s ease, visibility .45s ease; }
+    #toast.toast-fading { opacity: 0; transform: translateY(8px); visibility: hidden; }
     #toast.error { color: #ba3636; }
     #toast-close { margin-left: 12px; }
     .advanced { padding-top: 12px; }
+    #search-options-panel { margin-top: 14px; margin-bottom: 14px; }
     .advanced label { font-size: .9rem; }
     .status { font-size: .9rem; color: GrayText; }
     .status.error { color: #ba3636; }
     .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .catalog-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
     .table-wrap { overflow-x: auto; }
+    #results-table th:nth-child(2), #results-table td:nth-child(2) { min-width: 105px; white-space: nowrap; }
     table { width: 100%; border-collapse: collapse; font-size: .92rem; }
     th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, Canvas); }
     td.name { font-weight: 600; width: 100%; min-width: 0; max-width: 0; }
@@ -96,7 +103,7 @@ public static class WebUi
 </head>
 <body>
 <main>
-  <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
+  <header><h1><span class="wimf-brand" tabindex="0">Wimf<span class="wimf-meaning">Where is my file</span></span> <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
   <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
     <div class="bar"><h2>Catalogues et actualisation</h2><div class="catalog-buttons"><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
@@ -194,8 +201,16 @@ public static class WebUi
   const toast = byId("toast");
   const toastText = byId("toast-text");
   let toastTimer;
+  let toastFadeTimer;
+  function dismissToast(immediate = false) {
+    clearTimeout(toastTimer);
+    clearTimeout(toastFadeTimer);
+    if (immediate) { toast.hidden = true; toast.classList.remove("toast-fading"); return; }
+    toast.classList.add("toast-fading");
+    toastFadeTimer = setTimeout(() => { toast.hidden = true; toast.classList.remove("toast-fading"); }, 450);
+  }
   let fileActionsEnabled = false;
-  byId("toast-close").addEventListener("click", () => { clearTimeout(toastTimer); toast.hidden = true; });
+  byId("toast-close").addEventListener("click", () => dismissToast());
   const tbody = byId("results");
   const table = byId("results-table");
   const empty = byId("empty");
@@ -918,12 +933,12 @@ public static class WebUi
   });
 
   function message(text, isError = false, inProgress = false) {
-    clearTimeout(toastTimer);
+    dismissToast(true);
     toastText.textContent = text;
     toast.classList.toggle("error", isError);
     toast.hidden = !text;
     if (!isError && !inProgress && text)
-      toastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
+      toastTimer = setTimeout(() => dismissToast(), 4000);
   }
   function makeCell(row, value, className = "") {
     const cell = document.createElement("td");
@@ -1119,7 +1134,7 @@ public static class WebUi
       currentHits = Array.isArray(data.results) ? data.results : [];
       currentPage = 0;
       displayResults();
-      message(data.count + " résultat(s) affiché(s).");
+      dismissToast();
       addToHistory(submittedSearch);
     } catch (error) {
       if (activeController === controller && error.name !== "AbortError") {
