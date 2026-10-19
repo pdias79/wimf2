@@ -42,8 +42,17 @@ public static class JournalIncrementalRefresh
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var parts = line.TrimEnd('\r').Split('\t');
-                if (parts[0] != "E") continue;
-                if (parts.Length != 3) throw new InvalidDataException("Invalid journal record.");
+                if (parts[0] is "S" or "D" or "K")
+                {
+                    // Validate structural records as well: silently ignoring malformed
+                    // lines could acknowledge journal corruption permanently.
+                    var expected = parts[0] == "K" ? 4 : 3;
+                    if (parts.Length != expected)
+                        throw new InvalidDataException("Invalid journal metadata record.");
+                    continue;
+                }
+                if (parts[0] != "E" || parts.Length != 3)
+                    throw new InvalidDataException("Unknown or invalid journal record.");
                 string path;
                 try { path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
                     new UTF8Encoding(false, true).GetString(Convert.FromBase64String(parts[2])))); }
