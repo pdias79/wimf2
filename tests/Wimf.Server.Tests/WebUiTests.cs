@@ -25,6 +25,19 @@ public class WebUiTests
     }
 
     [Fact]
+    public void BrandExpansionToastFadeAndSizeColumnArePresent()
+    {
+        Assert.Contains("Where is my file", WebUi.Html);
+        Assert.Contains(".wimf-brand:hover .wimf-meaning", WebUi.Html);
+        Assert.Contains("toast-fading", WebUi.Html);
+        Assert.Contains("dismissToast();", WebUi.Html);
+        Assert.Contains("#results-table th:nth-child(2)", WebUi.Html);
+        Assert.Contains("#search-options-panel { margin-top: 14px;", WebUi.Html);
+        Assert.DoesNotContain("message(data.count +", WebUi.Html);
+        Assert.DoesNotContain("transform: translateY(-10px)", WebUi.Html);
+    }
+
+    [Fact]
     public void CompactSearchAndBulkIndexControlsArePresent()
     {
         Assert.Contains("id=\"search-options-panel\"", WebUi.Html);
