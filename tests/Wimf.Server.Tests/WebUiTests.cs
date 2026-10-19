@@ -17,6 +17,18 @@ public class WebUiTests
     }
 
     [Fact]
+    public void FileActionsRespectServerCapabilityAndFolderOpensWithoutConfirmation()
+    {
+        Assert.Contains("health.fileActionsEnabled === true", WebUi.Html);
+        Assert.Contains("if (fileActionsEnabled)", WebUi.Html);
+        Assert.DoesNotContain("confirm(buttonLabel", WebUi.Html);
+        Assert.Contains("id=\"toast\"", WebUi.Html);
+        Assert.DoesNotContain("id=\"health\"", WebUi.Html);
+        Assert.DoesNotContain("Rechercher des fichiers dans les catalogues locaux", WebUi.Html);
+        Assert.DoesNotContain("Prêt.</p>", WebUi.Html);
+    }
+
+    [Fact]
     public void PageHasAccessibleSearchAndCatalogDisplay()
     {
         Assert.Contains("lang=\"fr\"", WebUi.Html);
