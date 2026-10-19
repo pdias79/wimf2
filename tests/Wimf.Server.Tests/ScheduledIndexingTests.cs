@@ -392,7 +392,9 @@ public sealed class ScheduledIndexingTests
                 [new IndexingJob(files, output, "Skipped", [], TimeSpan.FromDays(1))]);
             await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
             var status = Assert.Single(scheduler.Status);
+            // Unsupported legacy names are reported but do not prevent publication.
             Assert.Equal("completed", status.State);
+            Assert.True(File.Exists(output));
             Assert.Equal(25, status.SkippedEntries);
             Assert.Equal(20, status.SkippedDetails!.Length);
 

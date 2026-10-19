@@ -413,7 +413,6 @@ public static class WebUi
           start.disabled = true;
           indexingError.textContent = "";
           try {
-            if (!confirm("Lancer maintenant l’indexation complète de " + catalog.name + " ?")) return;
             const response = await fetch("/api/indexing/" + catalog.indexingJobIndex + "/start", {
               method: "POST", headers: { "Content-Type": "application/json" }
             });

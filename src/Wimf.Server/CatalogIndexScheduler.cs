@@ -110,20 +110,21 @@ public sealed class CatalogIndexScheduler
                 if (jobIndex >= 0)
                     Volatile.Write(ref _statuses[jobIndex], Volatile.Read(ref _statuses[jobIndex]) with { ScanMetrics = m });
             };
-            if (File.Exists(job.Output))
+            // Scheduled publications remain full scans until SMB continuity is proven.
+            // Stage and verify before replacing a live catalog.
+            try
             {
-                var summary = LegacyCatalogUpdater.Update(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
-                entryCount = summary.Total;
+                entryCount = ScheduledCatalogPublication.Refresh(job.Root, job.Output, job.Name,
+                    cancellationToken: token, onSkipped: skipped, exclusions: job.Exclude,
+                    onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch,
+                    onDirectoriesEnumerated: enumerated);
             }
-            else
+            finally
             {
-                var count = LegacyCatalogWriter.Build(job.Root, job.Output, job.Name,
-                    cancellationToken: token, onSkipped: skipped,
-                    excludePaths: job.Exclude, onProgress: progress,
-                    onMetrics: metrics, directoryPrefetch: prefetch, onDirectoriesEnumerated: enumerated);
-                entryCount = count;
+                // Keep the complete skipped report even when publication is refused.
+                report.WriteLine();
+                report.WriteLine("Total ignore : " +
+                    (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
             }
             bench.Stop();
             if (scanResult is not null)
@@ -134,8 +135,6 @@ public sealed class CatalogIndexScheduler
                     $"tri={scanResult.DirectorySortMilliseconds} ms | metadonnees={scanResult.MetadataMilliseconds} ms | " +
                     $"autres/ecriture={(scanResult.OutputMilliseconds is long outputMs ? $"{outputMs} ms" : "n/a")} | ignores=" +
                     (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
-            report.WriteLine();
-            report.WriteLine("Total ignore : " + (jobIndex < 0 ? 0 : Volatile.Read(ref _statuses[jobIndex]).SkippedEntries));
         }, token));
     }
 
@@ -143,7 +142,7 @@ public sealed class CatalogIndexScheduler
     {
         if (index < 0 || index >= _jobs.Length) return null;
         var status = Volatile.Read(ref _statuses[index]);
-        if (status.State != "completed" || status.SkippedEntries == 0) return null;
+        if ((status.State != "completed" && status.State != "failed") || status.SkippedEntries == 0) return null;
         var path = _jobs[index].Output + ".skipped-report.txt";
         try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
         catch (FileNotFoundException) { return null; }

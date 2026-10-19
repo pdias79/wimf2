@@ -736,3 +736,20 @@ dotnet run --project src/Wimf.Server -c Release --no-build -- --incremental-safe
 ```
 
 Le mode `candidate-validated` est utilisé uniquement si la projection correspond à la référence complète. Si des entrées diffèrent, le mode `full-fallback` génère automatiquement un catalogue complet dans le nouveau fichier de sortie. Le fichier de sortie **ne doit pas déjà exister** et n'est jamais publié à la place du catalogue initial. Le scan complet reste requis pour valider le candidat ; cette version privilégie la sûreté, sans prétendre accélérer le temps total d'actualisation. Les modifications concurrentes pendant les deux scans peuvent encore affecter la cohérence ; la gestion transactionnelle de ces cas reste un chantier.
+
+
+#### Publication sécurisée des indexations planifiées (PR #62)
+
+Les actualisations du planificateur (manuelles et planifiées) construisent désormais un **scan complet dans un fichier de staging à côté du catalogue cible**. Le fichier est relu et son nombre d'entrées vérifié avant un renommage de remplacement sur le même volume. En cas d'annulation, d'erreur ou d'entrées ignorées, le catalogue précédent est préservé et le staging supprimé. Les notifications SMB restent diagnostiques : aucune publication incrémentale sans garanties de continuité, et aucun gain de temps de scan complet n'est revendiqué à ce stade.
+
+#### Fichiers ignorés et sécurité des indexations planifiées
+
+Les noms contenant `;` ou un retour à la ligne ne sont pas représentables dans le format historique WIMF. Ils sont consignés dans le rapport `.skipped-report.txt`, mais ne bloquent plus la publication des entrées représentables (comportement compatible avec les scans historiques). En revanche, une erreur d'accès à un dossier ou fichier (`Skipped inaccessible ...`) bloque la publication et préserve le catalogue précédent. Le rapport reste accessible dans le panneau même après un échec. Pour déterminer pourquoi une indexation a été rejetée, consulter ce rapport associé au catalogue.
+
+
+#### Accès refusés sur les disques système
+Lorsqu'un catalogue précédent existe, les chemins devenus inaccessibles sont comparés à ses entrées. Un chemin protégé qui n'était pas présent dans l'ancien catalogue peut rester ignoré avec un diagnostic, comme lors des anciens scans. Si le chemin était indexé (ou possédait des descendants indexés), la publication est refusée pour éviter la disparition artificielle de ces entrées. Une première indexation avec erreurs d'accès reste refusée. Consulter le fichier `.skipped-report.txt` du catalogue pour identifier les chemins en cause.
+
+#### Politique d'accès lors des scans planifiés
+
+Les fichiers et sous-répertoires inaccessibles sont ignorés et **retirés du nouveau catalogue**, même s'ils figuraient auparavant. Les chemins concernés restent listés dans le rapport des entrées ignorées. Pour éviter une publication après une déconnexion du partage, WIMF2 vérifie l'accès effectif à la **racine** (énumération de premier niveau) avant le scan, après le scan et juste avant publication. Si cette vérification échoue, le catalogue précédent est préservé. Cette vérification de la racine ne garantit pas de détecter toute indisponibilité intermittente survenue entre deux vérifications.
