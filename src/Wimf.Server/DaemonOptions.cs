@@ -138,7 +138,7 @@ public sealed record DaemonOptions(
                 var workers = job.Workers ?? 1;
                 if (workers is < 1 or > 50)
                     throw new ArgumentException("indexing.workers must be between 1 and 50.");
-                indexing.Add(new IndexingJob(root, output, job.Name, job.Exclude,
+                indexing.Add(new IndexingJob(root, output, job.Name, exclusions,
                     fullInterval, workers, incremental));
             }
         }
