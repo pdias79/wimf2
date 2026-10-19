@@ -135,10 +135,10 @@ public class IncrementalJournalPublisherTests
             Assert.Throws<InvalidDataException>(() =>
                 IncrementalJournalPublisher.Publish(root, catalog, journal));
             Assert.Equal(original, File.ReadAllBytes(catalog));
-            File.WriteAllText(journal, "S\\tstart\\t2026-10-19T12:00:00Z\\n" +
-                "D\\t" + Convert.ToBase64String(Encoding.UTF8.GetBytes(root)) + "\\n" +
-                "K\\tcreated\\tfile\\t" +
-                Convert.ToBase64String(Encoding.UTF8.GetBytes(Path.Combine(root, "example.txt"))) + "\\n");
+            File.WriteAllText(journal, "S\tstart\t2026-10-19T12:00:00Z\n" +
+                "D\t" + Convert.ToBase64String(Encoding.UTF8.GetBytes(root)) + "\n" +
+                "K\tcreated\tfile\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(Path.Combine(root, "example.txt"))) + "\n");
             IncrementalJournalPublisher.Publish(root, catalog, journal);
             Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
         }
