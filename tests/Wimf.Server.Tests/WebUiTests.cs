@@ -54,6 +54,15 @@ public class WebUiTests
     }
 
     [Fact]
+    public void DirectoryResultsAndLargePageAreVisible()
+    {
+        Assert.Contains("<option value=\"500\">500</option>", WebUi.Html);
+        Assert.Contains("Ouvrir le dossier", WebUi.Html);
+        Assert.Contains("#saved-search-panel { transform: translateY(-.5em); }", WebUi.Html);
+        Assert.Contains("isDirectory ? \"Dossier\" : formatSize(hit.size)", WebUi.Html);
+    }
+
+    [Fact]
     public void CompactSearchAndBulkIndexControlsArePresent()
     {
         Assert.Contains("id=\"search-options-panel\"", WebUi.Html);
