@@ -36,10 +36,23 @@ public sealed class CatalogIndexScheduler
     private readonly CancellationTokenSource?[] _cancellations;
     private readonly object _historyLock = new();
     private readonly List<IndexingRunHistoryEntry> _history = [];
+    private readonly IndexingHistoryStore? _historyStore;
 
     public IndexingRunHistoryEntry[] History
     {
         get { lock (_historyLock) return _history.ToArray(); }
+    }
+
+    // Best effort: a history I/O error must never stop an indexing operation.
+    // Call only while holding _historyLock.
+    private void PersistHistory()
+    {
+        if (_historyStore is null) return;
+        try { _historyStore.Save(_history); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[INDEXING-HISTORY] Save failed: {ex.Message}");
+        }
     }
 
     private void RecordRun(int i, string state, string? error = null)
@@ -52,6 +65,7 @@ public sealed class CatalogIndexScheduler
                 status.StartedAt ?? finished, finished, status.ScannedEntries,
                 status.SkippedEntries, error));
             if (_history.Count > 50) _history.RemoveRange(50, _history.Count - 50);
+            PersistHistory();
         }
     }
 
@@ -61,9 +75,12 @@ public sealed class CatalogIndexScheduler
         Func<IndexingJob, CancellationToken, Task<bool>>? incremental = null,
         Func<IndexingJob, long>? beforeFull = null,
         Action<IndexingJob, long>? afterFull = null,
-        Func<IndexingJob, (int Events, int Distinct, int Paths)>? incrementalMetrics = null)
+        Func<IndexingJob, (int Events, int Distinct, int Paths)>? incrementalMetrics = null,
+        IndexingHistoryStore? historyStore = null)
     {
         _jobs = jobs.ToArray();
+        _historyStore = historyStore;
+        if (historyStore is not null) _history.AddRange(historyStore.Load());
         _incremental = incremental;
         _incrementalMetrics = incrementalMetrics;
         _beforeFull = beforeFull;
@@ -394,6 +411,7 @@ public sealed class CatalogIndexScheduler
                             state, started, DateTimeOffset.UtcNow, 0, 0, error,
                             "incremental", metrics?.Events ?? 0, metrics?.Distinct ?? 0, metrics?.Paths ?? 0));
                         if (_history.Count > 50) _history.RemoveRange(50, _history.Count - 50);
+                        PersistHistory();
                     }
                 }
             }
