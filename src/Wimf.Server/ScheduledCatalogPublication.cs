@@ -20,15 +20,44 @@ public static class ScheduledCatalogPublication
         Directory.CreateDirectory(directory);
         var suffix = target.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? ".txt.gz" : ".txt";
         var staging = Path.Combine(directory, ".wimf-staging-" + Guid.NewGuid().ToString("N") + suffix);
-        var inaccessible = 0;
+        var inaccessiblePaths = new List<string>();
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         try
         {
             var count = LegacyCatalogWriter.Build(root, staging, name, cancellationToken,
-                message => { if (message.StartsWith("Skipped inaccessible ", StringComparison.Ordinal)) inaccessible++; onSkipped?.Invoke(message); }, exclusions, onProgress,
+                message =>
+                {
+                    if (message.StartsWith("Skipped inaccessible ", StringComparison.Ordinal))
+                    {
+                        var colon = message.IndexOf(": ", StringComparison.Ordinal);
+                        var detail = colon >= 0 ? message[(colon + 2)..] : "";
+                        var reason = detail.LastIndexOf(" (", StringComparison.Ordinal);
+                        if (reason >= 0) detail = detail[..reason];
+                        inaccessiblePaths.Add(detail);
+                    }
+                    onSkipped?.Invoke(message);
+                }, exclusions, onProgress,
                 onMetrics, directoryPrefetch, onDirectoriesEnumerated);
             cancellationToken.ThrowIfCancellationRequested();
-            if (inaccessible != 0)
-                throw new InvalidDataException($"Full reconciliation encountered {inaccessible} inaccessible entries; existing catalog preserved.");
+            if (inaccessiblePaths.Count != 0)
+            {
+                // A previously indexed file or subtree must never disappear only
+                // because access was denied during this scan.
+                if (!File.Exists(target))
+                    throw new InvalidDataException("Initial scan encountered inaccessible entries; catalog not published.");
+                var old = LegacyCatalogReader.ReadFile(target);
+                if (old.Diagnostics.Count != 0 ||
+                    !Path.TrimEndingDirectorySeparator(Path.GetFullPath(old.Header.RootPath))
+                        .Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)), comparison))
+                    throw new InvalidDataException("Previous catalog cannot validate inaccessible paths.");
+                var priorPaths = old.EnumerateEntries()
+                    .Select(entry => old.GetFullPath(entry.Id)).ToArray();
+                if (inaccessiblePaths.Any(path => string.IsNullOrWhiteSpace(path) ||
+                    priorPaths.Any(previous => previous.Equals(path, comparison) ||
+                        previous.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) +
+                            Path.DirectorySeparatorChar, comparison))))
+                    throw new InvalidDataException("Previously indexed entries became inaccessible; existing catalog preserved.");
+            }
             var catalog = LegacyCatalogReader.ReadFile(staging);
             if (catalog.Diagnostics.Count != 0 || catalog.EnumerateEntries().Count() != count)
                 throw new InvalidDataException("Staged catalog validation failed; existing catalog preserved.");
