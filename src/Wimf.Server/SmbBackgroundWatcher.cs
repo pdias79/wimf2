@@ -10,7 +10,7 @@ namespace Wimf.Server;
 public sealed class SmbBackgroundWatcher : IDisposable
 {
     private const int MaxDirectories = 2000;
-    private readonly FileSystemWatcher _watcher;
+    private FileSystemWatcher _watcher;
     private readonly string _root;
     private readonly string _journal;
     private readonly object _sync = new();
@@ -21,7 +21,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     private long _errors;
     private bool _needsFullScan = true; // No durable proof of uninterrupted coverage.
     private bool _disposed;
-    private bool _watchFailed;
+    private volatile bool _watchFailed;
     private readonly string _stateDirectory;
 
     public static string GetJournalPath(string root, string stateDirectory)
@@ -56,18 +56,24 @@ public sealed class SmbBackgroundWatcher : IDisposable
         }
         _stream = new FileStream(_journal, FileMode.Append, FileAccess.Write, FileShare.Read,
             4096, FileOptions.WriteThrough);
-        _watcher = new FileSystemWatcher(_root)
+        _watcher = CreateWatcher();
+    }
+
+    private FileSystemWatcher CreateWatcher()
+    {
+        var watcher = new FileSystemWatcher(_root)
         {
             IncludeSubdirectories = true,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
                            NotifyFilters.LastWrite | NotifyFilters.Size,
             InternalBufferSize = 64 * 1024
         };
-        _watcher.Created += OnChange;
-        _watcher.Changed += OnChange;
-        _watcher.Deleted += OnChange;
-        _watcher.Renamed += OnRename;
-        _watcher.Error += OnError;
+        watcher.Created += OnChange;
+        watcher.Changed += OnChange;
+        watcher.Deleted += OnChange;
+        watcher.Renamed += OnRename;
+        watcher.Error += OnError;
+        return watcher;
     }
 
     public string Root => _root;
@@ -106,6 +112,36 @@ public sealed class SmbBackgroundWatcher : IDisposable
         Marker("start");
         _watcher.EnableRaisingEvents = true;
         Console.WriteLine($"[SMB-WATCH] started | {_root} | persisted hints; full rescan required");
+    }
+
+    /// <summary>Restart a failed watcher without modifying journal cursor or scan schedules.</summary>
+    public bool TryRecover()
+    {
+        lock (_sync)
+        {
+            if (_disposed || !_watchFailed) return false;
+            if (!Directory.Exists(_root)) return false;
+            FileSystemWatcher? replacement = null;
+            try
+            {
+                replacement = CreateWatcher();
+                replacement.EnableRaisingEvents = true;
+                var previous = _watcher;
+                _watcher = replacement;
+                _watchFailed = false;
+                previous.Dispose();
+                Marker("recovered");
+                Console.WriteLine($"[SMB-WATCH] recovered | {_root}");
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                replacement?.Dispose();
+                Interlocked.Increment(ref _errors);
+                Console.Error.WriteLine($"[SMB-WATCH-ERROR] Retry {_root}: {ex.Message}");
+                return false;
+            }
+        }
     }
 
     private void AddDirectory(string path)
