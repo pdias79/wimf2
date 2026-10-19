@@ -79,7 +79,7 @@ public static class WebUi
     .file-actions { position: relative; display: inline-block; }
     .file-actions > summary { list-style: none; cursor: pointer; padding: 5px 8px; border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas); border-radius: 6px; color: CanvasText; background: color-mix(in srgb, CanvasText 7%, Canvas); line-height: 1; }
     .file-actions > summary::-webkit-details-marker { display: none; }
-    .file-actions-menu { position: absolute; z-index: 30; right: 0; top: 100%; min-width: 165px; display: grid; gap: 4px; padding: 7px; border-radius: 8px; background: Canvas; border: 1px solid GrayText; box-shadow: 0 3px 12px #0003; }
+    .file-actions-menu { position: fixed; z-index: 1000; min-width: 165px; display: grid; gap: 4px; padding: 7px; border-radius: 8px; background: Canvas; border: 1px solid GrayText; box-shadow: 0 3px 12px #0003; }
     .file-actions:not([open]) .file-actions-menu { display: none; }
     .file-actions-menu button { width: 100%; text-align: left; white-space: nowrap; }
     #results-table td:last-child, #results-table th:last-child { width: 1%; white-space: nowrap; }
@@ -134,7 +134,7 @@ public static class WebUi
     <details id="search-options-panel"><summary>Options et filtres</summary>
     <div class="options">
       <label for="extensions">Extensions <input id="extensions" placeholder="pdf, docx" aria-label="Extensions (séparées par virgules)"></label>
-      <label for="max-results">Max <input id="max-results" type="number" min="1" max="10000" value="100"></label>
+      <label for="max-results">Max <input id="max-results" type="number" min="1" max="10000" value="1000"></label>
       <label for="regex"><input id="regex" type="checkbox"> Expression régulière</label>
     </div>
     <div class="options advanced" aria-label="Filtres supplémentaires">
@@ -178,12 +178,14 @@ public static class WebUi
         <option value="size-desc">Taille décroissante</option>
         <option value="date-desc">Modification récente</option>
         <option value="date-asc">Modification ancienne</option>
+        <option value="extension-asc">Extension A → Z (dossiers en premier)</option>
+        <option value="extension-desc">Extension Z → A (dossiers en dernier)</option>
       </select>
       <label for="page-size">Par page :</label>
       <select id="page-size" aria-label="Résultats par page">
         <option value="25">25</option>
-        <option value="50" selected>50</option>
-        <option value="100">100</option>
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
         <option value="500">500</option>
       </select>
       <button id="export-csv" type="button" class="copy" disabled>Exporter CSV</button>
@@ -828,6 +830,7 @@ public static class WebUi
     byId("regex").checked = Boolean(entry.regex);
     byId("extensions").value = entry.extensions.join(", ");
     byId("max-results").value = entry.maxResults;
+    savePreference("maxResults", Number(entry.maxResults));
     byId("min-size").value = entry.minSizeKo || "";
     byId("modified-from").value = entry.modifiedFrom || "";
     byId("modified-to").value = entry.modifiedTo || "";
@@ -989,6 +992,18 @@ public static class WebUi
       const second = b.hit;
       let order = 0;
       switch (mode) {
+        case "extension-asc":
+          order = first.extension === "folder" ? (second.extension === "folder" ? 0 : -1)
+            : second.extension === "folder" ? 1 : nameOrder.compare(
+                first.name.slice(first.name.lastIndexOf(".") + 1).toLowerCase(),
+                second.name.slice(second.name.lastIndexOf(".") + 1).toLowerCase());
+          break;
+        case "extension-desc":
+          order = first.extension === "folder" ? (second.extension === "folder" ? 0 : 1)
+            : second.extension === "folder" ? -1 : nameOrder.compare(
+                second.name.slice(second.name.lastIndexOf(".") + 1).toLowerCase(),
+                first.name.slice(first.name.lastIndexOf(".") + 1).toLowerCase());
+          break;
         case "name-asc": order = nameOrder.compare(first.name, second.name); break;
         case "name-desc": order = nameOrder.compare(second.name, first.name); break;
         case "size-asc": order = first.size === second.size ? 0 : first.size < second.size ? -1 : 1; break;
@@ -1057,6 +1072,17 @@ public static class WebUi
       const menu = document.createElement("div");
       menu.className = "file-actions-menu";
       actions.appendChild(menu);
+      actions.addEventListener("toggle", () => {
+        if (!actions.open) return;
+        const anchor = menuToggle.getBoundingClientRect();
+        const height = menu.offsetHeight;
+        const width = menu.offsetWidth;
+        const spaceBelow = window.innerHeight - anchor.bottom;
+        const top = spaceBelow < height + 8 && anchor.top > spaceBelow
+          ? anchor.top - height : anchor.bottom;
+        menu.style.top = Math.max(4, Math.min(top, window.innerHeight - height - 4)) + "px";
+        menu.style.left = Math.max(4, Math.min(anchor.right - width, window.innerWidth - width - 4)) + "px";
+      });
       actions.addEventListener("mouseleave", () => { actions.open = false; });
       actions.addEventListener("keydown", event => {
         if (event.key === "Escape") { actions.open = false; menuToggle.focus(); }
@@ -1106,7 +1132,27 @@ public static class WebUi
   }
 
   sortControl.addEventListener("change", () => { currentPage = 0; displayResults(); });
-  pageSizeControl.addEventListener("change", () => { currentPage = 0; displayResults(); });
+  const maxResultsControl = byId("max-results");
+  const readPreference = (key, valid, fallback) => {
+    try {
+      const stored = Number(localStorage.getItem("wimf2.preferences." + key));
+      return valid(stored) ? stored : fallback;
+    } catch { return fallback; }
+  };
+  const savePreference = (key, value) => {
+    try { localStorage.setItem("wimf2.preferences." + key, String(value)); } catch { /* Private mode */ }
+  };
+  maxResultsControl.value = readPreference("maxResults", n => Number.isInteger(n) && n >= 1 && n <= 10000, 1000);
+  pageSizeControl.value = String(readPreference("pageSize", n => [25, 50, 100, 500].includes(n), 100));
+  maxResultsControl.addEventListener("change", () => {
+    const value = Number(maxResultsControl.value);
+    if (Number.isInteger(value) && value >= 1 && value <= 10000) savePreference("maxResults", value);
+  });
+  pageSizeControl.addEventListener("change", () => {
+    savePreference("pageSize", Number(pageSizeControl.value));
+    currentPage = 0;
+    displayResults();
+  });
   previousButton.addEventListener("click", () => { if (currentPage > 0) { currentPage--; displayResults(); } });
   nextButton.addEventListener("click", () => { if ((currentPage + 1) * Number(pageSizeControl.value) < currentHits.length) { currentPage++; displayResults(); } });
 
