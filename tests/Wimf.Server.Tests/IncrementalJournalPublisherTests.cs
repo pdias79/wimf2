@@ -85,9 +85,9 @@ public class IncrementalJournalPublisherTests
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(first)) + "\n";
             // A write interrupted before the terminating LF must not advance the cursor.
             File.WriteAllText(journal, eventRecord[..^1]);
-            Assert.Throws<InvalidDataException>(() =>
-                IncrementalJournalPublisher.Publish(root, catalog, journal));
+            Assert.False(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             Assert.Equal(originalBytes, File.ReadAllBytes(catalog));
+            Assert.Equal(0, IncrementalJournalPublisher.SnapshotLength(journal));
             File.AppendAllText(journal, "\n");
             Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             Assert.Single(LegacyCatalogReader.ReadFile(catalog).EnumerateEntries());
