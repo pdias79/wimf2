@@ -119,4 +119,30 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(temp, recursive: true); }
     }
 
+    [Fact]
+    public void MalformedMetadataMustNotAdvanceAcknowledgement()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-bad-event-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "catalog.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var original = File.ReadAllBytes(catalog);
+            var journal = Path.Combine(temp, "events");
+            File.WriteAllText(journal, "D\\t\\n");
+            Assert.Throws<InvalidDataException>(() =>
+                IncrementalJournalPublisher.Publish(root, catalog, journal));
+            Assert.Equal(original, File.ReadAllBytes(catalog));
+            File.WriteAllText(journal, "S\\tstart\\t2026-10-19T12:00:00Z\\n" +
+                "D\\t" + Convert.ToBase64String(Encoding.UTF8.GetBytes(root)) + "\\n" +
+                "K\\tcreated\\tfile\\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(Path.Combine(root, "example.txt"))) + "\\n");
+            IncrementalJournalPublisher.Publish(root, catalog, journal);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+        }
+        finally { Directory.Delete(temp, true); }
+    }
+
 }
