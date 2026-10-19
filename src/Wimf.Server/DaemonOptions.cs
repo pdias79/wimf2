@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Wimf.Server;
 
-/// <summary>Persistent startup settings. File actions deliberately remain a CLI-only opt-in.</summary>
+/// <summary>Persistent startup settings. File actions are enabled by default and may be disabled via CLI.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class DaemonConfiguration
 {
@@ -143,7 +143,7 @@ public sealed record DaemonOptions(
             }
         }
 
-        var fileActions = false;
+        var fileActions = true;
         var cliCatalogs = new List<string>();
         var cliSources = new List<string>();
         string? cliCache = null;
@@ -157,6 +157,9 @@ public sealed record DaemonOptions(
                     break;
                 case "--enable-file-actions":
                     fileActions = true;
+                    break;
+                case "--disable-file-actions":
+                    fileActions = false;
                     break;
                 case "--catalog" when i + 1 < args.Length:
                     cliCatalogs.Add(args[++i]);
