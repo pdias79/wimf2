@@ -351,6 +351,7 @@ public static class WebUi
     pending: "Non démarrée", queued: "En file d’attente", running: "En cours",
     completed: "Terminée", failed: "Échec", cancelled: "Annulée"
   };
+  const lastNextIncrementalByJob = new Map();
   function renderIndexingStatus(catalogs) {
     const expandedPaths = new Set(Array.from(indexingList.querySelectorAll("details[data-catalog-path]"))
       .filter(details => details.open).map(details => details.dataset.catalogPath));
@@ -532,9 +533,8 @@ public static class WebUi
         const incrementalTime = document.createElement("div");
         incrementalTime.className = "catalog-details";
         incrementalTime.setAttribute("data-next-incremental", "");
-        incrementalTime.textContent = catalog.nextIncremental
-          ? "Prochaine tentative incrémentale : " + new Date(catalog.nextIncremental).toLocaleString("fr-FR")
-          : "Prochaine tentative incrémentale : non planifiée";
+        incrementalTime.textContent = lastNextIncrementalByJob.get(catalog.indexingJobIndex) ||
+          "Prochaine tentative incrémentale : non configurée";
         item.append(schedule, incrementalTime, start);
         if (catalog.state === "queued" || catalog.state === "running") {
           const cancel = document.createElement("button");
@@ -668,9 +668,11 @@ public static class WebUi
         const job = jobs[Number(item.dataset.indexingJob)];
         const label = item.querySelector("[data-next-incremental]");
         if (!label) continue;
-        label.textContent = "Prochaine tentative incrémentale : " +
+        const text = "Prochaine tentative incrémentale : " +
           (job?.nextIncremental ? new Date(job.nextIncremental).toLocaleString("fr-FR")
             : "Non configurée");
+        lastNextIncrementalByJob.set(Number(item.dataset.indexingJob), text);
+        if (label.textContent !== text) label.textContent = text;
       }
     } catch { /* Optional monitoring must not interfere with indexing. */ }
   }
