@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Wimf.Server;
 
-public sealed record HealthResponse(string Status, int CatalogCount);
+public sealed record HealthResponse(string Status, int CatalogCount, bool FileActionsEnabled = false);
 public sealed record CatalogSummary(int Index, string Name, string RootPath, int RecordCount, int DiagnosticCount, DateTimeOffset CreatedAt);
 public sealed record SearchRequest
 {
