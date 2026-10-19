@@ -31,12 +31,20 @@ public static class IncrementalJournalPublisher
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         if (offset > stream.Length) offset = 0;
-        if (offset == stream.Length) return new(0, 0);
+        var end = CompleteBoundary(stream, offset);
+        if (offset == end) return new(0, 0);
+        // Count only complete records. Never display an unfinished append as pending.
+        // A bounded snapshot also prevents StreamReader from reading beyond the boundary.
+        if (end - offset > 128 * 1024 * 1024)
+            throw new InvalidDataException("Pending journal window is too large.");
         stream.Position = offset;
+        var snapshot = new byte[checked((int)(end - offset))];
+        stream.ReadExactly(snapshot);
+        using var bounded = new MemoryStream(snapshot, writable: false);
         var directories = new HashSet<string>(OperatingSystem.IsWindows() ?
             StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var events = 0;
-        using var reader = new StreamReader(stream, Encoding.UTF8, false, 4096, leaveOpen: true);
+        using var reader = new StreamReader(bounded, Encoding.UTF8);
         while (reader.ReadLine() is { } line)
         {
             if (line.StartsWith("E\t", StringComparison.Ordinal)) events++;
