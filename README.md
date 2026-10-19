@@ -745,3 +745,7 @@ Les actualisations du planificateur (manuelles et planifiées) construisent dés
 #### Fichiers ignorés et sécurité des indexations planifiées
 
 Les noms contenant `;` ou un retour à la ligne ne sont pas représentables dans le format historique WIMF. Ils sont consignés dans le rapport `.skipped-report.txt`, mais ne bloquent plus la publication des entrées représentables (comportement compatible avec les scans historiques). En revanche, une erreur d'accès à un dossier ou fichier (`Skipped inaccessible ...`) bloque la publication et préserve le catalogue précédent. Le rapport reste accessible dans le panneau même après un échec. Pour déterminer pourquoi une indexation a été rejetée, consulter ce rapport associé au catalogue.
+
+
+#### Accès refusés sur les disques système
+Lorsqu'un catalogue précédent existe, les chemins devenus inaccessibles sont comparés à ses entrées. Un chemin protégé qui n'était pas présent dans l'ancien catalogue peut rester ignoré avec un diagnostic, comme lors des anciens scans. Si le chemin était indexé (ou possédait des descendants indexés), la publication est refusée pour éviter la disparition artificielle de ces entrées. Une première indexation avec erreurs d'accès reste refusée. Consulter le fichier `.skipped-report.txt` du catalogue pour identifier les chemins en cause.
