@@ -526,8 +526,8 @@ public static class WebUi
         const label = item.querySelector("[data-smb-pending]");
         const storage = latestJournalByRoot.get(item.dataset.smbRoot.toLowerCase());
         if (label) {
-          const health = state ? (state.health === "error" ? "Surveillance indisponible" :
-            "Surveillance active") + " · Événements en attente : " + state.events +
+          const health = state ? (state.health === "error" ? "Surveillance interrompue" :
+            state.health === "recovered" ? "Surveillance rétablie" : "Surveillance active") + " · Événements en attente : " + state.events +
             " · Dossiers affectés : " + state.directories +
             " · Erreurs observées : " + state.errors : "Surveillance non disponible";
           const usage = storage ? " · Journal : " + formatBytes(storage.total) +
