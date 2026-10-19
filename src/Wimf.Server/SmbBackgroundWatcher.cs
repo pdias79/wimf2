@@ -65,6 +65,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     }
 
     public string Root => _root;
+    public string JournalPath => _journal;
     public long Observed => Interlocked.Read(ref _events);
     public long Errors => Interlocked.Read(ref _errors);
     public bool NeedsFullScan => _needsFullScan;

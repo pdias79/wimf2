@@ -274,6 +274,11 @@ public sealed class ScheduledIndexingTests
                 await Task.Delay(20);
             Assert.Equal("completed", scheduler.Status[1].State);
             Assert.Null(scheduler.Status[1].QueuedAt);
+            // The public state may become completed before the queued background
+            // task releases its cancellation source and file handles on Windows.
+            for (var attempt = 0; attempt < 100 && !scheduler.Status[1].CanStart; attempt++)
+                await Task.Delay(20);
+            Assert.True(scheduler.Status[1].CanStart);
         }
         finally { Directory.Delete(folder, true); }
     }
@@ -363,8 +368,9 @@ public sealed class ScheduledIndexingTests
                 [new IndexingJob(files, catalog, "Progress", [], TimeSpan.FromMinutes(1))]);
             await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
             Assert.Equal(300, Assert.Single(scheduler.Status).ScannedEntries);
-            File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddMinutes(-5));
-            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow);
+            // Full-scan cadence now uses its own persisted timestamp, not catalog mtime.
+            // Simulate the next scheduler tick after the configured one-minute interval.
+            await scheduler.CheckOnceAsync(DateTimeOffset.UtcNow.AddMinutes(2));
             var status = Assert.Single(scheduler.Status);
             Assert.Equal("completed", status.State);
             Assert.Equal(300, status.ScannedEntries);

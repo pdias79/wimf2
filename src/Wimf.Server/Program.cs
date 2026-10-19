@@ -753,24 +753,6 @@ app.MapPost("/api/indexing/{index:int}/cancel", (HttpContext context, int index)
     return indexingScheduler.TryCancel(index) ? Results.StatusCode(202) : Results.StatusCode(409);
 });
 
-if (options.Indexing is { Length: > 0 })
-{
-    var shutdown = app.Lifetime.ApplicationStopping;
-    indexingScheduler = new CatalogIndexScheduler(options.Indexing,
-        afterSuccess: async (job, token) =>
-        {
-            await store.RefreshLocalCatalogAsync(job.Output, token);
-        });
-    var scheduler = indexingScheduler;
-    _ = Task.Run(async () =>
-    {
-        try { await scheduler.RunAsync(shutdown); }
-        catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
-        catch (Exception ex) { Console.Error.WriteLine($"Indexing scheduler stopped: {ex.Message}"); }
-    }, shutdown);
-    Console.WriteLine($"Scheduled indexing configured for {options.Indexing.Length} catalog(s).");
-}
-
 // Monitoring is opt-in and observational: indexing continues to use full scans.
 var smbWatchers = new List<SmbBackgroundWatcher>();
 var unavailableWatchRoots = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -801,14 +783,76 @@ app.Lifetime.ApplicationStopping.Register(() =>
     foreach (var watcher in smbWatchers) watcher.Dispose();
 });
 
+if (options.Indexing is { Length: > 0 })
+{
+    var shutdown = app.Lifetime.ApplicationStopping;
+    indexingScheduler = new CatalogIndexScheduler(options.Indexing,
+        beforeFull: job =>
+        {
+            var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
+            return watcher is null ? 0 : IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
+        },
+        afterFull: (job, boundary) =>
+        {
+            var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
+            if (watcher is not null)
+                IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary);
+        },
+        incremental: async (job, token) =>
+        {
+            var watcher = smbWatchers.FirstOrDefault(w =>
+                watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
+            if (watcher is null || !File.Exists(job.Output)) return false;
+            // The current serializer intentionally refuses a staging file inside
+            // the indexed root (notably C:\\). Keep periodic full scans there.
+            var rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(job.Root));
+            var outputPath = Path.GetFullPath(job.Output);
+            var pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            var rootPrefix = Path.EndsInDirectorySeparator(rootPath)
+                ? rootPath : rootPath + Path.DirectorySeparatorChar;
+            if (outputPath.StartsWith(rootPrefix, pathComparison))
+                return false;
+            var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
+                job.Root, job.Output, watcher.JournalPath, token, job.Exclude), token);
+            if (result.Changed)
+                Console.WriteLine($"[INCREMENTAL] {job.Root} | hints={result.Hints} | entries={result.Entries}");
+            return result.Changed;
+        },
+        afterSuccess: async (job, token) =>
+        {
+            await store.RefreshLocalCatalogAsync(job.Output, token);
+        });
+    var scheduler = indexingScheduler;
+    _ = Task.Run(async () =>
+    {
+        try { await scheduler.RunAsync(shutdown); }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+        catch (Exception ex) { Console.Error.WriteLine($"Indexing scheduler stopped: {ex.Message}"); }
+    }, shutdown);
+    Console.WriteLine($"Scheduled indexing configured for {options.Indexing.Length} catalog(s).");
+}
+
 // Pending notification hints, not yet acknowledged by an incremental publisher.
 app.MapGet("/api/smb-pending", () =>
 {
     var lines = smbWatchers.Select(w =>
-        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
-        w.Observed.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
-        w.AffectedDirectories.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) +
-        "\t" + (w.WatchFailed ? "error" : "active"))
+    {
+        var job = options.Indexing?.FirstOrDefault(j => watchComparer.Equals(j.Root, w.Root));
+        try
+        {
+            var pending = job is null ? null : IncrementalJournalPublisher.Pending(job.Output, w.JournalPath);
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
+                (pending?.Events ?? w.Observed).ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
+                (pending?.Directories ?? w.AffectedDirectories.Length).ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                "\t" + (w.WatchFailed ? "error" : "active");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Console.Error.WriteLine($"[SMB-PENDING-ERROR] {w.Root}: {ex.Message}");
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t0\t0\terror";
+        }
+    })
         .Concat(unavailableWatchRoots.Select(root =>
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(root)) + "\t0\t0\terror"));
     return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");

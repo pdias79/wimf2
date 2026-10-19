@@ -759,7 +759,43 @@ Les fichiers et sous-répertoires inaccessibles sont ignorés et **retirés du n
 En cas d'erreur d'E/S lors de l'énumération d'un sous-dossier, WIMF tente une seconde énumération après 150 ms avant de le consigner comme inaccessible. Un refus de droits ne déclenche pas de nouvelle tentative. Quand un fichier ou sous-dossier est signalé inaccessible, le planificateur vérifie immédiatement l'accès à la racine ; une racine indisponible interrompt la publication et conserve l'ancien catalogue. Les fichiers réellement inaccessibles restent exclus du nouveau catalogue, conformément à la politique choisie. Ces contrôles ne prouvent pas la cohérence d'un instantané SMB si des modifications surviennent pendant le scan ; la journalisation des événements continue de servir au diagnostic.
 
 
-#### Intervalles séparés de scan complet et d'actualisation incrémentale (PR #64 en cours)
+#### Intervalles séparés de scan complet et d'actualisation incrémentale (PR #65 en validation)
 Chaque entrée `indexing` accepte exactement une unité parmi `fullScanIntervalMinutes`, `fullScanIntervalHours` et `fullScanIntervalDays`. Elle peut également définir `incrementalIntervalMinutes`, `incrementalIntervalHours` ou `incrementalIntervalDays` (une seule unité). Les paramètres historiques `intervalMinutes`, `intervalHours`, `intervalDays` restent acceptés comme période de scan complet, mais ne se combinent pas avec `fullScanInterval*`. Les valeurs doivent être positives et ne peuvent dépasser dix ans. Exemple : `"fullScanIntervalDays": 7, "incrementalIntervalMinutes": 15`.
 
-**Attention :** l'exécution incrémentale n'est pas encore branchée au planificateur ; les champs `incrementalInterval*` sont pour le moment configurables mais n'activent pas un scan incrémental. L'interface expose les notifications SMB observées **depuis le démarrage** comme indicateur de travail potentiellement en attente ; ce compteur ne remplace pas encore un vrai accusé de traitement du journal. Seule la période de scan complet déclenche réellement les indexations à ce stade.
+**PR #65 (en validation)** : l'exécution incrémentale utilise maintenant les événements journalisés et le planificateur dispose de deux cadences indépendantes. Le nombre d'événements en attente est calculé après le curseur de journal acquitté. Un scan complet manuel demeure un scan complet. Les notifications restent indicatives : une interruption de surveillance peut produire des événements manquants, corrigés par les scans complets périodiques, sans déclenchement immédiat. Un partage ne supportant pas `FileSystemWatcher` continue d'utiliser les scans complets. La sortie du catalogue doit se trouver hors de la racine surveillée pour bénéficier de la publication incrémentale.
+
+#### Essai fonctionnel isolé sous Windows (PR #65)
+
+Depuis PowerShell, dans le dépôt, créer un jeu de données provisoire sous `$env:TEMP` :
+
+```powershell
+$demo = Join-Path $env:TEMP "wimf2-incremental-demo"
+New-Item -ItemType Directory -Force "$demo\source" | Out-Null
+Set-Content -Path "$demo\source\initial.txt" -Value "initial" -Encoding utf8
+$config = @{
+  catalogs = @("$demo\catalog.txt.gz")
+  sources = @()
+  refreshSeconds = 5
+  indexing = @(@{
+    root = "$demo\source"
+    output = "$demo\catalog.txt.gz"
+    name = "Demo incremental"
+    fullScanIntervalDays = 7
+    incrementalIntervalMinutes = 1
+  })
+}
+$config | ConvertTo-Json -Depth 8 | Set-Content -Path "$demo\demo.json" -Encoding utf8
+dotnet run --project src/Wimf.Server -c Release -- --config "$demo\demo.json"
+```
+
+Dans **un second PowerShell**, créer puis supprimer un fichier dans `$demo\source` (la variable `$demo` n'est pas partagée entre fenêtres) :
+
+```powershell
+$demo = Join-Path $env:TEMP "wimf2-incremental-demo"
+Set-Content -Path "$demo\source\ajoute.txt" -Value "nouveau" -Encoding utf8
+# Laisser s'écouler au moins un passage d'actualisation incrémentale (une minute).
+# Vérifier le panneau « Catalogues et actualisation » et les lignes [INCREMENTAL] du serveur.
+Remove-Item "$demo\source\ajoute.txt"
+```
+
+Le dossier de démonstration est indépendant de la configuration de production : ne pas remplacer le fichier `wimf.json` habituel. Arrêter le serveur avec Ctrl+C avant de nettoyer `$demo`. Les traces `[INCREMENTAL]` indiquent les traitements avec changements ; l'absence de notification peut également provenir d'un watcher indisponible.
