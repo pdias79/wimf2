@@ -54,6 +54,26 @@ public sealed class LocalFileActionsTests
     }
 
     [Fact]
+    public void DirectoryResolutionRejectsStaleAndMissingDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-directory-action-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var folder = Path.Combine(root, "documents");
+            Directory.CreateDirectory(folder);
+            var catalog = Catalog(root, "documents;folder;0;0;2\n");
+            Assert.Equal(folder, LocalFileActions.Resolve([catalog], 0, 1, catalog.GetFullPath(1)));
+            Assert.Throws<InvalidOperationException>(() =>
+                LocalFileActions.Resolve([catalog], 0, 1, catalog.GetFullPath(1) + "-stale"));
+            Directory.Delete(folder);
+            Assert.Throws<FileNotFoundException>(() =>
+                LocalFileActions.Resolve([catalog], 0, 1, catalog.GetFullPath(1)));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void CopyIsUnsupportedOnNonWindowsHosts()
     {
         if (OperatingSystem.IsWindows()) return;

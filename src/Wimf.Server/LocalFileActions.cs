@@ -65,7 +65,14 @@ public static class LocalFileActions
                         ".scr", ".lnk", ".url", ".sh", ".desktop", ".app" }
                 .Contains(ext, StringComparer.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Opening executables and scripts is not allowed.");
-            if (OperatingSystem.IsWindows())
+            if (OperatingSystem.IsWindows() && Directory.Exists(absolutePath))
+            {
+                // ShellExecute on a folder can open Explorer and still report a Win32
+                // association error. Launch Explorer explicitly instead.
+                start = new ProcessStartInfo("explorer.exe") { UseShellExecute = false };
+                start.ArgumentList.Add(absolutePath);
+            }
+            else if (OperatingSystem.IsWindows())
                 start = new ProcessStartInfo(absolutePath) { UseShellExecute = true };
             else if (OperatingSystem.IsLinux())
             {
