@@ -14,12 +14,14 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     DateTimeOffset? NextIncremental = null);
 
 public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
-    DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error);
+    DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error,
+    string Kind = "full", int EventRecords = 0, int DistinctPaths = 0, int ProcessedPaths = 0);
 
 public sealed class CatalogIndexScheduler
 {
     private readonly IndexingJob[] _jobs;
     private readonly Func<IndexingJob, CancellationToken, Task<bool>>? _incremental;
+    private readonly Func<IndexingJob, (int Events, int Distinct, int Paths)>? _incrementalMetrics;
     private readonly Func<IndexingJob, long>? _beforeFull;
     private readonly Action<IndexingJob, long>? _afterFull;
     private readonly DateTimeOffset[] _incrementalAttempt;
@@ -58,10 +60,12 @@ public sealed class CatalogIndexScheduler
         Func<IndexingJob, CancellationToken, Task>? afterSuccess = null,
         Func<IndexingJob, CancellationToken, Task<bool>>? incremental = null,
         Func<IndexingJob, long>? beforeFull = null,
-        Action<IndexingJob, long>? afterFull = null)
+        Action<IndexingJob, long>? afterFull = null,
+        Func<IndexingJob, (int Events, int Distinct, int Paths)>? incrementalMetrics = null)
     {
         _jobs = jobs.ToArray();
         _incremental = incremental;
+        _incrementalMetrics = incrementalMetrics;
         _beforeFull = beforeFull;
         _afterFull = afterFull;
         _incrementalAttempt = new DateTimeOffset[_jobs.Length];
@@ -362,15 +366,35 @@ public sealed class CatalogIndexScheduler
                 if (_incremental is null || job.IncrementalInterval is not { } cadence ||
                     now < _incrementalAttempt[i].Add(cadence)) continue;
                 _incrementalAttempt[i] = now;
+                var started = DateTimeOffset.UtcNow;
+                var state = "completed";
+                string? error = null;
                 try
                 {
                     if (await _incremental(job, token) && _afterSuccess is not null)
                         await _afterSuccess(job, token);
                 }
-                catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    state = "cancelled";
+                    throw;
+                }
                 catch (Exception ex)
                 {
+                    state = "failed";
+                    error = ex.Message;
                     Console.Error.WriteLine($"[INCREMENTAL-ERROR] {job.Root}: {ex.Message}");
+                }
+                finally
+                {
+                    var metrics = state == "completed" ? _incrementalMetrics?.Invoke(job) : null;
+                    lock (_historyLock)
+                    {
+                        _history.Insert(0, new IndexingRunHistoryEntry(job.Name ?? job.Root,
+                            state, started, DateTimeOffset.UtcNow, 0, 0, error,
+                            "incremental", metrics?.Events ?? 0, metrics?.Distinct ?? 0, metrics?.Paths ?? 0));
+                        if (_history.Count > 50) _history.RemoveRange(50, _history.Count - 50);
+                    }
                 }
             }
         }
