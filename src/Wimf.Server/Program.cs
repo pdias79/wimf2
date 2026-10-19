@@ -787,6 +787,17 @@ if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
+        beforeFull: job =>
+        {
+            var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
+            return watcher is null ? 0 : IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
+        },
+        afterFull: (job, boundary) =>
+        {
+            var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
+            if (watcher is not null)
+                IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary);
+        },
         incremental: async (job, token) =>
         {
             var watcher = smbWatchers.FirstOrDefault(w =>
