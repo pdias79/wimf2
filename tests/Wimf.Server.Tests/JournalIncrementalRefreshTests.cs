@@ -42,7 +42,7 @@ public class JournalIncrementalRefreshTests
         try
         {
             var original = Path.Combine(temp, "original.txt.gz");
-            LegacyCatalogWriter.Build(root, original, exclusions: ["excluded"]);
+            LegacyCatalogWriter.Build(root, original, excludePaths: ["excluded"]);
             var nested = Path.Combine(excluded, "nested");
             Directory.CreateDirectory(nested);
             var file = Path.Combine(nested, "secret.txt");
