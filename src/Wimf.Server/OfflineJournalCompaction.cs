@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace Wimf.Server;
 
 /// <summary>
@@ -37,12 +34,10 @@ public static class OfflineJournalCompaction
             // Invalidate the old byte offset BEFORE replacing the journal.
             // A crash at any point can only cause reprocessing, not lost hints.
             File.Delete(marker);
-            source.SetLength(0);
-            using var tail = new FileStream(staging, FileMode.Open, FileAccess.Read, FileShare.Read);
-            tail.CopyTo(source);
-            source.Flush(flushToDisk: true);
         }
-        File.Delete(staging);
+        // Atomic same-volume replacement; never truncate the only copy.
+        // Invoke before watcher startup, with exclusive ownership of the journal.
+        File.Move(staging, journalPath, overwrite: true);
         return true;
     }
 }
