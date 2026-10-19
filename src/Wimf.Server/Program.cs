@@ -754,7 +754,7 @@ app.MapPost("/api/indexing/start-all", (HttpContext context) =>
     for (var i = 0; i < indexingScheduler.Status.Length; i++)
         if (indexingScheduler.TryQueueManual(i, app.Lifetime.ApplicationStopping))
             accepted++;
-    return Results.Json(new { accepted, total = indexingScheduler.Status.Length });
+    return Results.Text($"{{\"accepted\":{accepted},\"total\":{indexingScheduler.Status.Length}}}", "application/json");
 });
 
 app.MapPost("/api/indexing/{index:int}/cancel", (HttpContext context, int index) =>
