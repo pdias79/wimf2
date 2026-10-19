@@ -753,24 +753,6 @@ app.MapPost("/api/indexing/{index:int}/cancel", (HttpContext context, int index)
     return indexingScheduler.TryCancel(index) ? Results.StatusCode(202) : Results.StatusCode(409);
 });
 
-if (options.Indexing is { Length: > 0 })
-{
-    var shutdown = app.Lifetime.ApplicationStopping;
-    indexingScheduler = new CatalogIndexScheduler(options.Indexing,
-        afterSuccess: async (job, token) =>
-        {
-            await store.RefreshLocalCatalogAsync(job.Output, token);
-        });
-    var scheduler = indexingScheduler;
-    _ = Task.Run(async () =>
-    {
-        try { await scheduler.RunAsync(shutdown); }
-        catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
-        catch (Exception ex) { Console.Error.WriteLine($"Indexing scheduler stopped: {ex.Message}"); }
-    }, shutdown);
-    Console.WriteLine($"Scheduled indexing configured for {options.Indexing.Length} catalog(s).");
-}
-
 // Monitoring is opt-in and observational: indexing continues to use full scans.
 var smbWatchers = new List<SmbBackgroundWatcher>();
 var unavailableWatchRoots = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -800,6 +782,35 @@ app.Lifetime.ApplicationStopping.Register(() =>
 {
     foreach (var watcher in smbWatchers) watcher.Dispose();
 });
+
+if (options.Indexing is { Length: > 0 })
+{
+    var shutdown = app.Lifetime.ApplicationStopping;
+    indexingScheduler = new CatalogIndexScheduler(options.Indexing,
+        incremental: async (job, token) =>
+        {
+            var watcher = smbWatchers.FirstOrDefault(w =>
+                watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
+            if (watcher is null || !File.Exists(job.Output)) return false;
+            var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
+                job.Root, job.Output, watcher.JournalPath, token), token);
+            if (result.Changed)
+                Console.WriteLine($"[INCREMENTAL] {job.Root} | hints={result.Hints} | entries={result.Entries}");
+            return result.Changed;
+        },
+        afterSuccess: async (job, token) =>
+        {
+            await store.RefreshLocalCatalogAsync(job.Output, token);
+        });
+    var scheduler = indexingScheduler;
+    _ = Task.Run(async () =>
+    {
+        try { await scheduler.RunAsync(shutdown); }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { }
+        catch (Exception ex) { Console.Error.WriteLine($"Indexing scheduler stopped: {ex.Message}"); }
+    }, shutdown);
+    Console.WriteLine($"Scheduled indexing configured for {options.Indexing.Length} catalog(s).");
+}
 
 // Pending notification hints, not yet acknowledged by an incremental publisher.
 app.MapGet("/api/smb-pending", () =>
