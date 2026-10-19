@@ -518,7 +518,7 @@ catch (Exception ex) when (ex is ArgumentException or IOException or Unauthorize
                            or System.Text.Json.JsonException or InvalidDataException)
 {
     Console.Error.WriteLine($"Invalid server configuration: {ex.Message}");
-    Console.Error.WriteLine("Usage: wimfd [--config config.json] [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--enable-file-actions]");
+    Console.Error.WriteLine("Usage: wimfd [--config config.json] [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--disable-file-actions]");
     return 2;
 }
 
@@ -622,7 +622,7 @@ app.MapPost("/api/file-action", (HttpContext context, FileActionRequest request)
         Results.Json(new ErrorResponse(message), WimfJsonContext.Default.ErrorResponse, statusCode: status);
 
     if (!enableFileActions)
-        return Error("File actions are disabled. Restart with --enable-file-actions.", 403);
+        return Error("File actions are disabled. Restart without --disable-file-actions.", 403);
 
     var origin = context.Request.Headers.Origin.ToString();
     var site = context.Request.Headers["Sec-Fetch-Site"].ToString();

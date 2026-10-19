@@ -11,7 +11,7 @@ public class WebUiTests
         Assert.Contains("max-width: 1600px", WebUi.Html);
         Assert.Contains("text-overflow: ellipsis; white-space: nowrap", WebUi.Html);
         Assert.Contains("class=\"catalog-buttons\"", WebUi.Html);
-        Assert.Contains("transform: translateY(-10px)", WebUi.Html);
+        Assert.DoesNotContain("transform: translateY(-10px)", WebUi.Html);
         Assert.DoesNotContain(".advanced { border-top:", WebUi.Html);
     }
 
@@ -22,6 +22,19 @@ public class WebUiTests
         Assert.Contains("form.requestSubmit();", WebUi.Html);
         Assert.DoesNotContain("Critères restaurés. Lancez la recherche", WebUi.Html);
         Assert.Contains("label.classList.remove(\"error\")", WebUi.Html);
+    }
+
+    [Fact]
+    public void BrandExpansionToastFadeAndSizeColumnArePresent()
+    {
+        Assert.Contains("Where is my file", WebUi.Html);
+        Assert.Contains(".wimf-brand:hover .wimf-meaning", WebUi.Html);
+        Assert.Contains("toast-fading", WebUi.Html);
+        Assert.Contains("dismissToast();", WebUi.Html);
+        Assert.Contains("#results-table th:nth-child(2)", WebUi.Html);
+        Assert.Contains("#search-options-panel { margin-top: 14px;", WebUi.Html);
+        Assert.DoesNotContain("message(data.count +", WebUi.Html);
+        Assert.DoesNotContain("transform: translateY(-10px)", WebUi.Html);
     }
 
     [Fact]

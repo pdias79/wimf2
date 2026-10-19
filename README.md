@@ -258,10 +258,10 @@ The CSV is an export of the current limited search response, **not** a complete 
 
 ### Local desktop actions (opt-in)
 
-Restart the Wimf daemon with `--enable-file-actions` to allow per-result **Ouvrir**, **Dossier** and **Copier le fichier** buttons. They operate on the desktop session of the computer running the daemon; they cannot open a file in a browser on a different workstation. The existing **Copier le chemin** button still copies only text in the browser, without requiring the new option.
+File actions are enabled by default. Start the Wimf daemon with `--disable-file-actions` to hide and prohibit per-result **Ouvrir**, **Dossier** and **Copier le fichier** buttons. They operate on the desktop session of the computer running the daemon; they cannot open a file in a browser on a different workstation. The existing **Copier le chemin** button still copies only text in the browser, without requiring the new option.
 
 ```powershell
-dotnet run --project src/Wimf.Server -- --catalog "C:\\path\\to\\catalog.txt.gz" --enable-file-actions
+dotnet run --project src/Wimf.Server -- --catalog "C:\\path\\to\\catalog.txt.gz"
 ```
 
 - **Ouvrir** uses the operating system's default file association (Windows) or `xdg-open` (Linux). Known executable/script and shortcut extensions are intentionally blocked.
@@ -285,7 +285,7 @@ After a manual source refresh, the UI reloads catalog metadata and retains the s
 
 ### Compact search results: clickable filename
 
-The results table intentionally omits the often very long **Chemin** column. Hover over a filename to display the complete indexed path as a native browser tooltip; keyboard users can also focus the filename control to inspect its accessible label. Clicking a filename requests **Ouvrir** directly, using the same opt-in local daemon action and catalog-backed path validation as the former Open button. There is no second confirmation dialog for this deliberate click. Native opening remains disabled unless the daemon was started with `--enable-file-actions`; unsupported executable/script types remain blocked.
+The results table intentionally omits the often very long **Chemin** column. Hover over a filename to display the complete indexed path as a native browser tooltip; keyboard users can also focus the filename control to inspect its accessible label. Clicking a filename requests **Ouvrir** directly, using the same opt-in local daemon action and catalog-backed path validation as the former Open button. There is no second confirmation dialog for this deliberate click. Native opening remains disabled when the daemon is started with `--disable-file-actions`; unsupported executable/script types remain blocked.
 
 The **Copier le chemin** action still copies the full path as text, while **Copier le fichier** remains a separate native Windows clipboard action. Neither CSV export nor the search JSON payload loses the full path.
 
@@ -317,7 +317,7 @@ The writer produces the existing five-line header and legacy `name;extension;siz
 Load the generated catalog normally:
 
 ```powershell
-dotnet run --project src/Wimf.Server -- --catalog "C:\\WimfCatalogs\\Documents.txt.gz" --enable-file-actions
+dotnet run --project src/Wimf.Server -- --catalog "C:\\WimfCatalogs\\Documents.txt.gz"
 ```
 
 
@@ -350,13 +350,13 @@ Instead of typing all catalog paths every time, place a `wimf.json` file alongsi
 Start the local daemon with:
 
 ```powershell
-dotnet run --project src/Wimf.Server -- --config "C:\Users\Philou\Documents\repos\wimf2\wimf.json" --enable-file-actions
+dotnet run --project src/Wimf.Server -- --config "C:\Users\Philou\Documents\repos\wimf2\wimf.json"
 ```
 
 - The `--config` filename is searched in the daemon's working directory and then its parent directories, so `--config wimf.json` works for a file at the repository root when using `dotnet run --project src/Wimf.Server`. The nearest matching configuration file wins. Paths within the JSON file can be **relative to that JSON file's directory** or absolute. For sources on a network share, use JSON-escaped Windows UNC paths, e.g. `"\\\\server\\share\\catalog.gz"`, and set a cache directory.
 - `catalogs` points to directly loaded files; `sources` lists periodically refreshed source catalogs. `cacheDirectory` is required when there are sources. Set `refreshSeconds` to `0` to disable periodic refresh; otherwise it must be nonnegative. Omitted fields use defaults.
 - Existing CLI arguments work as before. If `--catalog` or `--source` is supplied explicitly, it **replaces** the corresponding JSON array. `--cache-dir` and `--refresh-seconds` override their JSON values.
-- **Security:** native file actions are never enabled by the config file. Explicitly pass `--enable-file-actions` on the command line. Unexpected JSON properties, including `enableFileActions`, are rejected rather than silently accepted.
+- **Security:** native file actions are enabled by default; explicitly pass `--disable-file-actions` on the command line to disable them. Unexpected JSON properties, including `enableFileActions`, are rejected rather than silently accepted.
 - Settings are read at server startup; restart the daemon after editing the JSON. This PR does not introduce an API to edit configuration remotely.
 
 An example is committed as `wimf.example.json`.
@@ -367,7 +367,7 @@ An example is committed as `wimf.example.json`.
 Catalog files declared with `--catalog` or under `catalogs` in `wimf.json` are now checked for changes at the same interval as network sources. No restart is required after replacing or updating a local catalog:
 
 ```powershell
-dotnet run --project src/Wimf.Server -- --config "wimf.json" --refresh-seconds 30 --enable-file-actions
+dotnet run --project src/Wimf.Server -- --config "wimf.json" --refresh-seconds 30
 ```
 
 When a local file's modification timestamp or length changes, Wimf reloads it and atomically publishes the refreshed snapshot. Active searches continue using their existing immutable catalog instance. If a changed catalog is missing, malformed, or temporarily unreadable, Wimf logs an error and **retains the last valid in-memory version** until a subsequent refresh succeeds. Local catalog order and search catalog indices remain stable. Existing `POST /api/refresh` also checks local files immediately; `refreshSeconds: 0` disables the automatic timer but not manual refresh.
