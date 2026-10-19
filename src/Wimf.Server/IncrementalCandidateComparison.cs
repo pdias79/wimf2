@@ -109,7 +109,7 @@ public static class IncrementalCandidateComparison
             {
                 if (!equal)
                     throw new InvalidDataException("Candidate differs from full reference; no candidate file was published.");
-                var entries = validatedCandidate.ToDictionary(kv => kv.Key,
+                var entries = validatedCandidate!.ToDictionary(kv => kv.Key,
                     kv => new IncrementalCatalogSerializer.Entry(kv.Value.Extension, kv.Value.Size, kv.Value.Day),
                     comparer);
                 IncrementalCatalogSerializer.Write(root, previous.Header.Name, entries, candidateOutput);
