@@ -131,7 +131,7 @@ public class IncrementalJournalPublisherTests
             LegacyCatalogWriter.Build(root, catalog);
             var original = File.ReadAllBytes(catalog);
             var journal = Path.Combine(temp, "events");
-            File.WriteAllText(journal, "D\\t\\n");
+            File.WriteAllText(journal, "D\n");
             Assert.Throws<InvalidDataException>(() =>
                 IncrementalJournalPublisher.Publish(root, catalog, journal));
             Assert.Equal(original, File.ReadAllBytes(catalog));
