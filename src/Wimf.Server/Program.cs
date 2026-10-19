@@ -824,10 +824,14 @@ if (options.Indexing is { Length: > 0 })
 app.MapGet("/api/smb-pending", () =>
 {
     var lines = smbWatchers.Select(w =>
-        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
-        w.Observed.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
-        w.AffectedDirectories.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) +
-        "\t" + (w.WatchFailed ? "error" : "active"))
+    {
+        var job = options.Indexing?.FirstOrDefault(j => watchComparer.Equals(j.Root, w.Root));
+        var pending = job is null ? null : IncrementalJournalPublisher.Pending(job.Output, w.JournalPath);
+        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
+            (pending?.Events ?? w.Observed).ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
+            (pending?.Directories ?? w.AffectedDirectories.Length).ToString(System.Globalization.CultureInfo.InvariantCulture) +
+            "\t" + (w.WatchFailed ? "error" : "active");
+    })
         .Concat(unavailableWatchRoots.Select(root =>
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(root)) + "\t0\t0\terror"));
     return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
