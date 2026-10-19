@@ -46,6 +46,32 @@ public static class IncrementalJournalPublisher
         return new(events, directories.Count);
     }
 
+    /// <summary>After a full scan, acknowledge only the events already present
+    /// before that scan began. Events recorded during the scan remain pending.</summary>
+    public static long SnapshotLength(string journal) =>
+        File.Exists(journal) ? new FileInfo(journal).Length : 0;
+
+    public static void AcknowledgeFullScan(string catalog, string journal, long beforeScanLength)
+    {
+        if (!File.Exists(catalog) || !File.Exists(journal)) return;
+        var target = Path.GetFullPath(catalog);
+        var currentLength = new FileInfo(journal).Length;
+        // If journal was truncated/replaced, replay rather than silently lose events.
+        if (beforeScanLength < 0 || beforeScanLength > currentLength) return;
+        var marker = Path.Combine(Path.GetDirectoryName(target)!,
+            "." + Path.GetFileName(target) + ".incremental-cursor");
+        var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            Path.GetFullPath(journal).ToUpperInvariant())));
+        var temp = marker + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temp, signature + "\t" + beforeScanLength + "\t" +
+                File.GetLastWriteTimeUtc(target).Ticks);
+            File.Move(temp, marker, overwrite: true);
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
+    }
+
     public static Result Publish(string root, string catalog, string journal, CancellationToken token = default)
     {
         if (!File.Exists(catalog) || !File.Exists(journal))
