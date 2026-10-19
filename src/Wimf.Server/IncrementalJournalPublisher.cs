@@ -9,6 +9,43 @@ public static class IncrementalJournalPublisher
 {
     public sealed record Result(int Entries, int Hints, long AcknowledgedBytes, bool Changed);
 
+    public sealed record PendingResult(int Events, int Directories);
+
+    public static PendingResult Pending(string catalog, string journal)
+    {
+        if (!File.Exists(journal)) return new(0, 0);
+        var target = Path.GetFullPath(catalog);
+        var marker = Path.Combine(Path.GetDirectoryName(target)!,
+            "." + Path.GetFileName(target) + ".incremental-cursor");
+        var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            Path.GetFullPath(journal).ToUpperInvariant())));
+        var offset = 0L;
+        if (File.Exists(target) && File.Exists(marker))
+        {
+            var parts = File.ReadAllText(marker).Split('\t');
+            if (parts.Length == 3 && parts[0] == signature &&
+                long.TryParse(parts[1], out var acknowledged) &&
+                long.TryParse(parts[2], out var ticks) &&
+                ticks == File.GetLastWriteTimeUtc(target).Ticks)
+                offset = acknowledged;
+        }
+        using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        if (offset > stream.Length) offset = 0;
+        if (offset == stream.Length) return new(0, 0);
+        stream.Position = offset;
+        var directories = new HashSet<string>(OperatingSystem.IsWindows() ?
+            StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var events = 0;
+        using var reader = new StreamReader(stream, Encoding.UTF8, false, 4096, leaveOpen: true);
+        while (reader.ReadLine() is { } line)
+        {
+            if (line.StartsWith("E\t", StringComparison.Ordinal)) events++;
+            if (line.StartsWith("D\t", StringComparison.Ordinal))
+                directories.Add(line[2..]);
+        }
+        return new(events, directories.Count);
+    }
+
     public static Result Publish(string root, string catalog, string journal, CancellationToken token = default)
     {
         if (!File.Exists(catalog) || !File.Exists(journal))
