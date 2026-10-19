@@ -229,6 +229,20 @@ public static class WebUi
       if (!runs.length) {
         container.textContent = "Aucune indexation terminée depuis le démarrage.";
       } else {
+        const incremental = runs.filter(run => run.kind === "incremental");
+        if (incremental.length) {
+          const summary = document.createElement("p");
+          const meanSeconds = incremental.reduce((sum, run) =>
+            sum + Math.max(0, new Date(run.finishedAt) - new Date(run.startedAt)), 0) /
+            incremental.length / 1000;
+          const events = incremental.reduce((sum, run) => sum + (Number(run.eventRecords) || 0), 0);
+          const failures = incremental.filter(run => run.state === "failed").length;
+          summary.textContent = "Incrémentales (session) : " + incremental.length +
+            " tentatives · " + meanSeconds.toLocaleString("fr-FR", {maximumFractionDigits: 2}) +
+            " s en moyenne · " + events.toLocaleString("fr-FR") +
+            " événements · " + failures + " échec(s)";
+          container.appendChild(summary);
+        }
         const list = document.createElement("ul");
         for (const run of runs) {
           const item = document.createElement("li");
@@ -236,9 +250,14 @@ public static class WebUi
             (new Date(run.finishedAt) - new Date(run.startedAt)) / 1000));
           item.textContent = new Date(run.finishedAt).toLocaleString("fr-FR") +
             " · " + run.name + " · " +
+            (run.kind === "incremental" ? "Incrémentale" : "Complète") + " · " +
             (run.state === "completed" ? "Terminée" : run.state === "failed" ? "Échec" : "Annulée") +
             " · " + Math.floor(seconds / 60) + " min " + (seconds % 60) + " s" +
-            " · " + run.scannedEntries + " éléments · " + run.skippedEntries + " ignorés" +
+            (run.kind === "incremental"
+              ? " · " + (run.eventRecords || 0) + " événements · " +
+                (run.distinctPaths || 0) + " chemins distincts · " +
+                (run.processedPaths || 0) + " chemins traités"
+              : " · " + run.scannedEntries + " éléments · " + run.skippedEntries + " ignorés") +
             (run.error ? " · Erreur : " + run.error : "");
           list.appendChild(item);
         }

@@ -840,6 +840,8 @@ _ = Task.Run(async () =>
 if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
+    var incrementalMetrics = new System.Collections.Concurrent.ConcurrentDictionary<string,
+        (int Events, int Distinct, int Paths)>(watchComparer);
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         beforeFull: job =>
         {
@@ -854,6 +856,7 @@ if (options.Indexing is { Length: > 0 })
         },
         incremental: async (job, token) =>
         {
+            incrementalMetrics.TryRemove(job.Output, out _);
             var watcher = smbWatchers.Values.FirstOrDefault(w =>
                 watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
             if (watcher is null || !File.Exists(job.Output)) return false;
@@ -869,6 +872,7 @@ if (options.Indexing is { Length: > 0 })
                 return false;
             var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
                 job.Root, job.Output, watcher.JournalPath, token, job.Exclude), token);
+            incrementalMetrics[job.Output] = (result.EventRecords, result.DistinctPaths, result.Hints);
             if (result.Changed)
                 Console.WriteLine($"[INCREMENTAL] {job.Root} | events={result.EventRecords} | distinct={result.DistinctPaths} | paths={result.Hints} | elapsed={result.ElapsedMilliseconds} ms | entries={result.Entries}");
             return result.Changed;
@@ -876,7 +880,9 @@ if (options.Indexing is { Length: > 0 })
         afterSuccess: async (job, token) =>
         {
             await store.RefreshLocalCatalogAsync(job.Output, token);
-        });
+        },
+        incrementalMetrics: job => incrementalMetrics.TryRemove(job.Output, out var metrics)
+            ? metrics : (0, 0, 0));
     var scheduler = indexingScheduler;
     _ = Task.Run(async () =>
     {

@@ -828,3 +828,7 @@ Les actualisations incrémentales lisent désormais un **lot d'au plus 8 Mio par
 #### Déduplication et mesures incrémentales (PR #71)
 
 WIMF2 regroupe les notifications répétées pour un même chemin et, lorsqu'un dossier parent figure parmi les chemins notifiés, évite de re-parcourir ses descendants séparément. Le journal et son acquittement restent inchangés. Les logs `[INCREMENTAL]` indiquent désormais le nombre d'événements lus (`events`), les chemins distincts (`distinct`), les chemins effectivement traités (`paths`) et la durée (`elapsed`). Aucune lecture exhaustive ni aucun scan complet anticipé n'est ajouté : les mises à jour restent strictement guidées par les notifications Windows/SMB.
+
+#### Historique des scans incrémentaux (PR #72)
+
+L'historique de session dans « Catalogues et actualisation » distingue les scans complets des tentatives incrémentales. Pour chaque tentative incrémentale, il indique son issue, sa durée, les événements lus et les chemins distincts/effectivement traités quand ces mesures sont disponibles. Un résumé de session affiche le nombre de tentatives, la durée moyenne, le total d'événements et les échecs. Cette supervision n'influence aucune planification : scans complets exclusivement selon le JSON ou manuellement.
