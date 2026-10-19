@@ -6,9 +6,9 @@ namespace Wimf.Server.Tests;
 public class ReconciliationSchedulerTests
 {
     [Fact]
-    public async Task LostWatcherCoverageTriggersFullScanBeforeNormalDeadline()
+    public async Task FullScanDeadlineIsNotAdvancedByIncrementalAttempts()
     {
-        var root = Path.Combine(Path.GetTempPath(), "wimf-reconcile-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "wimf-cadence-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
@@ -16,32 +16,30 @@ public class ReconciliationSchedulerTests
             File.WriteAllText(output, "existing");
             var now = DateTimeOffset.UtcNow;
             File.SetLastWriteTimeUtc(output, now.UtcDateTime);
-            var required = true;
             var full = 0;
             var incremental = 0;
             var scheduler = new CatalogIndexScheduler(
                 [new IndexingJob(root, output, "Test", [], TimeSpan.FromDays(7),
                     IncrementalInterval: TimeSpan.FromMinutes(1))],
                 execute: (_, _) => { full++; return Task.CompletedTask; },
-                afterFull: (_, _) => required = false,
-                reconciliationRequired: _ => required,
                 incremental: (_, _) => { incremental++; return Task.FromResult(false); });
 
-            await scheduler.CheckOnceAsync(now);
-            Assert.Equal(1, full);
-            Assert.Equal(0, incremental);
-            Assert.False(required);
+            await scheduler.CheckOnceAsync(now.AddDays(1));
+            await scheduler.CheckOnceAsync(now.AddDays(2));
+            await scheduler.CheckOnceAsync(now.AddDays(6));
+            Assert.Equal(0, full);
+            Assert.Equal(3, incremental);
 
-            await scheduler.CheckOnceAsync(now.AddSeconds(10));
+            await scheduler.CheckOnceAsync(now.AddDays(8));
             Assert.Equal(1, full);
         }
         finally { Directory.Delete(root, true); }
     }
 
     [Fact]
-    public async Task FailedReconciliationRetainsRequestAndBacksOff()
+    public async Task IncrementalFailureDoesNotForceEarlyFullScan()
     {
-        var root = Path.Combine(Path.GetTempPath(), "wimf-reconcile-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "wimf-cadence-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
@@ -51,15 +49,16 @@ public class ReconciliationSchedulerTests
             File.SetLastWriteTimeUtc(output, now.UtcDateTime);
             var full = 0;
             var scheduler = new CatalogIndexScheduler(
-                [new IndexingJob(root, output, "Test", [], TimeSpan.FromDays(7))],
-                execute: (_, _) => { full++; throw new IOException("SMB temporarily inaccessible"); },
-                reconciliationRequired: _ => true);
-            await scheduler.CheckOnceAsync(now);
-            await scheduler.CheckOnceAsync(now.AddMinutes(1));
+                [new IndexingJob(root, output, "Test", [], TimeSpan.FromDays(7),
+                    IncrementalInterval: TimeSpan.FromMinutes(1))],
+                execute: (_, _) => { full++; return Task.CompletedTask; },
+                incremental: (_, _) => throw new IOException("Watcher unavailable"));
+
+            await scheduler.CheckOnceAsync(now.AddDays(1));
+            await scheduler.CheckOnceAsync(now.AddDays(2));
+            Assert.Equal(0, full);
+            await scheduler.CheckOnceAsync(now.AddDays(8));
             Assert.Equal(1, full);
-            Assert.Equal("failed", scheduler.Status[0].State);
-            await scheduler.CheckOnceAsync(now.AddMinutes(6));
-            Assert.Equal(2, full);
         }
         finally { Directory.Delete(root, true); }
     }
