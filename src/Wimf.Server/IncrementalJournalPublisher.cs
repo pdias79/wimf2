@@ -48,8 +48,31 @@ public static class IncrementalJournalPublisher
 
     /// <summary>After a full scan, acknowledge only the events already present
     /// before that scan began. Events recorded during the scan remain pending.</summary>
-    public static long SnapshotLength(string journal) =>
-        File.Exists(journal) ? new FileInfo(journal).Length : 0;
+    public static long SnapshotLength(string journal)
+    {
+        if (!File.Exists(journal)) return 0;
+        using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        return CompleteBoundary(stream, 0);
+    }
+
+    // Return the byte offset immediately after the last complete line.
+    // Never consume a partially appended record.
+    private static long CompleteBoundary(FileStream stream, long lowerBound)
+    {
+        if (stream.Length <= lowerBound) return lowerBound;
+        var offset = stream.Length;
+        var buffer = new byte[4096];
+        while (offset > lowerBound)
+        {
+            var count = (int)Math.Min(buffer.Length, offset - lowerBound);
+            offset -= count;
+            stream.Position = offset;
+            stream.ReadExactly(buffer.AsSpan(0, count));
+            for (var i = count - 1; i >= 0; i--)
+                if (buffer[i] == (byte)'\\n') return offset + i + 1;
+        }
+        return lowerBound;
+    }
 
     public static void AcknowledgeFullScan(string catalog, string journal, long beforeScanLength)
     {
@@ -96,7 +119,7 @@ public static class IncrementalJournalPublisher
                 position = parsed;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var end = stream.Length;
+        var end = CompleteBoundary(stream, position);
         // Test seam for deterministic concurrent appends. The captured end is
         // immutable: notifications written afterwards belong to the next batch.
         afterJournalSnapshot?.Invoke();
