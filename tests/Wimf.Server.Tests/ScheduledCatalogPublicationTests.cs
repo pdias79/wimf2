@@ -50,4 +50,25 @@ public class ScheduledCatalogPublicationTests
         finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
     }
 
+    [Fact]
+    public void RootDisappearingAfterScanPreservesPreviousCatalog()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-root-lost-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "root");
+        var target = Path.Combine(temp, "index.txt.gz");
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "old.txt"), "old");
+            ScheduledCatalogPublication.Refresh(root, target);
+            var before = File.ReadAllBytes(target);
+            Assert.Throws<InvalidDataException>(() =>
+                ScheduledCatalogPublication.Refresh(root, target,
+                    onMetrics: _ => Directory.Delete(root, recursive: true)));
+            Assert.Equal(before, File.ReadAllBytes(target));
+            Assert.Empty(Directory.GetFiles(temp, ".wimf-staging-*"));
+        }
+        finally { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); }
+    }
+
 }
