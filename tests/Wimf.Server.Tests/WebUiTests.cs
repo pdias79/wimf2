@@ -6,6 +6,25 @@ namespace Wimf.Server.Tests;
 public class WebUiTests
 {
     [Fact]
+    public void WideLayoutKeepsFileNamesOnOneLineAndGroupsCatalogButtons()
+    {
+        Assert.Contains("max-width: 1600px", WebUi.Html);
+        Assert.Contains("text-overflow: ellipsis; white-space: nowrap", WebUi.Html);
+        Assert.Contains("class=\"catalog-buttons\"", WebUi.Html);
+        Assert.Contains("transform: translateY(-10px)", WebUi.Html);
+        Assert.DoesNotContain(".advanced { border-top:", WebUi.Html);
+    }
+
+    [Fact]
+    public void RestoringSavedSearchClosesPanelAndSubmitsImmediately()
+    {
+        Assert.Contains("byId(\"saved-search-panel\").open = false;", WebUi.Html);
+        Assert.Contains("form.requestSubmit();", WebUi.Html);
+        Assert.DoesNotContain("Critères restaurés. Lancez la recherche", WebUi.Html);
+        Assert.Contains("label.classList.remove(\"error\")", WebUi.Html);
+    }
+
+    [Fact]
     public void CompactSearchAndBulkIndexControlsArePresent()
     {
         Assert.Contains("id=\"search-options-panel\"", WebUi.Html);
