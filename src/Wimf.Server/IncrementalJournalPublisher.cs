@@ -11,6 +11,9 @@ public static class IncrementalJournalPublisher
 
     public sealed record PendingResult(int Events, int Directories);
 
+    // Bound journal reads so a long-running watcher cannot exhaust memory.
+    internal const int MaxBatchBytes = 8 * 1024 * 1024;
+
     public static PendingResult Pending(string catalog, string journal)
     {
         if (!File.Exists(journal)) return new(0, 0);
@@ -32,6 +35,8 @@ public static class IncrementalJournalPublisher
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         if (offset > stream.Length) offset = 0;
         var end = CompleteBoundary(stream, offset);
+        if (end - offset > MaxBatchBytes)
+            end = BatchBoundary(stream, offset, end);
         if (offset == end) return new(0, 0);
         // Count only complete records. Never display an unfinished append as pending.
         // A bounded snapshot also prevents StreamReader from reading beyond the boundary.
@@ -82,6 +87,28 @@ public static class IncrementalJournalPublisher
         return lowerBound;
     }
 
+    // Stop at a complete record line at or below the maximum batch size.
+    // If one line exceeds the budget, fail closed without advancing the cursor.
+    private static long BatchBoundary(FileStream stream, long start, long fullEnd)
+    {
+        var limit = Math.Min(fullEnd, checked(start + MaxBatchBytes));
+        var buffer = new byte[64 * 1024];
+        var cursor = start;
+        var lastComplete = start;
+        while (cursor < limit)
+        {
+            var count = (int)Math.Min(buffer.Length, limit - cursor);
+            stream.Position = cursor;
+            stream.ReadExactly(buffer.AsSpan(0, count));
+            for (var i = 0; i < count; i++)
+                if (buffer[i] == (byte)'\\n') lastComplete = cursor + i + 1;
+            cursor += count;
+        }
+        if (lastComplete == start)
+            throw new InvalidDataException("A single journal record exceeds the batch budget.");
+        return lastComplete;
+    }
+
     public static void AcknowledgeFullScan(string catalog, string journal, long beforeScanLength)
     {
         if (!File.Exists(catalog) || !File.Exists(journal)) return;
@@ -128,6 +155,8 @@ public static class IncrementalJournalPublisher
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var end = CompleteBoundary(stream, position);
+        if (end - position > MaxBatchBytes)
+            end = BatchBoundary(stream, position, end);
         // Test seam for deterministic concurrent appends. The captured end is
         // immutable: notifications written afterwards belong to the next batch.
         afterJournalSnapshot?.Invoke();
