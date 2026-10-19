@@ -53,9 +53,10 @@ public sealed class SequentialSearchEngine
             for (var id = 1; id <= catalog.RecordCount; id++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!catalog.TryGetEntryData(id, out var entry) || entry.IsDirectory ||
-                    (extensions.Count != 0 && !extensions.Contains(entry.Extension.TrimStart('.'))) ||
-                    entry.Size < query.MinSize || entry.Size > query.MaxSize ||
+                if (!catalog.TryGetEntryData(id, out var entry) ||
+                    (entry.IsDirectory && extensions.Count != 0) ||
+                    (!entry.IsDirectory && extensions.Count != 0 && !extensions.Contains(entry.Extension.TrimStart('.'))) ||
+                    (!entry.IsDirectory && (entry.Size < query.MinSize || entry.Size > query.MaxSize)) ||
                     (query.ModifiedFrom.HasValue && entry.ModifiedAt < query.ModifiedFrom.Value) ||
                     (query.ModifiedTo.HasValue && entry.ModifiedAt > query.ModifiedTo.Value))
                     continue;
