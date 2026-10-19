@@ -793,6 +793,16 @@ app.Lifetime.ApplicationStopping.Register(() =>
     foreach (var watcher in smbWatchers) watcher.Dispose();
 });
 
+// Pending notification hints, not yet acknowledged by an incremental publisher.
+app.MapGet("/api/smb-pending", () =>
+{
+    var lines = smbWatchers.Select(w =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
+        w.Observed.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
+        w.AffectedDirectories.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
+});
+
 app.MapGet("/api/smb-watch", () =>
 {
     var lines = smbWatchers.Select(w =>
