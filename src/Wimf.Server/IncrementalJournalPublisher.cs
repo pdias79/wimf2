@@ -50,8 +50,8 @@ public static class IncrementalJournalPublisher
             using var reader = new StreamReader(bounded, Encoding.UTF8);
             while (reader.ReadLine() is { } line)
             {
-                if (line.StartsWith("E\\t", StringComparison.Ordinal)) events++;
-                if (line.StartsWith("D\\t", StringComparison.Ordinal))
+                if (line.StartsWith("E\t", StringComparison.Ordinal)) events++;
+                if (line.StartsWith("D\t", StringComparison.Ordinal))
                     directories.Add(line[2..]);
             }
             offset = batchEnd;
