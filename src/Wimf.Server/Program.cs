@@ -812,7 +812,7 @@ if (options.Indexing is { Length: > 0 })
             if (outputPath.StartsWith(rootPath + Path.DirectorySeparatorChar, pathComparison))
                 return false;
             var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
-                job.Root, job.Output, watcher.JournalPath, token), token);
+                job.Root, job.Output, watcher.JournalPath, token, job.Exclude), token);
             if (result.Changed)
                 Console.WriteLine($"[INCREMENTAL] {job.Root} | hints={result.Hints} | entries={result.Entries}");
             return result.Changed;
