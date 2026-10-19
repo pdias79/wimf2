@@ -36,8 +36,9 @@ public class LargeJournalBatchTests
             var firstBatch = IncrementalJournalPublisher.Publish(root, catalog, journal);
             Assert.True(firstBatch.Changed);
             Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
-            Assert.Contains(LegacyCatalogReader.ReadFile(catalog).EnumerateEntries(),
-                e => LegacyCatalogReader.ReadFile(catalog).GetFullPath(e.Id) == first);
+            var firstCatalog = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(firstCatalog.EnumerateEntries(),
+                e => firstCatalog.GetFullPath(e.Id) == first);
             var secondBatch = IncrementalJournalPublisher.Publish(root, catalog, journal);
             Assert.True(secondBatch.Changed);
             Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
