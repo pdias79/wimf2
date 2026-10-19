@@ -69,7 +69,7 @@ public static class IncrementalJournalPublisher
             stream.Position = offset;
             stream.ReadExactly(buffer.AsSpan(0, count));
             for (var i = count - 1; i >= 0; i--)
-                if (buffer[i] == (byte)'\\n') return offset + i + 1;
+                if (buffer[i] == (byte)'\n') return offset + i + 1;
         }
         return lowerBound;
     }
