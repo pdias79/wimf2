@@ -278,6 +278,7 @@ public static class WebUi
       const item = document.createElement("div");
       item.className = "indexing-item";
       item.dataset.smbRoot = catalog.root || "";
+      if (catalog.indexingJobIndex !== null) item.dataset.indexingJob = catalog.indexingJobIndex;
       const smbPending = document.createElement("div");
       smbPending.className = "catalog-details";
       smbPending.setAttribute("data-smb-pending", "");
@@ -429,7 +430,11 @@ public static class WebUi
             indexingError.classList.add("error");
           } finally { start.disabled = false; }
         });
-        item.append(schedule, start);
+        const incrementalTime = document.createElement("div");
+        incrementalTime.className = "catalog-details";
+        incrementalTime.setAttribute("data-next-incremental", "");
+        incrementalTime.textContent = "Prochaine tentative incrémentale : chargement…";
+        item.append(schedule, incrementalTime, start);
         if (catalog.state === "queued" || catalog.state === "running") {
           const cancel = document.createElement("button");
           cancel.type = "button";
@@ -543,6 +548,7 @@ public static class WebUi
       const catalogs = await response.json();
       if (!Array.isArray(catalogs)) throw new Error("Réponse des catalogues invalide.");
       renderIndexingStatus(catalogs);
+      await pollIncrementalSchedule();
       await pollSmbPending();
       // Keep history aligned with the catalog status refresh when the panel is visible.
       if (!indexingPanel.hidden) pollIndexingHistory();
@@ -550,6 +556,22 @@ public static class WebUi
       indexingError.textContent = "État des catalogues indisponible : vérifiez la version du serveur.";
       indexingError.classList.add("error");
     } finally { indexingCheckInProgress = false; }
+  }
+  async function pollIncrementalSchedule() {
+    try {
+      const response = await fetch("/api/indexing-status", { cache: "no-store" });
+      if (!response.ok) return;
+      const jobs = await response.json();
+      if (!Array.isArray(jobs)) return;
+      for (const item of indexingList.querySelectorAll("[data-indexing-job]")) {
+        const job = jobs[Number(item.dataset.indexingJob)];
+        const label = item.querySelector("[data-next-incremental]");
+        if (!label) continue;
+        label.textContent = "Prochaine tentative incrémentale : " +
+          (job?.nextIncremental ? new Date(job.nextIncremental).toLocaleString("fr-FR")
+            : "Non configurée");
+      }
+    } catch { /* Optional monitoring must not interfere with indexing. */ }
   }
   let lastObservedRefresh = null;
   let refreshCheckInProgress = false;
