@@ -10,11 +10,12 @@ public static class JournalIncrementalRefresh
 
     public static Result Run(string rootPath, string catalogPath, string journalPath,
         string outputPath, long fromOffset = 0, long? untilOffset = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IEnumerable<string>? exclusions = null)
     {
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
         var cmp = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var excluded = new CatalogPathExclusions(root, exclusions);
         var source = LegacyCatalogReader.ReadFile(catalogPath);
         if (source.Diagnostics.Count != 0 ||
             !string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(source.Header.RootPath)), root, comparison))
@@ -60,6 +61,7 @@ public static class JournalIncrementalRefresh
             foreach (var stale in entries.Keys.Where(p => p.Equals(path, comparison) ||
                 p.StartsWith(path + Path.DirectorySeparatorChar, comparison)).ToArray())
                 entries.Remove(stale);
+            if (excluded.Contains(path)) continue;
             if (File.Exists(path))
             {
                 TryAddFile(path);
@@ -71,10 +73,12 @@ public static class JournalIncrementalRefresh
                 while (stack.TryPop(out var directory))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    if (excluded.Contains(directory)) continue;
                     if (!directory.Equals(root, comparison))
                         entries[directory] = new("folder", 0, Day(Directory.GetLastWriteTimeUtc(directory)));
                     foreach (var child in Directory.EnumerateFileSystemEntries(directory))
                     {
+                        if (excluded.Contains(child)) continue;
                         var attributes = File.GetAttributes(child);
                         if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
                         if ((attributes & FileAttributes.Directory) != 0) stack.Push(child);
@@ -96,6 +100,7 @@ public static class JournalIncrementalRefresh
 
         void TryAddFile(string path)
         {
+            if (excluded.Contains(path)) return;
             var name = Path.GetFileName(path);
             if (name.IndexOfAny([';', '\n', '\r']) >= 0) return;
             var info = new FileInfo(path);
