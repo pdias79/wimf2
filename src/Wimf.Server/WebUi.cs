@@ -494,7 +494,7 @@ public static class WebUi
         if (label) label.textContent = state
           ? (state.events > 0 ? "Événements détectés : " + state.events +
             " (dossiers affectés : " + state.directories + ") — en attente de traitement incrémental"
-            : "Aucun nouvel événement SMB depuis le démarrage")
+            : "Aucun nouvel événement détecté depuis le démarrage")
           : "";
       }
   }
