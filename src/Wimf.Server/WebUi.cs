@@ -281,7 +281,6 @@ public static class WebUi
       const smbPending = document.createElement("div");
       smbPending.className = "catalog-details";
       smbPending.setAttribute("data-smb-pending", "");
-      item.appendChild(smbPending);
       const heading = document.createElement("div");
       const name = document.createElement("strong");
       name.textContent = catalog.name || catalog.path || "Catalogue";
@@ -298,7 +297,7 @@ public static class WebUi
       metadata.className = "catalog-details";
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
-      item.append(heading, path, metadata);
+      item.append(heading, path, metadata, smbPending);
       if (catalog.scanMetrics) {
         const metrics = catalog.scanMetrics;
         const timing = document.createElement("div");
@@ -465,7 +464,9 @@ public static class WebUi
       fragment.appendChild(item);
     }
     indexingList.appendChild(fragment);
+    applyPendingIndicators();
   }
+  const latestPendingByRoot = new Map();
   async function pollSmbPending() {
     try {
       const response = await fetch("/api/smb-pending", { cache: "no-store" });
@@ -481,16 +482,21 @@ public static class WebUi
           pending.set(root.toLowerCase(), { events: Number(events), directories: Number(directories) });
         } catch { /* Ignore malformed diagnostics. */ }
       }
+      latestPendingByRoot.clear();
+      for (const [root, data] of pending) latestPendingByRoot.set(root, data);
+      applyPendingIndicators();
+    } catch { /* SMB watcher is optional. */ }
+  }
+  function applyPendingIndicators() {
       for (const item of indexingList.querySelectorAll("[data-smb-root]")) {
-        const state = pending.get(item.dataset.smbRoot.toLowerCase());
+        const state = latestPendingByRoot.get(item.dataset.smbRoot.toLowerCase());
         const label = item.querySelector("[data-smb-pending]");
         if (label) label.textContent = state
-          ? (state.events > 0 ? "Événements SMB détectés : " + state.events +
+          ? (state.events > 0 ? "Événements détectés : " + state.events +
             " (dossiers affectés : " + state.directories + ") — en attente de traitement incrémental"
             : "Aucun nouvel événement SMB depuis le démarrage")
           : "";
       }
-    } catch { /* SMB watcher is optional. */ }
   }
   async function pollIndexingStatus() {
     if (indexingCheckInProgress || document.hidden) return;
