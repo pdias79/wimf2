@@ -217,7 +217,7 @@ public class WebUiTests
         Assert.Contains("const units = [\"o\", \"Ko\", \"Mo\", \"Go\", \"To\", \"Po\", \"Eo\"]", WebUi.Html);
         Assert.Contains("while (value >= 1024", WebUi.Html);
         Assert.Contains("maximumFractionDigits: 1", WebUi.Html);
-        Assert.Contains("makeCell(row, formatSize(hit.size))", WebUi.Html);
+        Assert.Contains("makeCell(row, isDirectory ? \"Dossier\" : formatSize(hit.size))", WebUi.Html);
         Assert.Contains("sizeCell.title = exactByteFormatter.format(hit.size) + \" octets\"", WebUi.Html);
         Assert.DoesNotContain("new Intl.NumberFormat(\"fr-FR\").format(hit.size) + \" o\"", WebUi.Html);
     }
