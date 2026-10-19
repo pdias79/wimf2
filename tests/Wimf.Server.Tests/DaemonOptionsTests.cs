@@ -92,7 +92,7 @@ public sealed class DaemonOptionsTests
             Assert.Equal(Path.Combine(directory, "network", "share.gz"), options.Sources[0]);
             Assert.Equal(Path.Combine(directory, "cache"), options.CacheDirectory);
             Assert.Equal(45, options.RefreshSeconds);
-            Assert.False(options.EnableFileActions);
+            Assert.True(options.EnableFileActions);
         }
         finally { Directory.Delete(directory, true); }
     }
