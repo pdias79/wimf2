@@ -67,4 +67,56 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(directory, recursive: true); }
     }
 
+    [Fact]
+    public void IncompleteJournalRecordDoesNotPublishOrAcknowledge()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-partial-event-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "catalog.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var originalBytes = File.ReadAllBytes(catalog);
+            var journal = Path.Combine(temp, "events");
+            var first = Path.Combine(root, "new.txt");
+            File.WriteAllText(first, "new");
+            var eventRecord = "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(first)) + "\n";
+            // A write interrupted before the terminating LF must not advance the cursor.
+            File.WriteAllText(journal, eventRecord[..^1]);
+            Assert.Throws<InvalidDataException>(() =>
+                IncrementalJournalPublisher.Publish(root, catalog, journal));
+            Assert.Equal(originalBytes, File.ReadAllBytes(catalog));
+            File.AppendAllText(journal, "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            Assert.Single(LegacyCatalogReader.ReadFile(catalog).EnumerateEntries());
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
+    [Fact]
+    public void MissingRootNeverOverwritesExistingCatalog()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-disconnected-root-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "catalog.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var originalBytes = File.ReadAllBytes(catalog);
+            var journal = Path.Combine(temp, "events");
+            var path = Path.Combine(root, "missing.txt");
+            File.WriteAllText(journal, "E\tdeleted\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(path)) + "\n");
+            Directory.Delete(root);
+            Assert.ThrowsAny<Exception>(() =>
+                IncrementalJournalPublisher.Publish(root, catalog, journal));
+            Assert.Equal(originalBytes, File.ReadAllBytes(catalog));
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
 }
