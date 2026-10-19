@@ -44,6 +44,7 @@ public static class WebUi
     #toast.error { color: #ba3636; }
     #toast-close { margin-left: 12px; }
     .advanced { padding-top: 12px; }
+    #saved-search-panel { transform: translateY(-.5em); }
     #search-options-panel { margin-top: 14px; margin-bottom: 14px; }
     .advanced label { font-size: .9rem; }
     .status { font-size: .9rem; color: GrayText; }
@@ -183,6 +184,7 @@ public static class WebUi
         <option value="25">25</option>
         <option value="50" selected>50</option>
         <option value="100">100</option>
+        <option value="500">500</option>
       </select>
       <button id="export-csv" type="button" class="copy" disabled>Exporter CSV</button>
     </div>
@@ -1040,8 +1042,9 @@ public static class WebUi
       nameWithIcon.appendChild(fileName);
       nameCell.appendChild(nameWithIcon);
       row.appendChild(nameCell);
-      const sizeCell = makeCell(row, formatSize(hit.size));
-      sizeCell.title = exactByteFormatter.format(hit.size) + " octets";
+      const isDirectory = hit.extension === "folder";
+      const sizeCell = makeCell(row, isDirectory ? "Dossier" : formatSize(hit.size));
+      if (!isDirectory) sizeCell.title = exactByteFormatter.format(hit.size) + " octets";
       makeCell(row, dateFormatter.format(new Date(hit.modifiedAt)));
       makeCell(row, hit.catalog);
       const action = document.createElement("td");
@@ -1085,7 +1088,7 @@ public static class WebUi
         } catch (error) { message(error.message || "Action impossible.", true); }
       }
       if (fileActionsEnabled) {
-        actionButton("Dossier", () => fileAction("reveal", "Afficher le dossier"));
+        actionButton("Ouvrir le dossier", () => fileAction("reveal", "Afficher le dossier"));
         actionButton("Copier le fichier", () => fileAction("copy", "Copier ce fichier"));
       }
       action.appendChild(actions);
