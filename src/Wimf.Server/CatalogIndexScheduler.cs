@@ -10,7 +10,8 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     int ScannedEntries = 0, DateTimeOffset? StartedAt = null,
     int SkippedEntries = 0, string[]? SkippedDetails = null,
     string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null,
-    CatalogScanMetrics? ScanMetrics = null, int EnumeratedDirectories = 0);
+    CatalogScanMetrics? ScanMetrics = null, int EnumeratedDirectories = 0,
+    DateTimeOffset? NextIncremental = null);
 
 public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error);
@@ -186,6 +187,10 @@ public sealed class CatalogIndexScheduler
                 {
                     LastUpdate = last,
                     NextUpdate = next,
+                    NextIncremental = _incremental is not null && job.IncrementalInterval is { } cadence
+                        ? (_incrementalAttempt[i] == default ? DateTimeOffset.UtcNow
+                            : _incrementalAttempt[i].Add(cadence))
+                        : null,
                     CanStart = Volatile.Read(ref _manualQueued[i]) == 0 && status.State != "running"
                 };
             }).ToArray();
