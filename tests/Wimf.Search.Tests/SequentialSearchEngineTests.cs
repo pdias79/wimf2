@@ -28,6 +28,15 @@ public class SequentialSearchEngineTests
     }
 
     [Fact]
+    public void DirectoryNamesAreSearchableUnlessExtensionFilterIsActive()
+    {
+        var catalog = Read("Vacation Photos;folder;0;0;2\\nphoto.jpg;jpg;10;1;2\\nnotes.txt;txt;5;0;2\\n");
+        var dirs = _engine.Search([catalog], new() { Text = "Vacation" });
+        Assert.True(Assert.Single(dirs).Entry.IsDirectory);
+        Assert.Empty(_engine.Search([catalog], new() { Text = "Vacation", Extensions = ["jpg"] }));
+    }
+
+    [Fact]
     public void CombinesInclusiveExtensionSizeAndDateFilters()
     {
         var catalog = Read("a.pdf;pdf;10;0;2\nb.PDF;PDF;20;0;3\nc.txt;txt;15;0;2\nd.pdf;pdf;9;0;2\ne.pdf;pdf;21;0;2\nf.pdf;pdf;15;0;1\ng.pdf;pdf;15;0;4\n");
