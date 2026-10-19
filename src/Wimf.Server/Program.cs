@@ -792,6 +792,14 @@ if (options.Indexing is { Length: > 0 })
             var watcher = smbWatchers.FirstOrDefault(w =>
                 watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
             if (watcher is null || !File.Exists(job.Output)) return false;
+            // The current serializer intentionally refuses a staging file inside
+            // the indexed root (notably C:\\). Keep periodic full scans there.
+            var rootPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(job.Root));
+            var outputPath = Path.GetFullPath(job.Output);
+            var pathComparison = OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (outputPath.StartsWith(rootPath + Path.DirectorySeparatorChar, pathComparison))
+                return false;
             var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
                 job.Root, job.Output, watcher.JournalPath, token), token);
             if (result.Changed)
