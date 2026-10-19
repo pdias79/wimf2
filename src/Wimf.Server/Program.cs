@@ -556,7 +556,7 @@ app.MapGet("/", WebUi.GetPage);
 var engine = new SequentialSearchEngine();
 
 app.MapGet("/api/health", () =>
-    Results.Json(new HealthResponse("ok", store.Snapshot.Length), WimfJsonContext.Default.HealthResponse));
+    Results.Json(new HealthResponse("ok", store.Snapshot.Length, enableFileActions), WimfJsonContext.Default.HealthResponse));
 
 app.MapGet("/api/catalogs", () =>
     Results.Json(store.Snapshot.Select((c, index) =>
