@@ -33,7 +33,7 @@ public static class IncrementalJournalPublisher
                 offset = acknowledged;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        if (offset > stream.Length) offset = 0;
+        if (offset < 0 || offset > stream.Length) offset = 0;
         var completeEnd = CompleteBoundary(stream, offset);
         if (offset == completeEnd) return new(0, 0);
         var directories = new HashSet<string>(OperatingSystem.IsWindows() ?
@@ -154,6 +154,8 @@ public static class IncrementalJournalPublisher
                 position = parsed;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        // A truncated or replaced journal invalidates the previous byte offset.
+        if (position < 0 || position > stream.Length) position = 0;
         var end = CompleteBoundary(stream, position);
         if (end - position > MaxBatchBytes)
             end = BatchBoundary(stream, position, end);
