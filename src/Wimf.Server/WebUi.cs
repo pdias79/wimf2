@@ -92,7 +92,7 @@ public static class WebUi
 <main>
   <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button><span id="health" class="status" role="status">Connexion…</span></div></header>
   <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
-    <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Actualiser les catalogues</button></div>
+    <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
     <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
     <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
@@ -108,6 +108,7 @@ public static class WebUi
       <input id="query" type="search" maxlength="1024" placeholder="Nom de fichier ou mots à rechercher" aria-label="Nom du fichier" autofocus>
       <button id="submit" type="submit">Rechercher</button>
     </form>
+    <details id="search-options-panel"><summary>Options et filtres</summary>
     <div class="options">
       <label for="extensions">Extensions <input id="extensions" placeholder="pdf, docx" aria-label="Extensions (séparées par virgules)"></label>
       <label for="max-results">Max <input id="max-results" type="number" min="1" max="1000" value="100"></label>
@@ -126,6 +127,7 @@ public static class WebUi
         <span id="catalog-selection-count" class="status" role="status"></span>
       </div>
       <div id="catalog-list" class="catalog-list" aria-label="Catalogues disponibles"></div>
+    </details>
     </details>
     <details id="saved-search-panel" class="advanced">
       <summary>Historique et favoris de recherche</summary>
@@ -530,7 +532,9 @@ public static class WebUi
         const incrementalTime = document.createElement("div");
         incrementalTime.className = "catalog-details";
         incrementalTime.setAttribute("data-next-incremental", "");
-        incrementalTime.textContent = "Prochaine tentative incrémentale : chargement…";
+        incrementalTime.textContent = catalog.nextIncremental
+          ? "Prochaine tentative incrémentale : " + new Date(catalog.nextIncremental).toLocaleString("fr-FR")
+          : "Prochaine tentative incrémentale : non planifiée";
         item.append(schedule, incrementalTime, start);
         if (catalog.state === "queued" || catalog.state === "running") {
           const cancel = document.createElement("button");
@@ -632,7 +636,7 @@ public static class WebUi
             ", en attente : " + formatBytes(storage.pending) + ")" +
             (storage.validity !== "valid" ? " · Curseur non validé" : "") : "";
           label.textContent = health + usage;
-          label.classList.toggle("error", !!state && state.health === "error");
+          label.classList.toggle("error", !!state && state.health === "error" && state.events !== null);
         }
       }
   }
