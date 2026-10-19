@@ -6,6 +6,17 @@ namespace Wimf.Server.Tests;
 public class WebUiTests
 {
     [Fact]
+    public void CompactSearchAndBulkIndexControlsArePresent()
+    {
+        Assert.Contains("id=\"search-options-panel\"", WebUi.Html);
+        Assert.Contains("<summary>Options et filtres</summary>", WebUi.Html);
+        Assert.Contains("Recharger les catalogues", WebUi.Html);
+        Assert.Contains("id=\"reindex-all\"", WebUi.Html);
+        Assert.Contains("/api/indexing/start-all", WebUi.Html);
+        Assert.DoesNotContain("Prochaine tentative incrémentale : chargement", WebUi.Html);
+    }
+
+    [Fact]
     public void PageHasAccessibleSearchAndCatalogDisplay()
     {
         Assert.Contains("lang=\"fr\"", WebUi.Html);
