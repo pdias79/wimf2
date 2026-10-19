@@ -18,6 +18,9 @@ public sealed record IndexingRunHistoryEntry(string Name, string State, DateTime
 public sealed class CatalogIndexScheduler
 {
     private readonly IndexingJob[] _jobs;
+    private readonly Func<IndexingJob, CancellationToken, Task<bool>>? _incremental;
+    private readonly DateTimeOffset[] _incrementalAttempt;
+    private readonly DateTimeOffset[] _lastFull;
     private readonly DateTimeOffset[] _retryNotBefore;
     private readonly Func<IndexingJob, CancellationToken, Task> _execute;
     private readonly Func<IndexingJob, CancellationToken, Task>? _afterSuccess;
@@ -49,9 +52,21 @@ public sealed class CatalogIndexScheduler
 
     public CatalogIndexScheduler(IEnumerable<IndexingJob> jobs,
         Func<IndexingJob, CancellationToken, Task>? execute = null,
-        Func<IndexingJob, CancellationToken, Task>? afterSuccess = null)
+        Func<IndexingJob, CancellationToken, Task>? afterSuccess = null,
+        Func<IndexingJob, CancellationToken, Task<bool>>? incremental = null)
     {
         _jobs = jobs.ToArray();
+        _incremental = incremental;
+        _incrementalAttempt = new DateTimeOffset[_jobs.Length];
+        _lastFull = _jobs.Select(job =>
+        {
+            var marker = job.Output + ".last-full-scan";
+            if (File.Exists(marker) && DateTimeOffset.TryParse(File.ReadAllText(marker), out var timestamp))
+                return timestamp;
+            return File.Exists(job.Output)
+                ? new DateTimeOffset(File.GetLastWriteTimeUtc(job.Output), TimeSpan.Zero)
+                : DateTimeOffset.MinValue;
+        }).ToArray();
         _afterSuccess = afterSuccess;
         _retryNotBefore = new DateTimeOffset[_jobs.Length];
         _manualQueued = new int[_jobs.Length];
@@ -263,6 +278,8 @@ public sealed class CatalogIndexScheduler
                 State = "completed", LastSuccess = DateTimeOffset.UtcNow, LastError = null
             });
             RecordRun(i, "completed");
+            _lastFull[i] = DateTimeOffset.UtcNow;
+            File.WriteAllText(job.Output + ".last-full-scan", _lastFull[i].ToString("O"));
 
             _retryNotBefore[i] = DateTimeOffset.MinValue;
             // A catalog is fully published before refreshing the search snapshot.
@@ -324,11 +341,24 @@ public sealed class CatalogIndexScheduler
                 token.ThrowIfCancellationRequested();
                 if (Volatile.Read(ref _manualQueued[i]) != 0 || now < _retryNotBefore[i]) continue;
                 var job = _jobs[i];
-                var indexedAt = File.Exists(job.Output)
-                    ? new DateTimeOffset(File.GetLastWriteTimeUtc(job.Output), TimeSpan.Zero)
-                    : DateTimeOffset.MinValue;
-                if (IsDue(job, indexedAt, now))
+                if (IsDue(job, _lastFull[i], now))
+                {
                     await ExecuteAsync(i, now, token);
+                    continue;
+                }
+                if (_incremental is null || job.IncrementalInterval is not { } cadence ||
+                    now < _incrementalAttempt[i].Add(cadence)) continue;
+                _incrementalAttempt[i] = now;
+                try
+                {
+                    if (await _incremental(job, token) && _afterSuccess is not null)
+                        await _afterSuccess(job, token);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[INCREMENTAL-ERROR] {job.Root}: {ex.Message}");
+                }
             }
         }
         finally { _executionLock.Release(); }
