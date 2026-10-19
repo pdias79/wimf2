@@ -820,3 +820,7 @@ Le panneau « Catalogues et actualisation » affiche par racine l'état de la su
 #### Reprise des surveillances SMB/Windows (PR #69)
 
 Lorsqu'un `FileSystemWatcher` signale une erreur, WIMF2 conserve le journal existant, signale « Surveillance interrompue » et tente de reconstruire le watcher chaque minute. Les racines indisponibles dès le démarrage sont également retentées chaque minute. Une reprise réussie est affichée comme « Surveillance rétablie » ; les événements enregistrés précédemment restent dans le journal pour l'indexation incrémentale. Des notifications peuvent manquer pendant la coupure : seul le prochain scan complet **périodique** configuré dans le JSON les rattrapera. **Aucun scan complet n'est déclenché par la reprise.**
+
+#### Indexations incrémentales sur journaux volumineux (PR #70)
+
+Les actualisations incrémentales lisent désormais un **lot d'au plus 8 Mio par tentative**, arrêté à une fin de ligne complète du journal. Seuls les octets publiés avec succès (ou vérifiés sans changement de catalogue) sont acquittés ; les événements suivants restent disponibles pour les prochains passages incrémentaux. Le comptage des notifications en attente parcourt tous les lots, sans allouer un tampon proportionnel à la taille totale du journal. Un enregistrement unique dépassant la limite est refusé sans déplacer le curseur. Le serveur n'accélère **jamais** les scans complets en raison de journaux volumineux : la cadence JSON demeure inchangée.

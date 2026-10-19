@@ -11,6 +11,9 @@ public static class IncrementalJournalPublisher
 
     public sealed record PendingResult(int Events, int Directories);
 
+    // Bound journal reads so a long-running watcher cannot exhaust memory.
+    internal const int MaxBatchBytes = 8 * 1024 * 1024;
+
     public static PendingResult Pending(string catalog, string journal)
     {
         if (!File.Exists(journal)) return new(0, 0);
@@ -30,26 +33,28 @@ public static class IncrementalJournalPublisher
                 offset = acknowledged;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        if (offset > stream.Length) offset = 0;
-        var end = CompleteBoundary(stream, offset);
-        if (offset == end) return new(0, 0);
-        // Count only complete records. Never display an unfinished append as pending.
-        // A bounded snapshot also prevents StreamReader from reading beyond the boundary.
-        if (end - offset > 128 * 1024 * 1024)
-            throw new InvalidDataException("Pending journal window is too large.");
-        stream.Position = offset;
-        var snapshot = new byte[checked((int)(end - offset))];
-        stream.ReadExactly(snapshot);
-        using var bounded = new MemoryStream(snapshot, writable: false);
+        if (offset < 0 || offset > stream.Length) offset = 0;
+        var completeEnd = CompleteBoundary(stream, offset);
+        if (offset == completeEnd) return new(0, 0);
         var directories = new HashSet<string>(OperatingSystem.IsWindows() ?
             StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var events = 0;
-        using var reader = new StreamReader(bounded, Encoding.UTF8);
-        while (reader.ReadLine() is { } line)
+        while (offset < completeEnd)
         {
-            if (line.StartsWith("E\t", StringComparison.Ordinal)) events++;
-            if (line.StartsWith("D\t", StringComparison.Ordinal))
-                directories.Add(line[2..]);
+            var batchEnd = completeEnd - offset > MaxBatchBytes
+                ? BatchBoundary(stream, offset, completeEnd) : completeEnd;
+            stream.Position = offset;
+            var snapshot = new byte[checked((int)(batchEnd - offset))];
+            stream.ReadExactly(snapshot);
+            using var bounded = new MemoryStream(snapshot, writable: false);
+            using var reader = new StreamReader(bounded, Encoding.UTF8);
+            while (reader.ReadLine() is { } line)
+            {
+                if (line.StartsWith("E\t", StringComparison.Ordinal)) events++;
+                if (line.StartsWith("D\t", StringComparison.Ordinal))
+                    directories.Add(line[2..]);
+            }
+            offset = batchEnd;
         }
         return new(events, directories.Count);
     }
@@ -80,6 +85,28 @@ public static class IncrementalJournalPublisher
                 if (buffer[i] == (byte)'\n') return offset + i + 1;
         }
         return lowerBound;
+    }
+
+    // Stop at a complete record line at or below the maximum batch size.
+    // If one line exceeds the budget, fail closed without advancing the cursor.
+    private static long BatchBoundary(FileStream stream, long start, long fullEnd)
+    {
+        var limit = Math.Min(fullEnd, checked(start + MaxBatchBytes));
+        var buffer = new byte[64 * 1024];
+        var cursor = start;
+        var lastComplete = start;
+        while (cursor < limit)
+        {
+            var count = (int)Math.Min(buffer.Length, limit - cursor);
+            stream.Position = cursor;
+            stream.ReadExactly(buffer.AsSpan(0, count));
+            for (var i = 0; i < count; i++)
+                if (buffer[i] == (byte)'\n') lastComplete = cursor + i + 1;
+            cursor += count;
+        }
+        if (lastComplete == start)
+            throw new InvalidDataException("A single journal record exceeds the batch budget.");
+        return lastComplete;
     }
 
     public static void AcknowledgeFullScan(string catalog, string journal, long beforeScanLength)
@@ -127,7 +154,11 @@ public static class IncrementalJournalPublisher
                 position = parsed;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        // A truncated or replaced journal invalidates the previous byte offset.
+        if (position < 0 || position > stream.Length) position = 0;
         var end = CompleteBoundary(stream, position);
+        if (end - position > MaxBatchBytes)
+            end = BatchBoundary(stream, position, end);
         // Test seam for deterministic concurrent appends. The captured end is
         // immutable: notifications written afterwards belong to the next batch.
         afterJournalSnapshot?.Invoke();
