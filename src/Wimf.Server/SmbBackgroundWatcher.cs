@@ -68,12 +68,8 @@ public sealed class SmbBackgroundWatcher : IDisposable
     public string JournalPath => _journal;
     public long Observed => Interlocked.Read(ref _events);
     public long Errors => Interlocked.Read(ref _errors);
-    public bool NeedsFullScan => Volatile.Read(ref _needsFullScan);
-
-    // Only a successfully published full scan may clear the recovery request.
-    // A failed watcher remains disabled for incremental updates.
-    public void MarkFullScanCompleted() => Volatile.Write(ref _needsFullScan, false);
-    public bool WatchFailed => Volatile.Read(ref _watchFailed);
+    public bool NeedsFullScan => _needsFullScan;
+    public bool WatchFailed => _watchFailed;
     public string[] AffectedDirectories
     {
         get { lock (_sync) return _directories.OrderBy(x => x, StringComparer.Ordinal).ToArray(); }
