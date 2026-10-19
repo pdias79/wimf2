@@ -20,6 +20,7 @@ public sealed class CatalogIndexScheduler
     private readonly IndexingJob[] _jobs;
     private readonly Func<IndexingJob, CancellationToken, Task<bool>>? _incremental;
     private readonly Func<IndexingJob, long>? _beforeFull;
+    private readonly Func<IndexingJob, bool>? _reconciliationRequired;
     private readonly Action<IndexingJob, long>? _afterFull;
     private readonly DateTimeOffset[] _incrementalAttempt;
     private readonly DateTimeOffset[] _lastFull;
@@ -57,11 +58,13 @@ public sealed class CatalogIndexScheduler
         Func<IndexingJob, CancellationToken, Task>? afterSuccess = null,
         Func<IndexingJob, CancellationToken, Task<bool>>? incremental = null,
         Func<IndexingJob, long>? beforeFull = null,
-        Action<IndexingJob, long>? afterFull = null)
+        Action<IndexingJob, long>? afterFull = null,
+        Func<IndexingJob, bool>? reconciliationRequired = null)
     {
         _jobs = jobs.ToArray();
         _incremental = incremental;
         _beforeFull = beforeFull;
+        _reconciliationRequired = reconciliationRequired;
         _afterFull = afterFull;
         _incrementalAttempt = new DateTimeOffset[_jobs.Length];
         _lastFull = _jobs.Select(job =>
@@ -180,7 +183,8 @@ public sealed class CatalogIndexScheduler
                     ? new DateTimeOffset(File.GetLastWriteTimeUtc(job.Output), TimeSpan.Zero)
                     : (DateTimeOffset?)null;
                 var status = Volatile.Read(ref _statuses[i]);
-                var scheduled = last?.Add(job.Interval) ?? DateTimeOffset.UtcNow;
+                var scheduled = _reconciliationRequired?.Invoke(job) == true
+                    ? DateTimeOffset.UtcNow : last?.Add(job.Interval) ?? DateTimeOffset.UtcNow;
                 var next = scheduled > _retryNotBefore[i] ? scheduled : _retryNotBefore[i];
                 return status with
                 {
@@ -314,7 +318,8 @@ public sealed class CatalogIndexScheduler
                                    System.Security.SecurityException)
         {
             var offline = !Directory.Exists(job.Root);
-            _retryNotBefore[i] = now.Add(offline ? TimeSpan.FromMinutes(1) : TimeSpan.FromHours(1));
+            _retryNotBefore[i] = now.Add(offline ? TimeSpan.FromMinutes(1) :
+                _reconciliationRequired?.Invoke(job) == true ? TimeSpan.FromMinutes(5) : TimeSpan.FromHours(1));
             Volatile.Write(ref _statuses[i], _statuses[i] with { State = "failed", LastError = ex.Message });
             RecordRun(i, "failed", ex.Message);
             Console.Error.WriteLine($"Indexing failed for '{job.Root}' -> '{job.Output}': " +
@@ -349,7 +354,9 @@ public sealed class CatalogIndexScheduler
                 token.ThrowIfCancellationRequested();
                 if (Volatile.Read(ref _manualQueued[i]) != 0 || now < _retryNotBefore[i]) continue;
                 var job = _jobs[i];
-                if (IsDue(job, _lastFull[i], now))
+                // A broken or restarted watcher requires a full reconciliation, even
+                // when the ordinary full-scan deadline is days away.
+                if (_reconciliationRequired?.Invoke(job) == true || IsDue(job, _lastFull[i], now))
                 {
                     await ExecuteAsync(i, now, token);
                     continue;
