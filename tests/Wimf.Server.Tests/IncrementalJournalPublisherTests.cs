@@ -24,7 +24,7 @@ public class IncrementalJournalPublisherTests
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(first)) + "\n");
             var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
             Assert.True(result.Changed);
-            Assert.Equal(1, LegacyCatalogReader.ReadFile(catalog).EnumerateEntries().Count());
+            Assert.Single(LegacyCatalogReader.ReadFile(catalog).EnumerateEntries());
             Assert.False(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             var second = Path.Combine(root, "second.txt");
             File.WriteAllText(second, "2");
