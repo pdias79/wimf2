@@ -868,6 +868,27 @@ public static class WebUi
   });
   renderSavedSearches();
 
+  byId("reindex-all").addEventListener("click", async event => {
+    if (!confirm("Lancer une indexation complète de tous les catalogues configurés ? " +
+      "Cela peut être long sur les partages SMB.")) return;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/indexing/start-all", {
+        method: "POST", headers: { "Content-Type": "application/json" }
+      });
+      if (!response.ok) throw new Error("Impossible de demander la réindexation globale.");
+      const result = await response.json();
+      indexingError.classList.remove("error");
+      indexingError.textContent = result.accepted + " catalogue(s) mis en file d'attente sur " +
+        result.total + " configuré(s).";
+      await pollIncrementalSchedule();
+    } catch (error) {
+      indexingError.classList.add("error");
+      indexingError.textContent = error.message || "Erreur réseau.";
+    } finally { button.disabled = false; }
+  });
+
   refreshButton.addEventListener("click", async () => {
     refreshButton.disabled = true;
     refreshRequestInProgress = true;
