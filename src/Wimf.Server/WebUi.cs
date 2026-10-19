@@ -358,7 +358,6 @@ public static class WebUi
     const expandedExclusions = new Set(Array.from(indexingList.querySelectorAll("details[data-exclusion-path]"))
       .filter(details => details.open).map(details => details.dataset.exclusionPath));
     indexingList.replaceChildren();
-    indexingError.textContent = "";
     const runningCatalog = catalogs.find(c => c.state === "running");
     const active = catalogs.filter(c => c.state === "running").length;
     const errors = catalogs.filter(c => c.state === "failed").length;
@@ -636,7 +635,7 @@ public static class WebUi
             ", en attente : " + formatBytes(storage.pending) + ")" +
             (storage.validity !== "valid" ? " · Curseur non validé" : "") : "";
           label.textContent = health + usage;
-          label.classList.toggle("error", !!state && state.health === "error" && state.events !== null);
+          label.classList.toggle("error", !!state && state.health === "error" && state.errors > 0);
         }
       }
   }
