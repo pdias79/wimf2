@@ -20,54 +20,41 @@ public static class ScheduledCatalogPublication
         Directory.CreateDirectory(directory);
         var suffix = target.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? ".txt.gz" : ".txt";
         var staging = Path.Combine(directory, ".wimf-staging-" + Guid.NewGuid().ToString("N") + suffix);
-        var inaccessiblePaths = new List<string>();
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         try
         {
+            // Confirm root access before enumeration, not only Directory.Exists.
+            EnsureRootAccessible(root);
             var count = LegacyCatalogWriter.Build(root, staging, name, cancellationToken,
-                message =>
-                {
-                    if (message.StartsWith("Skipped inaccessible ", StringComparison.Ordinal))
-                    {
-                        var colon = message.IndexOf(": ", StringComparison.Ordinal);
-                        var detail = colon >= 0 ? message[(colon + 2)..] : "";
-                        var reason = detail.LastIndexOf(" (", StringComparison.Ordinal);
-                        if (reason >= 0) detail = detail[..reason];
-                        inaccessiblePaths.Add(detail);
-                    }
-                    onSkipped?.Invoke(message);
-                }, exclusions, onProgress,
-                onMetrics, directoryPrefetch, onDirectoriesEnumerated);
+                onSkipped, exclusions, onProgress, onMetrics, directoryPrefetch,
+                onDirectoriesEnumerated);
             cancellationToken.ThrowIfCancellationRequested();
-            if (inaccessiblePaths.Count != 0)
-            {
-                // A previously indexed file or subtree must never disappear only
-                // because access was denied during this scan.
-                if (!File.Exists(target))
-                    throw new InvalidDataException("Initial scan encountered inaccessible entries; catalog not published.");
-                var old = LegacyCatalogReader.ReadFile(target);
-                if (old.Diagnostics.Count != 0 ||
-                    !Path.TrimEndingDirectorySeparator(Path.GetFullPath(old.Header.RootPath))
-                        .Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)), comparison))
-                    throw new InvalidDataException("Previous catalog cannot validate inaccessible paths.");
-                var priorPaths = old.EnumerateEntries()
-                    .Select(entry => old.GetFullPath(entry.Id)).ToArray();
-                if (inaccessiblePaths.Any(path => string.IsNullOrWhiteSpace(path) ||
-                    priorPaths.Any(previous => previous.Equals(path, comparison) ||
-                        previous.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) +
-                            Path.DirectorySeparatorChar, comparison))))
-                    throw new InvalidDataException("Previously indexed entries became inaccessible; existing catalog preserved.");
-            }
+            // A share may disconnect while children are being enumerated.
+            EnsureRootAccessible(root);
             var catalog = LegacyCatalogReader.ReadFile(staging);
             if (catalog.Diagnostics.Count != 0 || catalog.EnumerateEntries().Count() != count)
                 throw new InvalidDataException("Staged catalog validation failed; existing catalog preserved.");
             cancellationToken.ThrowIfCancellationRequested();
+            EnsureRootAccessible(root);
             File.Move(staging, target, overwrite: true);
             return count;
         }
         finally
         {
             if (File.Exists(staging)) File.Delete(staging);
+        }
+    }
+
+    private static void EnsureRootAccessible(string root)
+    {
+        try
+        {
+            using var enumerator = Directory.EnumerateFileSystemEntries(root).GetEnumerator();
+            _ = enumerator.MoveNext();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or DirectoryNotFoundException or System.Security.SecurityException)
+        {
+            throw new InvalidDataException("Indexing root is not accessible; previous catalog preserved.", ex);
         }
     }
 }
