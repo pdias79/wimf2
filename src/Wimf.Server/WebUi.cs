@@ -243,6 +243,51 @@ public static class WebUi
             " événements · " + failures + " échec(s)";
           container.appendChild(summary);
         }
+        // Performance dashboard based solely on the persisted history.
+        const groups = new Map();
+        for (const run of runs) {
+          const key = JSON.stringify([run.name, run.kind || "full"]);
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(run);
+        }
+        const summaryTitle = document.createElement("h4");
+        summaryTitle.textContent = "Performances par catalogue";
+        container.appendChild(summaryTitle);
+        for (const [key, records] of groups) {
+          const [name, kind] = JSON.parse(key);
+          const successes = records.filter(run => run.state === "completed");
+          const average = successes.length ? successes.reduce((sum, run) =>
+            sum + Math.max(0, new Date(run.finishedAt) - new Date(run.startedAt)), 0) /
+            successes.length / 1000 : null;
+          const events = records.reduce((sum, run) =>
+            sum + (kind === "incremental" ? Number(run.eventRecords) || 0 : 0), 0);
+          const info = document.createElement("p");
+          info.className = "catalog-details";
+          info.textContent = name + " · " + (kind === "incremental" ? "Incrémental" : "Complet") +
+            " · " + records.length + " opérations · moyenne réussies : " +
+            (average === null ? "—" : average.toLocaleString("fr-FR", {maximumFractionDigits: 2}) + " s") +
+            " · " + records.filter(run => run.state === "failed").length + " échecs" +
+            (kind === "incremental" ? " · " + events.toLocaleString("fr-FR") + " événements" : "");
+          container.appendChild(info);
+        }
+        const chart = document.createElement("div");
+        chart.setAttribute("role", "img");
+        chart.setAttribute("aria-label", "Durée des dix dernières indexations réussies");
+        chart.style.cssText = "display:flex;align-items:end;gap:5px;min-height:90px;margin:12px 0;overflow-x:auto";
+        const recent = runs.filter(run => run.state === "completed").slice(0, 10).reverse();
+        const durations = recent.map(run => Math.max(0,
+          new Date(run.finishedAt) - new Date(run.startedAt)));
+        const maximum = Math.max(1, ...durations);
+        for (let i = 0; i < recent.length; i++) {
+          const bar = document.createElement("div");
+          bar.style.cssText = "min-width:22px;flex:1;background:currentColor;opacity:.55;border-radius:3px 3px 0 0";
+          bar.style.height = Math.max(3, Math.round(85 * durations[i] / maximum)) + "px";
+          bar.title = recent[i].name + " · " +
+            (recent[i].kind === "incremental" ? "incrémentale" : "complète") +
+            " · " + (durations[i] / 1000).toLocaleString("fr-FR") + " s";
+          chart.appendChild(bar);
+        }
+        container.appendChild(chart);
         const list = document.createElement("ul");
         for (const run of runs) {
           const item = document.createElement("li");

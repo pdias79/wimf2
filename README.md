@@ -836,3 +836,7 @@ L'historique de session dans « Catalogues et actualisation » distingue les sca
 #### Historique persistant des indexations (PR #73)
 
 Les 50 dernières indexations complètes et tentatives incrémentales sont sauvegardées dans le répertoire local de données de l'application (`Wimf2/indexing-history.json`, sous `LocalApplicationData`) et rechargées au démarrage. L'écriture passe par un fichier temporaire puis un remplacement atomique. Un fichier JSON illisible est ignoré avec un avertissement : il n'empêche ni le démarrage ni la planification des indexations. Les erreurs de sauvegarde de l'historique ne doivent pas interrompre l'indexation. Les périodicités JSON et les scans complets restent inchangés.
+
+#### Tableau des performances d'indexation (PR #74)
+
+Le panneau « Catalogues et actualisation » utilise l'historique conservé des 50 dernières opérations pour présenter, par catalogue et par type (complet/incrémental), le nombre d'opérations, la durée moyenne des réussites, le nombre d'échecs et le total des événements incrémentaux. Un graphique à barres montre la durée des dix dernières opérations réussies (info-bulle au survol). Les statistiques sont en lecture seule et n'affectent ni les scans ni les intervalles du JSON.
