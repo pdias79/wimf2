@@ -21,7 +21,7 @@ public sealed class IndexingJobConfiguration
     public string Root { get; init; } = "";
     public string Output { get; init; } = "";
     public string? Name { get; init; }
-    public string[] Exclude { get; init; } = [];
+    public string[]? Exclude { get; init; }
     public int? IntervalMinutes { get; init; }
     public int? IntervalHours { get; init; }
     public int? IntervalDays { get; init; }
@@ -132,8 +132,9 @@ public sealed record DaemonOptions(
                 var root = Resolve(baseDirectory, job.Root);
                 var output = Resolve(baseDirectory, job.Output);
                 // An omitted exclude property defaults to an empty array; explicit null remains invalid.
-                if (job.Exclude is null) throw new ArgumentException("indexing.exclude must be an array.");
-                _ = new Wimf.Catalog.CatalogPathExclusions(root, job.Exclude);
+                // Missing exclude means no exclusions; explicit null is likewise empty.
+                var exclusions = job.Exclude ?? [];
+                _ = new Wimf.Catalog.CatalogPathExclusions(root, exclusions);
                 var workers = job.Workers ?? 1;
                 if (workers is < 1 or > 50)
                     throw new ArgumentException("indexing.workers must be between 1 and 50.");
