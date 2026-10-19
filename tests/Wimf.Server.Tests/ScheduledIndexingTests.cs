@@ -274,6 +274,11 @@ public sealed class ScheduledIndexingTests
                 await Task.Delay(20);
             Assert.Equal("completed", scheduler.Status[1].State);
             Assert.Null(scheduler.Status[1].QueuedAt);
+            // The public state may become completed before the queued background
+            // task releases its cancellation source and file handles on Windows.
+            for (var attempt = 0; attempt < 100 && !scheduler.Status[1].CanStart; attempt++)
+                await Task.Delay(20);
+            Assert.True(scheduler.Status[1].CanStart);
         }
         finally { Directory.Delete(folder, true); }
     }
