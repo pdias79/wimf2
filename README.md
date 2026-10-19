@@ -832,3 +832,7 @@ WIMF2 regroupe les notifications répétées pour un même chemin et, lorsqu'un 
 #### Historique des scans incrémentaux (PR #72)
 
 L'historique de session dans « Catalogues et actualisation » distingue les scans complets des tentatives incrémentales. Pour chaque tentative incrémentale, il indique son issue, sa durée, les événements lus et les chemins distincts/effectivement traités quand ces mesures sont disponibles. Un résumé de session affiche le nombre de tentatives, la durée moyenne, le total d'événements et les échecs. Cette supervision n'influence aucune planification : scans complets exclusivement selon le JSON ou manuellement.
+
+#### Historique persistant des indexations (PR #73)
+
+Les 50 dernières indexations complètes et tentatives incrémentales sont sauvegardées dans le répertoire local de données de l'application (`Wimf2/indexing-history.json`, sous `LocalApplicationData`) et rechargées au démarrage. L'écriture passe par un fichier temporaire puis un remplacement atomique. Un fichier JSON illisible est ignoré avec un avertissement : il n'empêche ni le démarrage ni la planification des indexations. Les erreurs de sauvegarde de l'historique ne doivent pas interrompre l'indexation. Les périodicités JSON et les scans complets restent inchangés.
