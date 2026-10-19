@@ -11,7 +11,7 @@ public class WebUiTests
         Assert.Contains("max-width: 1600px", WebUi.Html);
         Assert.Contains("text-overflow: ellipsis; white-space: nowrap", WebUi.Html);
         Assert.Contains("class=\"catalog-buttons\"", WebUi.Html);
-        Assert.Contains("transform: translateY(-10px)", WebUi.Html);
+        Assert.DoesNotContain("transform: translateY(-10px)", WebUi.Html);
         Assert.DoesNotContain(".advanced { border-top:", WebUi.Html);
     }
 
