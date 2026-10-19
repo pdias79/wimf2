@@ -97,7 +97,8 @@ public static class WebUi
     <h3>Indexations planifiées <span id="indexing-summary" class="status" role="status" aria-live="polite"></span></h3>
     <div id="indexing-list" class="indexing-list" aria-label="État des indexations"><span class="status">Chargement des indexations…</span></div>
     <p id="indexing-error" class="status" role="status"></p>
-    <details id="indexing-history-panel"><summary>Historique des indexations (session en cours)</summary>
+    <details id="indexing-history-panel"><summary>Historique des indexations (50 dernières opérations)</summary>
+      <div class="options"><label>Catalogue <select id="history-catalog-filter"><option value="">Tous</option></select></label><label>Type <select id="history-kind-filter"><option value="">Tous</option><option value="full">Complet</option><option value="incremental">Incrémental</option></select></label></div>
       <div id="indexing-history" class="catalog-details">Aucune indexation terminée.</div>
     </details>
   </section>
@@ -216,16 +217,17 @@ public static class WebUi
   const indexingError = byId("indexing-error");
   let indexingCheckInProgress = false;
   let historyCheckInProgress = false;
-  async function pollIndexingHistory() {
-    if (historyCheckInProgress || document.hidden || indexingPanel.hidden) return;
-    historyCheckInProgress = true;
-    try {
-      const response = await fetch("/api/indexing-history", { cache: "no-store" });
-      if (!response.ok) throw new Error();
-      const runs = await response.json();
-      if (!Array.isArray(runs)) throw new Error();
-      const container = byId("indexing-history");
-      container.replaceChildren();
+  let latestIndexingHistory = [];
+  const historyCatalogFilter = byId("history-catalog-filter");
+  const historyKindFilter = byId("history-kind-filter");
+  historyCatalogFilter.addEventListener("change", () => renderIndexingHistory());
+  historyKindFilter.addEventListener("change", () => renderIndexingHistory());
+  function renderIndexingHistory() {
+    const runs = latestIndexingHistory.filter(run =>
+      (!historyCatalogFilter.value || run.name === historyCatalogFilter.value) &&
+      (!historyKindFilter.value || (run.kind || "full") === historyKindFilter.value));
+    const container = byId("indexing-history");
+    container.replaceChildren();
       if (!runs.length) {
         container.textContent = "Aucune indexation terminée depuis le démarrage.";
       } else {
@@ -261,12 +263,21 @@ public static class WebUi
             successes.length / 1000 : null;
           const events = records.reduce((sum, run) =>
             sum + (kind === "incremental" ? Number(run.eventRecords) || 0 : 0), 0);
+          const latest = records[0];
+          const latestSeconds = Math.max(0, (new Date(latest.finishedAt) - new Date(latest.startedAt)) / 1000);
+          const successRate = Math.round(100 * successes.length / records.length);
+          const previous = successes.filter(run => run !== latest);
+          const baseline = previous.length ? previous.reduce((total, run) =>
+            total + Math.max(0, new Date(run.finishedAt) - new Date(run.startedAt)) / 1000, 0) / previous.length : null;
+          const unusuallySlow = latest.state === "completed" && baseline !== null &&
+            baseline > 0 && latestSeconds > baseline * 2;
           const info = document.createElement("p");
           info.className = "catalog-details";
           info.textContent = name + " · " + (kind === "incremental" ? "Incrémental" : "Complet") +
-            " · " + records.length + " opérations · moyenne réussies : " +
+            " · " + records.length + " opérations · dernière : " + latestSeconds.toLocaleString("fr-FR", {maximumFractionDigits: 2}) + " s · moyenne réussies : " +
             (average === null ? "—" : average.toLocaleString("fr-FR", {maximumFractionDigits: 2}) + " s") +
-            " · " + records.filter(run => run.state === "failed").length + " échecs" +
+            " · " + successRate + "% de réussite · " + records.filter(run => run.state === "failed").length + " échecs" +
+            (unusuallySlow ? " · Durée anormalement longue (> 2× la moyenne précédente)" : "") +
             (kind === "incremental" ? " · " + events.toLocaleString("fr-FR") + " événements" : "");
           container.appendChild(info);
         }
@@ -308,6 +319,28 @@ public static class WebUi
         }
         container.appendChild(list);
       }
+  }
+  async function pollIndexingHistory() {
+    if (historyCheckInProgress || document.hidden || indexingPanel.hidden) return;
+    historyCheckInProgress = true;
+    try {
+      const response = await fetch("/api/indexing-history", { cache: "no-store" });
+      if (!response.ok) throw new Error();
+      const runs = await response.json();
+      if (!Array.isArray(runs)) throw new Error();
+      latestIndexingHistory = runs;
+      const selected = historyCatalogFilter.value;
+      historyCatalogFilter.replaceChildren();
+      const any = document.createElement("option");
+      any.value = ""; any.textContent = "Tous";
+      historyCatalogFilter.appendChild(any);
+      for (const name of [...new Set(runs.map(run => run.name))].sort()) {
+        const option = document.createElement("option");
+        option.value = name; option.textContent = name;
+        historyCatalogFilter.appendChild(option);
+      }
+      historyCatalogFilter.value = selected;
+      renderIndexingHistory();
     } catch {
       byId("indexing-history").textContent = "Historique indisponible.";
     } finally { historyCheckInProgress = false; }
