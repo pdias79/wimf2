@@ -809,7 +809,9 @@ if (options.Indexing is { Length: > 0 })
             var outputPath = Path.GetFullPath(job.Output);
             var pathComparison = OperatingSystem.IsWindows()
                 ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-            if (outputPath.StartsWith(rootPath + Path.DirectorySeparatorChar, pathComparison))
+            var rootPrefix = Path.EndsInDirectorySeparator(rootPath)
+                ? rootPath : rootPath + Path.DirectorySeparatorChar;
+            if (outputPath.StartsWith(rootPrefix, pathComparison))
                 return false;
             var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
                 job.Root, job.Output, watcher.JournalPath, token, job.Exclude), token);
