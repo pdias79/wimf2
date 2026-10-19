@@ -786,34 +786,22 @@ app.Lifetime.ApplicationStopping.Register(() =>
 if (options.Indexing is { Length: > 0 })
 {
     var shutdown = app.Lifetime.ApplicationStopping;
-    var watcherErrorSnapshots = new Dictionary<SmbBackgroundWatcher, long>();
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
-        reconciliationRequired: job => smbWatchers.Any(w =>
-            watchComparer.Equals(w.Root, job.Root) && w.NeedsFullScan),
         beforeFull: job =>
         {
             var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
-            if (watcher is null) return 0;
-            watcherErrorSnapshots[watcher] = watcher.Errors;
-            return IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
+            return watcher is null ? 0 : IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
         },
         afterFull: (job, boundary) =>
         {
             var watcher = smbWatchers.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
             if (watcher is not null)
-            {
                 IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary);
-                // Do not clear the request if a notification failure occurred
-                // while the full scan was in progress.
-                if (watcherErrorSnapshots.TryGetValue(watcher, out var errorsBefore) &&
-                    watcher.Errors == errorsBefore)
-                    watcher.MarkFullScanCompleted();
-            }
         },
         incremental: async (job, token) =>
         {
             var watcher = smbWatchers.FirstOrDefault(w =>
-                watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed && !w.NeedsFullScan);
+                watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
             if (watcher is null || !File.Exists(job.Output)) return false;
             // The current serializer intentionally refuses a staging file inside
             // the indexed root (notably C:\\). Keep periodic full scans there.
