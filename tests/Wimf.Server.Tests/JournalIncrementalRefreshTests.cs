@@ -32,4 +32,29 @@ public class JournalIncrementalRefreshTests
         }
         finally { Directory.Delete(dir, true); }
     }
+    [Fact]
+    public void NewFilesAndFoldersUnderExcludedDirectoryAreNotCatalogued()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-delta-exclude-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        var excluded = Path.Combine(root, "excluded");
+        Directory.CreateDirectory(excluded);
+        try
+        {
+            var original = Path.Combine(temp, "original.txt.gz");
+            LegacyCatalogWriter.Build(root, original, exclusions: ["excluded"]);
+            var nested = Path.Combine(excluded, "nested");
+            Directory.CreateDirectory(nested);
+            var file = Path.Combine(nested, "secret.txt");
+            File.WriteAllText(file, "secret");
+            var journal = Path.Combine(temp, "events");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(excluded)) + "\n");
+            var result = JournalIncrementalRefresh.Run(root, original, journal,
+                Path.Combine(temp, "updated.txt.gz"), exclusions: ["excluded"]);
+            Assert.Empty(LegacyCatalogReader.ReadFile(result.Output).EnumerateEntries());
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
 }
