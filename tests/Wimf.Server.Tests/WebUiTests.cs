@@ -145,7 +145,7 @@ public class WebUiTests
         Assert.Contains("fileName.title = hit.fullPath", WebUi.Html);
         Assert.Contains("fileName.setAttribute(\"aria-label\"", WebUi.Html);
         Assert.Contains("fileName.addEventListener(\"click\", () => fileAction(\"open\"", WebUi.Html);
-        Assert.Contains("actionName !== \"open\"", WebUi.Html);
+        Assert.DoesNotContain("confirm(buttonLabel", WebUi.Html);
         Assert.DoesNotContain("<th>Chemin</th>", WebUi.Html);
         Assert.DoesNotContain("makeCell(row, hit.fullPath, \"path\")", WebUi.Html);
         Assert.Contains("navigator.clipboard.writeText(hit.fullPath)", WebUi.Html);
