@@ -71,7 +71,7 @@ public sealed class DaemonOptionsTests
         Assert.Empty(options.Sources);
         Assert.Null(options.CacheDirectory);
         Assert.Equal(300, options.RefreshSeconds);
-        Assert.False(options.EnableFileActions);
+        Assert.True(options.EnableFileActions);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public sealed class DaemonOptionsTests
     }
 
     [Fact]
-    public void CliOverridesListsAndSettingsButFileActionsRequireExplicitFlag()
+    public void CliOverridesListsAndSettingsWithFileActionsEnabledByDefault()
     {
         var directory = Path.Combine(Path.GetTempPath(), "wimf-config-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -116,7 +116,9 @@ public sealed class DaemonOptionsTests
             Assert.Equal("other-cache", options.CacheDirectory);
             Assert.Equal(0, options.RefreshSeconds);
             Assert.True(options.EnableFileActions);
-            Assert.False(DaemonOptions.Parse(["--config", file]).EnableFileActions);
+            Assert.True(DaemonOptions.Parse(["--config", file]).EnableFileActions);
+            Assert.False(DaemonOptions.Parse(["--config", file, "--disable-file-actions"]).EnableFileActions);
+            Assert.True(DaemonOptions.Parse(["--disable-file-actions", "--enable-file-actions"]).EnableFileActions);
         }
         finally { Directory.Delete(directory, true); }
     }
