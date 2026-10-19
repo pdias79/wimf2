@@ -749,3 +749,7 @@ Les noms contenant `;` ou un retour à la ligne ne sont pas représentables dans
 
 #### Accès refusés sur les disques système
 Lorsqu'un catalogue précédent existe, les chemins devenus inaccessibles sont comparés à ses entrées. Un chemin protégé qui n'était pas présent dans l'ancien catalogue peut rester ignoré avec un diagnostic, comme lors des anciens scans. Si le chemin était indexé (ou possédait des descendants indexés), la publication est refusée pour éviter la disparition artificielle de ces entrées. Une première indexation avec erreurs d'accès reste refusée. Consulter le fichier `.skipped-report.txt` du catalogue pour identifier les chemins en cause.
+
+#### Politique d'accès lors des scans planifiés
+
+Les fichiers et sous-répertoires inaccessibles sont ignorés et **retirés du nouveau catalogue**, même s'ils figuraient auparavant. Les chemins concernés restent listés dans le rapport des entrées ignorées. Pour éviter une publication après une déconnexion du partage, WIMF2 vérifie l'accès effectif à la **racine** (énumération de premier niveau) avant le scan, après le scan et juste avant publication. Si cette vérification échoue, le catalogue précédent est préservé. Cette vérification de la racine ne garantit pas de détecter toute indisponibilité intermittente survenue entre deux vérifications.
