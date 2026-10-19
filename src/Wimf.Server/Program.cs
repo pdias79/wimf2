@@ -870,7 +870,7 @@ if (options.Indexing is { Length: > 0 })
             var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
                 job.Root, job.Output, watcher.JournalPath, token, job.Exclude), token);
             if (result.Changed)
-                Console.WriteLine($"[INCREMENTAL] {job.Root} | hints={result.Hints} | entries={result.Entries}");
+                Console.WriteLine($"[INCREMENTAL] {job.Root} | events={result.EventRecords} | distinct={result.DistinctPaths} | paths={result.Hints} | elapsed={result.ElapsedMilliseconds} ms | entries={result.Entries}");
             return result.Changed;
         },
         afterSuccess: async (job, token) =>

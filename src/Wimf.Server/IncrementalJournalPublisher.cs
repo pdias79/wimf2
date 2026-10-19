@@ -7,7 +7,8 @@ namespace Wimf.Server;
 /// <summary>Persists journal acknowledgement only after the new catalog is published.</summary>
 public static class IncrementalJournalPublisher
 {
-    public sealed record Result(int Entries, int Hints, long AcknowledgedBytes, bool Changed);
+    public sealed record Result(int Entries, int Hints, long AcknowledgedBytes, bool Changed,
+        int EventRecords = 0, int DistinctPaths = 0, long ElapsedMilliseconds = 0);
 
     public sealed record PendingResult(int Events, int Directories);
 
@@ -187,7 +188,8 @@ public static class IncrementalJournalPublisher
                 File.Move(tempMarker, marker, overwrite: true);
             }
             finally { if (File.Exists(tempMarker)) File.Delete(tempMarker); }
-            return new(result.Entries, result.Hints, end, result.Hints != 0);
+            return new(result.Entries, result.Hints, end, result.Hints != 0,
+                result.EventRecords, result.DistinctPaths, result.ElapsedMilliseconds);
         }
         finally { if (File.Exists(staging)) File.Delete(staging); }
     }
