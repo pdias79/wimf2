@@ -142,7 +142,7 @@ public sealed class CatalogIndexScheduler
     {
         if (index < 0 || index >= _jobs.Length) return null;
         var status = Volatile.Read(ref _statuses[index]);
-        if (status.State != "completed" || status.SkippedEntries == 0) return null;
+        if ((status.State != "completed" && status.State != "failed") || status.SkippedEntries == 0) return null;
         var path = _jobs[index].Output + ".skipped-report.txt";
         try { return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
         catch (FileNotFoundException) { return null; }
