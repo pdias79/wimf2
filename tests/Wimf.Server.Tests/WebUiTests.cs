@@ -200,7 +200,7 @@ public class WebUiTests
         Assert.Contains("if (!indexingPanel.hidden) { pollIndexingStatus(); pollIndexingHistory(); }", WebUi.Html);
         Assert.Contains("Catalogues et actualisation", WebUi.Html);
         Assert.Contains("id=\"refresh\" type=\"button\"", WebUi.Html);
-        Assert.Contains("Actualiser les catalogues", WebUi.Html);
+        Assert.Contains("Recharger les catalogues", WebUi.Html);
         Assert.Contains("refreshButton.addEventListener(\"click\"", WebUi.Html);
         Assert.DoesNotContain("<details id=\"indexing-panel\"", WebUi.Html);
         Assert.Contains("<section class=\"panel\" aria-label=\"Résultats\">", WebUi.Html);
