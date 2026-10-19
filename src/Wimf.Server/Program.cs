@@ -558,6 +558,14 @@ var engine = new SequentialSearchEngine();
 app.MapGet("/api/health", () =>
     Results.Json(new HealthResponse("ok", store.Snapshot.Length, enableFileActions), WimfJsonContext.Default.HealthResponse));
 
+app.MapGet("/api/file-type-icon/{extension}", (string extension) =>
+{
+    var icon = FileTypeIcons.GetIcon(extension);
+    return icon is null
+        ? Results.NotFound()
+        : Results.File(icon, "image/x-icon");
+});
+
 app.MapGet("/api/catalogs", () =>
     Results.Json(store.Snapshot.Select((c, index) =>
         new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
