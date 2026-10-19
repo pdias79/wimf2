@@ -858,6 +858,30 @@ app.MapGet("/api/smb-pending", () =>
     return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
 });
 
+// Read-only storage accounting for planning safe journal retention.
+// Invalid cursors count as entirely pending; this endpoint never truncates files.
+app.MapGet("/api/smb-journal-storage", () =>
+{
+    var lines = smbWatchers.Select(w =>
+    {
+        var job = options.Indexing?.FirstOrDefault(j => watchComparer.Equals(j.Root, w.Root));
+        if (job is null) return null;
+        try
+        {
+            var storage = JournalStorageStatus.Read(job.Output, w.JournalPath);
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
+                storage.Bytes + "\t" + storage.AcknowledgedBytes + "\t" +
+                storage.PendingBytes + "\t" + (storage.CursorValid ? "valid" : "invalid");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[JOURNAL-STORAGE-ERROR] {w.Root}: {ex.Message}");
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\\t0\\t0\\t0\\terror";
+        }
+    }).Where(line => line is not null);
+    return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
+});
+
 app.MapGet("/api/smb-watch", () =>
 {
     var lines = smbWatchers.Select(w =>
