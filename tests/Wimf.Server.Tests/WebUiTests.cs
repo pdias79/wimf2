@@ -38,6 +38,18 @@ public class WebUiTests
     }
 
     [Fact]
+    public void ResultsUseFileTypeIconsAndSingleRowActionControls()
+    {
+        Assert.Contains("/api/file-type-icon/", WebUi.Html);
+        Assert.Contains("className = \"name-with-icon\"", WebUi.Html);
+        Assert.Contains("flex-wrap: nowrap; gap: 5px", WebUi.Html);
+        Assert.Contains("class=\"panel results-panel\"", WebUi.Html);
+        Assert.DoesNotContain("Tri et export des résultats reçus uniquement", WebUi.Html);
+        Assert.Contains("if (resultsTruncated)", WebUi.Html);
+        Assert.Contains("resultsTruncated = data.truncated === true", WebUi.Html);
+    }
+
+    [Fact]
     public void CompactSearchAndBulkIndexControlsArePresent()
     {
         Assert.Contains("id=\"search-options-panel\"", WebUi.Html);
@@ -247,7 +259,7 @@ public class WebUiTests
         Assert.Contains("Recharger les catalogues", WebUi.Html);
         Assert.Contains("refreshButton.addEventListener(\"click\"", WebUi.Html);
         Assert.DoesNotContain("<details id=\"indexing-panel\"", WebUi.Html);
-        Assert.Contains("<section class=\"panel\" aria-label=\"Résultats\">", WebUi.Html);
+        Assert.Contains("<section class=\"panel results-panel\" aria-label=\"Résultats\">", WebUi.Html);
         Assert.Contains("id=\"indexing-list\"", WebUi.Html);
         Assert.Contains("id=\"indexing-history-panel\"", WebUi.Html);
         Assert.Contains("fetch(\"/api/indexing-history\"", WebUi.Html);
