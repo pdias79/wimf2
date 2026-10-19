@@ -29,4 +29,25 @@ public class ScheduledCatalogPublicationTests
         }
         finally { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); }
     }
+    [Fact]
+    public void UnsupportedNamesRemainReportedButDoNotBlockCompleteRepresentableCatalog()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-staged-names-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "root");
+        var target = Path.Combine(temp, "index.txt.gz");
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "valid.txt"), "valid");
+            File.WriteAllText(Path.Combine(root, "unsupported;name.txt"), "legacy cannot encode");
+            var skipped = new List<string>();
+            var count = ScheduledCatalogPublication.Refresh(root, target, onSkipped: skipped.Add);
+            Assert.Equal(1, count);
+            Assert.Single(skipped);
+            Assert.StartsWith("Skipped unsupported file name:", skipped[0]);
+            Assert.Single(LegacyCatalogReader.ReadFile(target).EnumerateEntries());
+        }
+        finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
+    }
+
 }
