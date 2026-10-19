@@ -88,6 +88,7 @@ public class IncrementalJournalPublisherTests
             Assert.False(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             Assert.Equal(originalBytes, File.ReadAllBytes(catalog));
             Assert.Equal(0, IncrementalJournalPublisher.SnapshotLength(journal));
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             File.AppendAllText(journal, "\n");
             Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             Assert.Single(LegacyCatalogReader.ReadFile(catalog).EnumerateEntries());
@@ -206,6 +207,7 @@ public class IncrementalJournalPublisherTests
             File.WriteAllText(journal, firstRecord + secondRecord[..^1]);
             Assert.Equal(Encoding.UTF8.GetByteCount(firstRecord),
                 IncrementalJournalPublisher.SnapshotLength(journal));
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
             Assert.True(result.Changed);
             Assert.Equal(Encoding.UTF8.GetByteCount(firstRecord), result.AcknowledgedBytes);
