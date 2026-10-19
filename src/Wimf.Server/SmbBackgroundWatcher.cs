@@ -21,6 +21,8 @@ public sealed class SmbBackgroundWatcher : IDisposable
     private long _errors;
     private bool _needsFullScan = true; // No durable proof of uninterrupted coverage.
     private bool _disposed;
+    private bool _watchFailed;
+    private readonly string _stateDirectory;
 
     public SmbBackgroundWatcher(string root, string stateDirectory)
     {
@@ -28,10 +30,12 @@ public sealed class SmbBackgroundWatcher : IDisposable
         if (!Directory.Exists(_root))
             throw new DirectoryNotFoundException($"Watched root unavailable: {_root}");
         Directory.CreateDirectory(stateDirectory);
+        _stateDirectory = Path.GetFullPath(stateDirectory);
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_root.ToUpperInvariant())));
         _journal = Path.Combine(stateDirectory, hash + ".events");
         if (Path.GetFullPath(_journal).StartsWith(_root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
+            !Path.GetPathRoot(_root)!.Equals(_root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
             throw new ArgumentException("The journal must be outside the watched root.", nameof(stateDirectory));
 
         // Replaying the hints is diagnostic only: a restart always requires full reconciliation.
@@ -64,6 +68,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     public long Observed => Interlocked.Read(ref _events);
     public long Errors => Interlocked.Read(ref _errors);
     public bool NeedsFullScan => _needsFullScan;
+    public bool WatchFailed => _watchFailed;
     public string[] AffectedDirectories
     {
         get { lock (_sync) return _directories.OrderBy(x => x, StringComparer.Ordinal).ToArray(); }
@@ -108,6 +113,10 @@ public sealed class SmbBackgroundWatcher : IDisposable
 
     private void Remember(string path, string action, string kind = "unknown")
     {
+        // For whole-volume watches, the journal is necessarily on the same volume.
+        // Never emit notifications about our own persistent journal directory.
+        if (path.StartsWith(_stateDirectory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) return;
         Interlocked.Increment(ref _events);
         var directory = Path.GetDirectoryName(path);
         if (string.IsNullOrWhiteSpace(directory)) directory = _root;
@@ -152,6 +161,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
 
     private void OnError(object sender, ErrorEventArgs e)
     {
+        _watchFailed = true;
         _needsFullScan = true;
         Marker("error");
         Interlocked.Increment(ref _errors);

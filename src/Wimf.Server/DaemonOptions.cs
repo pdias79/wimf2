@@ -26,10 +26,16 @@ public sealed class IndexingJobConfiguration
     public int? IntervalHours { get; init; }
     public int? IntervalDays { get; init; }
     public int? Workers { get; init; }
+    public int? IncrementalIntervalMinutes { get; init; }
+    public int? IncrementalIntervalHours { get; init; }
+    public int? IncrementalIntervalDays { get; init; }
+    public int? FullScanIntervalMinutes { get; init; }
+    public int? FullScanIntervalHours { get; init; }
+    public int? FullScanIntervalDays { get; init; }
 }
 
 public sealed record IndexingJob(string Root, string Output, string? Name,
-    string[] Exclude, TimeSpan Interval, int Workers = 1);
+    string[] Exclude, TimeSpan Interval, int Workers = 1, TimeSpan? IncrementalInterval = null);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DaemonConfiguration))]
@@ -101,15 +107,28 @@ public sealed record DaemonOptions(
             foreach (var job in document.Indexing ?? [])
             {
                 if (job is null) throw new ArgumentException("indexing entries must be objects.");
-                var specifiedIntervals = (job.IntervalMinutes.HasValue ? 1 : 0) +
-                    (job.IntervalHours.HasValue ? 1 : 0) + (job.IntervalDays.HasValue ? 1 : 0);
-                if (specifiedIntervals != 1)
-                    throw new ArgumentException("Specify exactly one of intervalMinutes, intervalHours or intervalDays for each indexing job.");
-                var minutes = job.IntervalMinutes.HasValue ? (long)job.IntervalMinutes.Value :
-                    job.IntervalHours.HasValue ? (long)job.IntervalHours.Value * 60 :
-                    (long)job.IntervalDays!.Value * 24 * 60;
-                if (minutes < 1 || minutes > 3650L * 24 * 60)
-                    throw new ArgumentException("Indexing intervals must be between one minute and ten years.");
+                static TimeSpan? Interval(int? minutes, int? hours, int? days, string prefix)
+                {
+                    var specified = (minutes.HasValue ? 1 : 0) + (hours.HasValue ? 1 : 0) +
+                        (days.HasValue ? 1 : 0);
+                    if (specified > 1)
+                        throw new ArgumentException($"Specify at most one unit for {prefix}Interval.");
+                    if (specified == 0) return null;
+                    var value = minutes.HasValue ? (long)minutes.Value :
+                        hours.HasValue ? (long)hours.Value * 60 : (long)days!.Value * 1440;
+                    if (value < 1 || value > 3650L * 1440)
+                        throw new ArgumentException($"{prefix} interval must be between one minute and ten years.");
+                    return TimeSpan.FromMinutes(value);
+                }
+                var legacy = Interval(job.IntervalMinutes, job.IntervalHours, job.IntervalDays, "legacy");
+                var full = Interval(job.FullScanIntervalMinutes, job.FullScanIntervalHours,
+                    job.FullScanIntervalDays, "fullScan");
+                var incremental = Interval(job.IncrementalIntervalMinutes, job.IncrementalIntervalHours,
+                    job.IncrementalIntervalDays, "incremental");
+                if (legacy.HasValue && full.HasValue)
+                    throw new ArgumentException("Specify either intervalMinutes/Hours/Days or fullScanIntervalMinutes/Hours/Days, not both.");
+                var fullInterval = full ?? legacy ??
+                    throw new ArgumentException("Each indexing job requires a full scan interval.");
                 var root = Resolve(baseDirectory, job.Root);
                 var output = Resolve(baseDirectory, job.Output);
                 if (job.Exclude is null) throw new ArgumentException("indexing.exclude must be an array.");
@@ -118,7 +137,7 @@ public sealed record DaemonOptions(
                 if (workers is < 1 or > 50)
                     throw new ArgumentException("indexing.workers must be between 1 and 50.");
                 indexing.Add(new IndexingJob(root, output, job.Name, job.Exclude,
-                    TimeSpan.FromMinutes(minutes), workers));
+                    fullInterval, workers, incremental));
             }
         }
 

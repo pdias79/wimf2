@@ -773,7 +773,14 @@ if (options.Indexing is { Length: > 0 })
 
 // Monitoring is opt-in and observational: indexing continues to use full scans.
 var smbWatchers = new List<SmbBackgroundWatcher>();
-foreach (var root in options.WatchRoots ?? [])
+var unavailableWatchRoots = new HashSet<string>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+// Watch every indexed root, including local Windows disks. Explicit watchRoots
+// are retained for roots without a scheduled indexing job.
+var watchComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+var watchedRoots = (options.WatchRoots ?? [])
+    .Concat(options.Indexing?.Select(job => job.Root) ?? [])
+    .Distinct(watchComparer);
+foreach (var root in watchedRoots)
 {
     try
     {
@@ -785,12 +792,26 @@ foreach (var root in options.WatchRoots ?? [])
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
     {
+        unavailableWatchRoots.Add(root);
         Console.Error.WriteLine($"[SMB-WATCH-ERROR] Cannot monitor '{root}': {ex.Message}; full scans remain enabled.");
     }
 }
 app.Lifetime.ApplicationStopping.Register(() =>
 {
     foreach (var watcher in smbWatchers) watcher.Dispose();
+});
+
+// Pending notification hints, not yet acknowledged by an incremental publisher.
+app.MapGet("/api/smb-pending", () =>
+{
+    var lines = smbWatchers.Select(w =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
+        w.Observed.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\t" +
+        w.AffectedDirectories.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+        "\t" + (w.WatchFailed ? "error" : "active"))
+        .Concat(unavailableWatchRoots.Select(root =>
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(root)) + "\t0\t0\terror"));
+    return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
 });
 
 app.MapGet("/api/smb-watch", () =>
