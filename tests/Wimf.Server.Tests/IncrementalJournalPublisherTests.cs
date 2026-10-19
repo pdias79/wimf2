@@ -145,4 +145,39 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(temp, true); }
     }
 
+    [Fact]
+    public void EventsAppendedAfterSnapshotRemainPending()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-concurrent-events-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "catalog.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var journal = Path.Combine(temp, "events");
+            var first = Path.Combine(root, "first.txt");
+            var second = Path.Combine(root, "second.txt");
+            File.WriteAllText(first, "first");
+            File.WriteAllText(journal, Event(first));
+            var result = IncrementalJournalPublisher.Publish(root, catalog, journal,
+                afterJournalSnapshot: () =>
+                {
+                    File.WriteAllText(second, "second");
+                    File.AppendAllText(journal, Event(second));
+                });
+            Assert.True(result.Changed);
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            var firstCatalog = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Single(firstCatalog.EnumerateEntries());
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            Assert.Equal(2, LegacyCatalogReader.ReadFile(catalog).EnumerateEntries().Count());
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+
+        static string Event(string path) => "E" + (char)9 + "created" + (char)9 +
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(path)) + (char)10;
+    }
+
 }
