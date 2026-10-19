@@ -22,15 +22,19 @@ public class IncrementalJournalPublisherTests
             File.WriteAllText(first, "1");
             File.WriteAllText(journal, "E\tcreated\t" +
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(first)) + "\n");
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
             Assert.True(result.Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             Assert.Single(LegacyCatalogReader.ReadFile(catalog).EnumerateEntries());
             Assert.False(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             var second = Path.Combine(root, "second.txt");
             File.WriteAllText(second, "2");
             File.AppendAllText(journal, "E\tcreated\t" +
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(second)) + "\n");
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             Assert.Equal(2, LegacyCatalogReader.ReadFile(catalog).EnumerateEntries().Count());
         }
         finally { Directory.Delete(temp, true); }
