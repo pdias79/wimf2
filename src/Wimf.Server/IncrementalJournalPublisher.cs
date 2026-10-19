@@ -73,7 +73,7 @@ public static class IncrementalJournalPublisher
     }
 
     public static Result Publish(string root, string catalog, string journal, CancellationToken token = default,
-        IEnumerable<string>? exclusions = null)
+        IEnumerable<string>? exclusions = null, Action? afterJournalSnapshot = null)
     {
         if (!File.Exists(catalog) || !File.Exists(journal))
             return new(0, 0, 0, false);
@@ -97,6 +97,9 @@ public static class IncrementalJournalPublisher
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var end = stream.Length;
+        // Test seam for deterministic concurrent appends. The captured end is
+        // immutable: notifications written afterwards belong to the next batch.
+        afterJournalSnapshot?.Invoke();
         if (position > end) position = 0; // Journal rotation or truncation.
         if (position == end) return new(0, 0, position, false);
         // Snapshot the journal boundary before doing expensive work. Append-only watcher
