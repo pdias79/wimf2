@@ -54,6 +54,21 @@ public class WebUiTests
     }
 
     [Fact]
+    public void ExtensionSortingAndLocalPagingPreferencesAreAvailable()
+    {
+        Assert.Contains("extension-asc", WebUi.Html);
+        Assert.Contains("extension-desc", WebUi.Html);
+        Assert.Contains("first.extension === \"folder\"", WebUi.Html);
+        Assert.Contains("wimf2.preferences.", WebUi.Html);
+        Assert.Contains("savePreference(\"pageSize\"", WebUi.Html);
+        Assert.Contains("savePreference(\"maxResults\"", WebUi.Html);
+        Assert.Contains("value=\"1000\"", WebUi.Html);
+        Assert.Contains("<option value=\"100\" selected>", WebUi.Html);
+        Assert.Contains(".file-actions-menu { position: fixed;", WebUi.Html);
+        Assert.Contains("menuToggle.getBoundingClientRect()", WebUi.Html);
+    }
+
+    [Fact]
     public void DirectoryResultsAndLargePageAreVisible()
     {
         Assert.Contains("<option value=\"500\">500</option>", WebUi.Html);
@@ -134,7 +149,7 @@ public class WebUiTests
         foreach (var mode in new[]
         {
             "original", "name-asc", "name-desc", "size-asc", "size-desc",
-            "date-asc", "date-desc"
+            "date-asc", "date-desc", "extension-asc", "extension-desc"
         })
             Assert.Contains("value=" + (char)34 + mode + (char)34, WebUi.Html);
         Assert.Contains("Modifié le", WebUi.Html);
