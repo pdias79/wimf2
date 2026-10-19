@@ -118,8 +118,34 @@ public static class LegacyCatalogWriter
                             sortTicks += result.SortTicks;
                         }
                     }
+                    catch (IOException firstError) when (parent != 0)
+                    {
+                        // An SMB enumeration can fail transiently while a different
+                        // computer is modifying the share. Re-enumerate once before
+                        // treating the folder as inaccessible.
+                        try
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            Thread.Sleep(150);
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            children = folder.EnumerateFileSystemInfos().ToArray();
+                            enumerationTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                            start = System.Diagnostics.Stopwatch.GetTimestamp();
+                            Array.Sort(children, (a, b) => StringComparer.Ordinal.Compare(a.Name, b.Name));
+                            sortTicks += System.Diagnostics.Stopwatch.GetTimestamp() - start;
+                            onDirectoriesEnumerated?.Invoke(++enumeratedDirectories);
+                        }
+                        catch (Exception retryError) when (retryError is IOException or
+                            UnauthorizedAccessException or System.Security.SecurityException)
+                        {
+                            onSkipped?.Invoke($"Skipped inaccessible directory: {folder.FullName} ({retryError.Message}; initial: {firstError.Message})");
+                            Prefetch();
+                            continue;
+                        }
+                    }
                     catch (Exception ex) when (parent != 0 &&
-                        ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
+                        ex is UnauthorizedAccessException or System.Security.SecurityException)
                     {
                         onSkipped?.Invoke($"Skipped inaccessible directory: {folder.FullName} ({ex.Message})");
                         Prefetch();

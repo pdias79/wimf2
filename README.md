@@ -753,3 +753,7 @@ Lorsqu'un catalogue précédent existe, les chemins devenus inaccessibles sont c
 #### Politique d'accès lors des scans planifiés
 
 Les fichiers et sous-répertoires inaccessibles sont ignorés et **retirés du nouveau catalogue**, même s'ils figuraient auparavant. Les chemins concernés restent listés dans le rapport des entrées ignorées. Pour éviter une publication après une déconnexion du partage, WIMF2 vérifie l'accès effectif à la **racine** (énumération de premier niveau) avant le scan, après le scan et juste avant publication. Si cette vérification échoue, le catalogue précédent est préservé. Cette vérification de la racine ne garantit pas de détecter toute indisponibilité intermittente survenue entre deux vérifications.
+
+
+#### Fiabilité SMB pendant les indexations (PR #63)
+En cas d'erreur d'E/S lors de l'énumération d'un sous-dossier, WIMF tente une seconde énumération après 150 ms avant de le consigner comme inaccessible. Un refus de droits ne déclenche pas de nouvelle tentative. Quand un fichier ou sous-dossier est signalé inaccessible, le planificateur vérifie immédiatement l'accès à la racine ; une racine indisponible interrompt la publication et conserve l'ancien catalogue. Les fichiers réellement inaccessibles restent exclus du nouveau catalogue, conformément à la politique choisie. Ces contrôles ne prouvent pas la cohérence d'un instantané SMB si des modifications surviennent pendant le scan ; la journalisation des événements continue de servir au diagnostic.

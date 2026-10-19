@@ -25,7 +25,14 @@ public static class ScheduledCatalogPublication
             // Confirm root access before enumeration, not only Directory.Exists.
             EnsureRootAccessible(root);
             var count = LegacyCatalogWriter.Build(root, staging, name, cancellationToken,
-                onSkipped, exclusions, onProgress, onMetrics, directoryPrefetch,
+                message =>
+                {
+                    // Detect disconnection at the point of a failed child enumeration,
+                    // not only before and after a potentially long SMB scan.
+                    if (message.StartsWith("Skipped inaccessible ", StringComparison.Ordinal))
+                        EnsureRootAccessible(root);
+                    onSkipped?.Invoke(message);
+                }, exclusions, onProgress, onMetrics, directoryPrefetch,
                 onDirectoriesEnumerated);
             cancellationToken.ThrowIfCancellationRequested();
             // A share may disconnect while children are being enumerated.
