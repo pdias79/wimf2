@@ -6,12 +6,15 @@ namespace Wimf.Server;
 /// <summary>Best-effort journal-based update. Missed notifications are corrected by periodic full scans.</summary>
 public static class JournalIncrementalRefresh
 {
-    public sealed record Result(int Entries, int Hints, string Output);
+    public sealed record Result(int Entries, int Hints, string Output,
+        int EventRecords = 0, int DistinctPaths = 0, long ElapsedMilliseconds = 0);
 
     public static Result Run(string rootPath, string catalogPath, string journalPath,
         string outputPath, long fromOffset = 0, long? untilOffset = null,
         CancellationToken cancellationToken = default, IEnumerable<string>? exclusions = null)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var eventRecords = 0;
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
         var cmp = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -61,10 +64,18 @@ public static class JournalIncrementalRefresh
                 if (!path.Equals(root, comparison) &&
                     !path.StartsWith(root + Path.DirectorySeparatorChar, comparison))
                     throw new InvalidDataException("Journal path outside configured root.");
+                eventRecords++;
                 if (!path.Equals(root, comparison)) hints.Add(path);
             }
         }
-        foreach (var path in hints.OrderBy(p => p.Length))
+        // A parent notification subsumes its children: scan the subtree once.
+        var compacted = new List<string>();
+        foreach (var path in hints.OrderBy(p => p.Length).ThenBy(p => p, cmp))
+        {
+            if (!compacted.Any(parent => path.StartsWith(parent + Path.DirectorySeparatorChar, comparison)))
+                compacted.Add(path);
+        }
+        foreach (var path in compacted)
         {
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var stale in entries.Keys.Where(p => p.Equals(path, comparison) ||
@@ -105,7 +116,8 @@ public static class JournalIncrementalRefresh
             File.Delete(output);
             throw new InvalidDataException("Incremental round-trip validation failed.");
         }
-        return new(count, hints.Count, output);
+        stopwatch.Stop();
+        return new(count, compacted.Count, output, eventRecords, hints.Count, stopwatch.ElapsedMilliseconds);
 
         void TryAddFile(string path)
         {
