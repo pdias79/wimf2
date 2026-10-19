@@ -22,6 +22,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     private bool _needsFullScan = true; // No durable proof of uninterrupted coverage.
     private bool _disposed;
     private volatile bool _watchFailed;
+    private volatile bool _recovered;
     private readonly string _stateDirectory;
 
     public static string GetJournalPath(string root, string stateDirectory)
@@ -82,6 +83,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     public long Errors => Interlocked.Read(ref _errors);
     public bool NeedsFullScan => _needsFullScan;
     public bool WatchFailed => _watchFailed;
+    public bool Recovered => _recovered;
     public string[] AffectedDirectories
     {
         get { lock (_sync) return _directories.OrderBy(x => x, StringComparer.Ordinal).ToArray(); }
@@ -129,6 +131,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
                 var previous = _watcher;
                 _watcher = replacement;
                 _watchFailed = false;
+                _recovered = true;
                 previous.Dispose();
                 Marker("recovered");
                 Console.WriteLine($"[SMB-WATCH] recovered | {_root}");
