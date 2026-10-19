@@ -33,6 +33,10 @@ public static class WebUi
     .options input[type=checkbox] { width: auto; }
     .options input[type=number] { width: 110px; }
     .options input[type=date] { width: 148px; }
+    #search-options-panel:not([open]) { border: none; }
+    #toast { position: fixed; bottom: 20px; right: 20px; max-width: min(440px, calc(100vw - 40px)); padding: 12px 16px; border: 1px solid GrayText; border-radius: 8px; background: Canvas; color: CanvasText; box-shadow: 0 3px 12px #0003; z-index: 20; }
+    #toast.error { color: #ba3636; }
+    #toast-close { margin-left: 12px; }
     .advanced { border-top: 1px solid color-mix(in srgb, CanvasText 15%, Canvas); padding-top: 12px; }
     .advanced label { font-size: .9rem; }
     .status { font-size: .9rem; color: GrayText; }
@@ -90,7 +94,7 @@ public static class WebUi
 </head>
 <body>
 <main>
-  <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button><span id="health" class="status" role="status">Connexion…</span></div></header>
+  <header><h1>Wimf <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
   <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
     <div class="bar"><h2>Catalogues et actualisation</h2><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
@@ -102,7 +106,6 @@ public static class WebUi
       <div id="indexing-history" class="catalog-details">Aucune indexation terminée.</div>
     </details>
   </section>
-  <p class="sub">Rechercher des fichiers dans les catalogues locaux chargés par le daemon.</p>
   <section class="panel" aria-label="Recherche">
     <form id="search-form">
       <input id="query" type="search" maxlength="1024" placeholder="Nom de fichier ou mots à rechercher" aria-label="Nom du fichier" autofocus>
@@ -142,7 +145,6 @@ public static class WebUi
       <h3>Recherches récentes</h3>
       <div id="history-list" class="saved-searches"></div>
     </details>
-    <p id="status" class="status" role="status" aria-live="polite">Prêt.</p>
   </section>
   <section class="panel" aria-label="Résultats">
     <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2></div>
@@ -180,13 +182,18 @@ public static class WebUi
     <p id="empty" class="empty">Lancez une recherche pour afficher les résultats.</p>
   </section>
 </main>
+<div id="toast" class="status" role="status" aria-live="polite" hidden><span id="toast-text"></span><button id="toast-close" type="button" aria-label="Fermer la notification">×</button></div>
 <script>
 (() => {
   "use strict";
   const byId = id => document.getElementById(id);
   const form = byId("search-form");
   const submit = byId("submit");
-  const status = byId("status");
+  const toast = byId("toast");
+  const toastText = byId("toast-text");
+  let toastTimer;
+  let fileActionsEnabled = false;
+  byId("toast-close").addEventListener("click", () => { clearTimeout(toastTimer); toast.hidden = true; });
   const tbody = byId("results");
   const table = byId("results-table");
   const empty = byId("empty");
@@ -891,7 +898,7 @@ public static class WebUi
   refreshButton.addEventListener("click", async () => {
     refreshButton.disabled = true;
     refreshRequestInProgress = true;
-    message("Actualisation des catalogues en cours…");
+    message("Actualisation des catalogues en cours…", false, true);
     try {
       const response = await fetch("/api/refresh", { method: "POST" });
       const data = await response.json();
@@ -907,9 +914,13 @@ public static class WebUi
     finally { refreshRequestInProgress = false; refreshButton.disabled = false; }
   });
 
-  function message(text, isError = false) {
-    status.textContent = text;
-    status.classList.toggle("error", isError);
+  function message(text, isError = false, inProgress = false) {
+    clearTimeout(toastTimer);
+    toastText.textContent = text;
+    toast.classList.toggle("error", isError);
+    toast.hidden = !text;
+    if (!isError && !inProgress && text)
+      toastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
   }
   function makeCell(row, value, className = "") {
     const cell = document.createElement("td");
@@ -1003,7 +1014,6 @@ public static class WebUi
         catch { message("Impossible de copier le chemin en texte.", true); }
       });
       async function fileAction(actionName, buttonLabel) {
-        if (actionName !== "open" && !confirm(buttonLabel + " sur l’ordinateur exécutant Wimf ?\\n" + hit.fullPath)) return;
         try {
           const response = await fetch("/api/file-action", {
             method: "POST", headers: { "Content-Type": "application/json" },
@@ -1012,12 +1022,13 @@ public static class WebUi
           });
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || "Action impossible.");
-          message(actionName === "copy" ? "Fichier copié : collez-le dans l’Explorateur Windows."
-            : "Action demandée au système.");
+          if (actionName === "copy") message("Fichier copié : collez-le dans l’Explorateur Windows.");
         } catch (error) { message(error.message || "Action impossible.", true); }
       }
-      actionButton("Dossier", () => fileAction("reveal", "Afficher le dossier"));
-      actionButton("Copier le fichier", () => fileAction("copy", "Copier ce fichier"));
+      if (fileActionsEnabled) {
+        actionButton("Dossier", () => fileAction("reveal", "Afficher le dossier"));
+        actionButton("Copier le fichier", () => fileAction("copy", "Copier ce fichier"));
+      }
       action.appendChild(actions);
       row.appendChild(action);
       fragment.appendChild(row);
@@ -1064,7 +1075,7 @@ public static class WebUi
     const controller = new AbortController();
     activeController = controller;
     submit.disabled = true;
-    message("Recherche en cours…");
+    message("Recherche en cours…", false, true);
     const extensions = byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean);
     const maxResults = Number(byId("max-results").value);
     const minSizeText = byId("min-size").value.trim();
@@ -1150,13 +1161,12 @@ public static class WebUi
     fetch("/api/catalogs").then(r => { if (!r.ok) throw new Error(); return r.json(); }),
     fetch("/api/refresh-status").then(r => { if (!r.ok) throw new Error(); return r.json(); })
   ]).then(([health, catalogs, refreshStatus]) => {
-    byId("health").textContent = "Connecté";
+    fileActionsEnabled = health.fileActionsEnabled === true;
     renderCatalogs(catalogs);
     showRefreshStatus(refreshStatus);
     lastObservedRefresh = refreshStatus.lastRefresh;
     if (catalogs.length === 0) message("Aucun catalogue chargé : démarrer wimfd avec --catalog.");
   }).catch(() => {
-    byId("health").textContent = "Déconnecté";
     message("Impossible de contacter le daemon.", true);
   });
 })();
