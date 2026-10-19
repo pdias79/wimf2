@@ -38,11 +38,15 @@ public class WebUiTests
     }
 
     [Fact]
-    public void ResultsUseFileTypeIconsAndSingleRowActionControls()
+    public void ResultsUseFileTypeIconsAndContextMenu()
     {
         Assert.Contains("/api/file-type-icon/", WebUi.Html);
         Assert.Contains("className = \"name-with-icon\"", WebUi.Html);
-        Assert.Contains("flex-wrap: nowrap; gap: 5px", WebUi.Html);
+        Assert.Contains("className = \"file-actions-menu\"", WebUi.Html);
+        Assert.Contains("actions.addEventListener(\"mouseleave\"", WebUi.Html);
+        Assert.Contains("const dot = hit.name.lastIndexOf(\".\")", WebUi.Html);
+        Assert.Contains("max=\"10000\"", WebUi.Html);
+        Assert.Contains("<th aria-label=\"Actions\"></th>", WebUi.Html);
         Assert.Contains("class=\"panel results-panel\"", WebUi.Html);
         Assert.DoesNotContain("Tri et export des résultats reçus uniquement", WebUi.Html);
         Assert.Contains("if (resultsTruncated)", WebUi.Html);
