@@ -766,9 +766,27 @@ foreach (var root in watchedRoots)
 {
     try
     {
-        var watcher = new SmbBackgroundWatcher(root,
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Wimf2", "smb-watch"));
+        var watchStateDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Wimf2", "smb-watch");
+        // Only compact before the watcher opens the journal. A root shared by
+        // multiple configured catalogs is left untouched because their cursor
+        // positions may differ.
+        var consumers = options.Indexing?.Where(j => watchComparer.Equals(j.Root, root)).ToArray() ?? [];
+        if (consumers.Length == 1)
+        {
+            var journal = SmbBackgroundWatcher.GetJournalPath(root, watchStateDirectory);
+            try
+            {
+                if (OfflineJournalCompaction.TryCompact(consumers[0].Output, journal))
+                    Console.WriteLine($"[JOURNAL-COMPACT] {root} | acknowledged prefix removed");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine($"[JOURNAL-COMPACT-ERROR] {root}: {ex.Message}");
+            }
+        }
+        var watcher = new SmbBackgroundWatcher(root, watchStateDirectory);
         watcher.Start();
         smbWatchers.Add(watcher);
     }
@@ -855,6 +873,29 @@ app.MapGet("/api/smb-pending", () =>
     })
         .Concat(unavailableWatchRoots.Select(root =>
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(root)) + "\t0\t0\terror"));
+    return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
+});
+
+// Read-only size and acknowledgement diagnostics; no journal contents are modified.
+app.MapGet("/api/smb-journal-storage", () =>
+{
+    var lines = smbWatchers.Select(w =>
+    {
+        var job = options.Indexing?.FirstOrDefault(j => watchComparer.Equals(j.Root, w.Root));
+        if (job is null) return null;
+        try
+        {
+            var storage = JournalStorageStatus.Read(job.Output, w.JournalPath);
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t" +
+                storage.Bytes + "\t" + storage.AcknowledgedBytes + "\t" +
+                storage.PendingBytes + "\t" + (storage.CursorValid ? "valid" : "invalid");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[JOURNAL-STORAGE-ERROR] {w.Root}: {ex.Message}");
+            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(w.Root)) + "\t0\t0\t0\terror";
+        }
+    }).Where(line => line is not null);
     return Results.Text(string.Join("\n", lines), "text/plain; charset=utf-8");
 });
 

@@ -24,6 +24,13 @@ public sealed class SmbBackgroundWatcher : IDisposable
     private bool _watchFailed;
     private readonly string _stateDirectory;
 
+    public static string GetJournalPath(string root, string stateDirectory)
+    {
+        var normalized = Path.GetFullPath(root);
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized.ToUpperInvariant())));
+        return Path.Combine(stateDirectory, hash + ".events");
+    }
+
     public SmbBackgroundWatcher(string root, string stateDirectory)
     {
         _root = Path.GetFullPath(root);
@@ -31,8 +38,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
             throw new DirectoryNotFoundException($"Watched root unavailable: {_root}");
         Directory.CreateDirectory(stateDirectory);
         _stateDirectory = Path.GetFullPath(stateDirectory);
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_root.ToUpperInvariant())));
-        _journal = Path.Combine(stateDirectory, hash + ".events");
+        _journal = GetJournalPath(_root, stateDirectory);
         if (Path.GetFullPath(_journal).StartsWith(_root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) &&
             !Path.GetPathRoot(_root)!.Equals(_root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))

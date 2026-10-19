@@ -806,3 +806,9 @@ Remove-Item "$demo\source\ajoute.txt"
 ```
 
 Le dossier de démonstration est indépendant de la configuration de production : ne pas remplacer le fichier `wimf.json` habituel. Arrêter le serveur avec Ctrl+C avant de nettoyer `$demo`. Les traces `[INCREMENTAL]` indiquent les traitements avec changements ; l'absence de notification peut également provenir d'un watcher indisponible.
+
+#### Diagnostic de stockage des journaux (PR #67, en brouillon)
+
+Le nouveau point de diagnostic local `GET /api/smb-journal-storage` retourne une ligne par catalogue indexé disposant d'un watcher. Chaque ligne contient la racine en Base64 UTF-8, suivie de la taille totale du journal en octets, des octets acquittés, des octets encore en attente et de la validité du curseur (`valid`, `invalid`, ou `error`). Un curseur manquant ou invalide est traité de manière conservatrice : la totalité du journal est considérée en attente. Ce diagnostic ne lit pas tout le journal et ne modifie aucun fichier.
+
+**Compaction PR #67 :** au démarrage du serveur, avant l'ouverture du journal par le watcher, WIMF2 peut supprimer les premiers 64 Mio déjà acquittés ou davantage. Les enregistrements non acquittés sont recopiés à l'identique dans un fichier temporaire, puis remplacent le journal original ; l'ancien curseur est invalidé avant le remplacement, afin que les événements restants soient tous relus. Si le curseur est manquant ou invalide, aucune compaction n'est effectuée. Les racines associées à plusieurs catalogues configurés sont exclues de cette compaction. La défaillance de la compaction ne déclenche aucun scan complet supplémentaire : les périodicités JSON restent souveraines. Une compaction est volontairement réalisée uniquement hors surveillance active, et non pendant l'exécution du serveur.
