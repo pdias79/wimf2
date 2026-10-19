@@ -15,7 +15,7 @@ public sealed class DaemonOptionsTests
         {
             var config = Path.Combine(dir, "wimf.json");
             File.WriteAllText(config, """
-                {"indexing":[{"root":"files","output":"catalog.gz","intervalHours":1}]}
+                {"catalogs":["catalog.gz"],"indexing":[{"root":"files","output":"catalog.gz","intervalHours":1}]}
                 """);
             var options = DaemonOptions.Parse(["--config", config]);
             Assert.Empty(Assert.Single(options.Indexing!).Exclude);
