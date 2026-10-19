@@ -46,7 +46,7 @@ public static class JournalIncrementalRefresh
                 {
                     // Validate structural records as well: silently ignoring malformed
                     // lines could acknowledge journal corruption permanently.
-                    var expected = parts[0] == "K" ? 4 : 3;
+                    var expected = parts[0] == "K" ? 4 : parts[0] == "D" ? 2 : 3;
                     if (parts.Length != expected)
                         throw new InvalidDataException("Invalid journal metadata record.");
                     continue;
