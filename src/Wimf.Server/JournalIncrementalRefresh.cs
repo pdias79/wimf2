@@ -70,10 +70,18 @@ public static class JournalIncrementalRefresh
         }
         // A parent notification subsumes its children: scan the subtree once.
         var compacted = new List<string>();
+        var retained = new HashSet<string>(cmp);
         foreach (var path in hints.OrderBy(p => p.Length).ThenBy(p => p, cmp))
         {
-            if (!compacted.Any(parent => path.StartsWith(parent + Path.DirectorySeparatorChar, comparison)))
-                compacted.Add(path);
+            var parent = Path.GetDirectoryName(path);
+            var redundant = false;
+            while (!string.IsNullOrEmpty(parent) && parent.Length >= root.Length)
+            {
+                if (retained.Contains(parent)) { redundant = true; break; }
+                if (parent.Equals(root, comparison)) break;
+                parent = Path.GetDirectoryName(parent);
+            }
+            if (!redundant) { retained.Add(path); compacted.Add(path); }
         }
         foreach (var path in compacted)
         {
