@@ -558,6 +558,14 @@ var engine = new SequentialSearchEngine();
 app.MapGet("/api/health", () =>
     Results.Json(new HealthResponse("ok", store.Snapshot.Length, enableFileActions), WimfJsonContext.Default.HealthResponse));
 
+app.MapGet("/api/file-type-icon/{extension}", (string extension) =>
+{
+    var icon = FileTypeIcons.GetIcon(extension);
+    return icon is null
+        ? Results.NotFound()
+        : Results.File(icon, "image/x-icon");
+});
+
 app.MapGet("/api/catalogs", () =>
     Results.Json(store.Snapshot.Select((c, index) =>
         new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
@@ -585,16 +593,17 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
             MaxSize = request.MaxSize,
             ModifiedFrom = request.ModifiedFrom,
             ModifiedTo = request.ModifiedTo,
-            MaxResults = request.MaxResults
+            MaxResults = request.MaxResults == 0 ? 0 : request.MaxResults + 1
         };
         var snapshot = store.Snapshot;
         var indices = CatalogSelection.Resolve(snapshot.Length, request.CatalogIndices);
         var selected = indices.Select(index => snapshot[index]).ToArray();
         var results = engine.Search(selected, query, cancellationToken);
-        var hits = results.Select(r => new SearchHit(
+        var truncated = results.Count > request.MaxResults;
+        var hits = results.Take(request.MaxResults).Select(r => new SearchHit(
             r.Catalog.Header.Name, indices[Array.IndexOf(selected, r.Catalog)], r.Entry.Id, r.Entry.Name, r.FullPath,
             r.Entry.Extension, r.Entry.Size, r.Entry.ModifiedAt)).ToArray();
-        return Results.Json(new SearchResponse(hits.Length, hits),
+        return Results.Json(new SearchResponse(hits.Length, hits, truncated),
             WimfJsonContext.Default.SearchResponse);
     }
     catch (ArgumentException ex)

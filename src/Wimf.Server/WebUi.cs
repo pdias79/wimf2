@@ -63,6 +63,7 @@ public static class WebUi
     th { color: GrayText; font-size: .82rem; }
     tbody tr:hover { background: color-mix(in srgb, CanvasText 6%, Canvas); }
     tbody tr:nth-child(even) { background: color-mix(in srgb, CanvasText 3%, Canvas); }
+    .results-panel { padding-top: 10px; }
     .result-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0 12px; }
     .result-tools label { font-size: .9rem; color: GrayText; }
     .result-tools select { padding: 6px 10px; }
@@ -74,7 +75,11 @@ public static class WebUi
     .skipped-report-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
     .skipped-report-download { display: inline-block; border-radius: 8px; color: white; font-weight: 600; text-decoration: none; cursor: pointer; }
     .skipped-report-download:hover, .skipped-report-download:focus-visible { background: #344052; }
-    .file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 240px; }
+    .file-actions { display: flex; align-items: center; flex-wrap: nowrap; gap: 5px; white-space: nowrap; }
+    #results-table td:last-child, #results-table th:last-child { width: 1%; white-space: nowrap; }
+    .name-with-icon { display: flex; align-items: center; min-width: 0; gap: 7px; }
+    .file-type-icon { width: 18px; height: 18px; flex: 0 0 18px; object-fit: contain; }
+    .file-type-fallback { display: inline-block; width: 18px; flex: 0 0 18px; font-size: 16px; line-height: 18px; }
     .file-actions button { font-size: .78rem; }
     .catalog-list { display: grid; gap: 8px; margin-top: 12px; }
     .catalog-item { display: flex; align-items: flex-start; gap: 10px; overflow-wrap: anywhere; }
@@ -155,7 +160,7 @@ public static class WebUi
       <div id="history-list" class="saved-searches"></div>
     </details>
   </section>
-  <section class="panel" aria-label="Résultats">
+  <section class="panel results-panel" aria-label="Résultats">
     <div class="bar"><h2>Résultats <span id="count" class="muted"></span></h2></div>
     <div class="result-tools">
       <label for="result-sort">Trier les résultats affichés :</label>
@@ -175,7 +180,6 @@ public static class WebUi
         <option value="100">100</option>
       </select>
       <button id="export-csv" type="button" class="copy" disabled>Exporter CSV</button>
-      <span class="status">Tri et export des résultats reçus uniquement (maximum 1 000).</span>
     </div>
     <div class="table-wrap">
       <table id="results-table" hidden>
@@ -216,6 +220,7 @@ public static class WebUi
   const empty = byId("empty");
   let activeController;
   let currentHits = [];
+  let resultsTruncated = false;
   let currentPage = 0;
   let loadedCatalogs = [];
   let catalogSelection = new Set();
@@ -1009,7 +1014,24 @@ public static class WebUi
       fileName.title = hit.fullPath;
       fileName.setAttribute("aria-label", "Ouvrir " + hit.name + " — " + hit.fullPath);
       fileName.addEventListener("click", () => fileAction("open", "Ouvrir ce fichier"));
-      nameCell.appendChild(fileName);
+      const nameWithIcon = document.createElement("div");
+      nameWithIcon.className = "name-with-icon";
+      const fallback = document.createElement("span");
+      fallback.className = "file-type-fallback";
+      fallback.textContent = hit.extension === "folder" ? "📁" : "📄";
+      fallback.setAttribute("aria-hidden", "true");
+      const extension = String(hit.extension || "").replace(/^\\./, "").toLowerCase();
+      if (/^[a-z0-9]{1,16}$/.test(extension) && extension !== "folder") {
+        const icon = document.createElement("img");
+        icon.className = "file-type-icon";
+        icon.alt = "";
+        icon.loading = "lazy";
+        icon.src = "/api/file-type-icon/" + encodeURIComponent(extension);
+        icon.addEventListener("error", () => icon.replaceWith(fallback), { once: true });
+        nameWithIcon.appendChild(icon);
+      } else nameWithIcon.appendChild(fallback);
+      nameWithIcon.appendChild(fileName);
+      nameCell.appendChild(nameWithIcon);
       row.appendChild(nameCell);
       const sizeCell = makeCell(row, formatSize(hit.size));
       sizeCell.title = exactByteFormatter.format(hit.size) + " octets";
@@ -1084,7 +1106,8 @@ public static class WebUi
     anchor.download = "wimf-resultats.csv";
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
-    message(rows.length + " résultat(s) exporté(s) en CSV.");
+    if (resultsTruncated)
+      message("Export partiel : la recherche contient davantage de résultats que la limite demandée.", true);
   });
 
   form.addEventListener("submit", async event => {
@@ -1132,6 +1155,7 @@ public static class WebUi
       if (!response.ok) throw new Error(data.error || "Erreur de recherche.");
       if (activeController !== controller) return;
       currentHits = Array.isArray(data.results) ? data.results : [];
+      resultsTruncated = data.truncated === true;
       currentPage = 0;
       displayResults();
       dismissToast();
@@ -1139,6 +1163,7 @@ public static class WebUi
     } catch (error) {
       if (activeController === controller && error.name !== "AbortError") {
         currentHits = [];
+        resultsTruncated = false;
         clearResults();
         empty.textContent = "La recherche a échoué.";
         message(error.message || "Erreur réseau.", true);

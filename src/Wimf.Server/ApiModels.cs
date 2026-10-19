@@ -18,7 +18,7 @@ public sealed record SearchRequest
     public int MaxResults { get; init; } = 100;
 }
 public sealed record SearchHit(string Catalog, int CatalogIndex, int Id, string Name, string FullPath, string Extension, ulong Size, DateTimeOffset ModifiedAt);
-public sealed record SearchResponse(int Count, SearchHit[] Results);
+public sealed record SearchResponse(int Count, SearchHit[] Results, bool Truncated = false);
 public sealed record ErrorResponse(string Error);
 public sealed record FileActionRequest(string Action, int CatalogIndex, int Id, string FullPath);
 public sealed record FileActionResponse(bool Success);
