@@ -842,6 +842,8 @@ if (options.Indexing is { Length: > 0 })
     var shutdown = app.Lifetime.ApplicationStopping;
     var incrementalMetrics = new System.Collections.Concurrent.ConcurrentDictionary<string,
         (int Events, int Distinct, int Paths)>(watchComparer);
+    var historyFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Wimf2", "indexing-history.json");
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         beforeFull: job =>
         {
@@ -882,7 +884,8 @@ if (options.Indexing is { Length: > 0 })
             await store.RefreshLocalCatalogAsync(job.Output, token);
         },
         incrementalMetrics: job => incrementalMetrics.TryRemove(job.Output, out var metrics)
-            ? metrics : (0, 0, 0));
+            ? metrics : (0, 0, 0),
+        historyStore: new IndexingHistoryStore(historyFile));
     var scheduler = indexingScheduler;
     _ = Task.Run(async () =>
     {
