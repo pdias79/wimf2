@@ -6,6 +6,26 @@ namespace Wimf.Server.Tests;
 public class WebUiTests
 {
     [Fact]
+    public void BirthdayCakeShownOnOctober28OrWhenForced()
+    {
+        Assert.True(WebUi.ShowBirthdayCake(new DateTime(2026, 10, 28), false));
+        Assert.False(WebUi.ShowBirthdayCake(new DateTime(2026, 10, 27), false));
+        Assert.False(WebUi.ShowBirthdayCake(new DateTime(2026, 10, 29), false));
+        Assert.True(WebUi.ShowBirthdayCake(new DateTime(2026, 1, 1), true));
+        Assert.Contains("Philippe DIAS", WebUi.RenderPage(new DateTime(2026, 10, 28)));
+        Assert.Contains("chocolatine", WebUi.RenderPage(new DateTime(2026, 1, 1), true));
+        Assert.DoesNotContain("birthday-cake\" title=", WebUi.RenderPage(new DateTime(2026, 1, 1)));
+    }
+
+    [Fact]
+    public void FileActionsHavePointerSizedLeaveTolerance()
+    {
+        Assert.Contains("Math.max(anchor.width, anchor.height)", WebUi.Html);
+        Assert.Contains("document.addEventListener(\"pointermove\", trackPointer)", WebUi.Html);
+        Assert.Contains("document.removeEventListener(\"pointermove\", trackPointer)", WebUi.Html);
+    }
+
+    [Fact]
     public void WideLayoutKeepsFileNamesOnOneLineAndGroupsCatalogButtons()
     {
         Assert.Contains("max-width: 1600px", WebUi.Html);

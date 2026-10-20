@@ -518,7 +518,7 @@ catch (Exception ex) when (ex is ArgumentException or IOException or Unauthorize
                            or System.Text.Json.JsonException or InvalidDataException)
 {
     Console.Error.WriteLine($"Invalid server configuration: {ex.Message}");
-    Console.Error.WriteLine("Usage: wimfd [--config config.json] [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--disable-file-actions]");
+    Console.Error.WriteLine("Usage: wimfd [--config config.json] [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--disable-file-actions] [--force-birthday-cake]");
     return 2;
 }
 
@@ -552,7 +552,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 
 // The UI and API are deliberately bound to localhost until authentication is implemented.
-app.MapGet("/", WebUi.GetPage);
+app.MapGet("/", () => WebUi.GetPage(options.ForceBirthdayCake));
 var engine = new SequentialSearchEngine();
 
 app.MapGet("/api/health", () =>

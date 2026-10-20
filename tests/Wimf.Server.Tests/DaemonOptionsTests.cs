@@ -7,6 +7,13 @@ namespace Wimf.Server.Tests;
 public sealed class DaemonOptionsTests
 {
     [Fact]
+    public void BirthdayCakeOverrideIsOptIn()
+    {
+        Assert.False(DaemonOptions.Parse([]).ForceBirthdayCake);
+        Assert.True(DaemonOptions.Parse(["--force-birthday-cake"]).ForceBirthdayCake);
+    }
+
+    [Fact]
     public void IndexingExcludeIsOptionalAndDefaultsToEmpty()
     {
         var dir = Path.Combine(Path.GetTempPath(), "wimf-exclude-" + Guid.NewGuid().ToString("N"));
