@@ -1286,19 +1286,32 @@ public static class WebUi
       if (modifiedFromText && modifiedToText && modifiedFromText > modifiedToText)
         throw new Error("La date de début ne peut pas dépasser la date de fin.");
       const submittedSearch = captureSearch();
+      const timingStart = performance.now();
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         signal: controller.signal
       });
+      const responseAt = performance.now();
       const data = await response.json();
+      const parsedAt = performance.now();
       if (!response.ok) throw new Error(data.error || "Erreur de recherche.");
       if (activeController !== controller) return;
       currentHits = Array.isArray(data.results) ? data.results : [];
       resultsTruncated = data.truncated === true;
       currentPage = 0;
       displayResults();
+      const renderedAt = performance.now();
+      const backend = response.headers.get("Server-Timing") || "indisponible";
+      console.info("[WIMF-PERF] recherche", {
+        serveur: backend,
+        reseauEtServeurMs: +(responseAt - timingStart).toFixed(2),
+        lectureEtJsonMs: +(parsedAt - responseAt).toFixed(2),
+        renduEtTriMs: +(renderedAt - parsedAt).toFixed(2),
+        totalMs: +(renderedAt - timingStart).toFixed(2),
+        resultats: currentHits.length
+      });
       dismissToast();
       addToHistory(submittedSearch);
     } catch (error) {

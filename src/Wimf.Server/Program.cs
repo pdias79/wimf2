@@ -573,7 +573,7 @@ app.MapGet("/api/catalogs", () =>
             c.Diagnostics.Count, c.Header.CreatedAt)).ToArray(),
         WimfJsonContext.Default.CatalogSummaryArray));
 
-app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellationToken) =>
+app.MapPost("/api/search", (HttpContext http, SearchRequest request, CancellationToken cancellationToken) =>
 {
     if (request.Text is null || request.Text.Length > 1024 ||
         request.MaxResults < 0 || request.MaxResults > 10000 ||
@@ -600,7 +600,10 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
         var snapshot = store.Snapshot;
         var indices = CatalogSelection.Resolve(snapshot.Length, request.CatalogIndices);
         var selected = indices.Select(index => snapshot[index]).ToArray();
+        var searchTimer = System.Diagnostics.Stopwatch.StartNew();
         var results = engine.Search(selected, query, cancellationToken);
+        searchTimer.Stop();
+        http.Response.Headers["Server-Timing"] = $"search;dur={searchTimer.Elapsed.TotalMilliseconds.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}";
         var truncated = results.Count > request.MaxResults;
         var hits = results.Take(request.MaxResults).Select(r => new SearchHit(
             r.Catalog.Header.Name, indices[Array.IndexOf(selected, r.Catalog)], r.Entry.Id, r.Entry.Name, r.FullPath,
