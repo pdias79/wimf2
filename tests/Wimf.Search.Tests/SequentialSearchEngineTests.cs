@@ -100,6 +100,18 @@ public class SequentialSearchEngineTests
     }
 
     [Fact]
+    public void SingleMultipleAndEmptyTermsPreserveResultsAndOrder()
+    {
+        var catalog = Read("Annual Report.pdf;pdf;12;0;1\nreport draft.txt;txt;6;0;1\nnotes.txt;txt;3;0;1\n");
+        Assert.Equal(new[] { "Annual Report.pdf", "report draft.txt" },
+            _engine.Search([catalog], new() { Text = "report" }).Select(result => result.Entry.Name));
+        Assert.Equal(new[] { "report draft.txt" },
+            _engine.Search([catalog], new() { Text = "report draft" }).Select(result => result.Entry.Name));
+        Assert.Equal(3, _engine.Search([catalog], new() { Text = "" }).Count);
+        Assert.Empty(_engine.Search([catalog], new() { Text = "nonexistent" }));
+    }
+
+    [Fact]
     public void RegexMatchesCaseInsensitively()
     {
         var catalog = Read("Report42.PDF;pdf;1;0;1\nReportX.pdf;pdf;1;0;1\n");

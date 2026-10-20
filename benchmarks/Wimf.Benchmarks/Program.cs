@@ -70,7 +70,9 @@ if (searchMatrix)
             var cases = new (string Label, SearchQuery Query)[]
             {
                 ("no-hits", new() { Text = "not_existing_9e710be2", MaxResults = limit }),
+                ("no-hits-multi", new() { Text = "not_existing_9e710be2 other_term", MaxResults = limit }),
                 ("rare", new() { Text = "needle_rare", MaxResults = limit }),
+                ("rare-separators", new() { Text = "needle_rare", IgnoreSeparators = true, MaxResults = limit }),
                 ("common", new() { Text = "file", MaxResults = limit }),
                 ("extension", new() { Text = "file", Extensions = ["pdf"], MaxResults = limit }),
                 ("regex", new() { Text = @"^file_\d+\.", UseRegex = true, MaxResults = limit })
