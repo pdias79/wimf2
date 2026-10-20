@@ -883,23 +883,28 @@ if (options.Indexing is { Length: > 0 })
         (int Events, int Distinct, int Paths)>(watchComparer);
     var historyFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Wimf2", "indexing-history.json");
+    var fullScanEpochs = new System.Collections.Concurrent.ConcurrentDictionary<string, long>(watchComparer);
     indexingScheduler = new CatalogIndexScheduler(options.Indexing,
         beforeFull: job =>
         {
             var watcher = smbWatchers.Values.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
-            return watcher is null ? 0 : IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
+            if (watcher is null) return 0;
+            fullScanEpochs[job.Output] = watcher.ContinuityEpoch;
+            return IncrementalJournalPublisher.SnapshotLength(watcher.JournalPath);
         },
         afterFull: (job, boundary) =>
         {
             var watcher = smbWatchers.Values.FirstOrDefault(w => watchComparer.Equals(w.Root, job.Root));
-            if (watcher is not null)
-                IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary);
+            if (watcher is not null &&
+                IncrementalJournalPublisher.AcknowledgeFullScan(job.Output, watcher.JournalPath, boundary) &&
+                fullScanEpochs.TryRemove(job.Output, out var epoch))
+                watcher.MarkFullScanReconciled(epoch);
         },
         incremental: async (job, token) =>
         {
             incrementalMetrics.TryRemove(job.Output, out _);
             var watcher = smbWatchers.Values.FirstOrDefault(w =>
-                watchComparer.Equals(w.Root, job.Root) && !w.WatchFailed);
+                watchComparer.Equals(w.Root, job.Root) && w.CanPublishIncremental);
             if (watcher is null || !File.Exists(job.Output)) return false;
             // The current serializer intentionally refuses a staging file inside
             // the indexed root (notably C:\\). Keep periodic full scans there.

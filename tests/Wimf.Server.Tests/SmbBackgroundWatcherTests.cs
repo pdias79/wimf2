@@ -81,6 +81,37 @@ public class SmbBackgroundWatcherTests
     }
 
     [Fact]
+    public void RecoveryDoesNotAllowIncrementalUntilReconciliationAfterTheGap()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "wimf-gap-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(directory, "share");
+        var state = Path.Combine(directory, "state");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var watcher = new SmbBackgroundWatcher(root, state);
+            watcher.Start();
+            Assert.True(watcher.CanPublishIncremental);
+            var before = watcher.ContinuityEpoch;
+            var onError = typeof(SmbBackgroundWatcher).GetMethod("OnError",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var underlying = typeof(SmbBackgroundWatcher).GetField("_watcher",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(watcher);
+            onError.Invoke(watcher, [underlying, new ErrorEventArgs(new IOException("simulated disconnect"))]);
+            Assert.False(watcher.CanPublishIncremental);
+            Assert.True(watcher.TryRecover());
+            Assert.False(watcher.WatchFailed);
+            Assert.False(watcher.CanPublishIncremental);
+            // Full scan that started before the disconnect may not clear the gap.
+            watcher.MarkFullScanReconciled(before);
+            Assert.False(watcher.CanPublishIncremental);
+            watcher.MarkFullScanReconciled(watcher.ContinuityEpoch);
+            Assert.True(watcher.CanPublishIncremental);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public void UnavailableRootCannotStartWatcherUntilDirectoryReturns()
     {
         var directory = Path.Combine(Path.GetTempPath(), "wimf-recover-" + Guid.NewGuid().ToString("N"));
