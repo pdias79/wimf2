@@ -85,7 +85,7 @@ public class SequentialSearchEngineTests
         var catalog = Read("file_00000001.txt;txt;1;0;2\nfile_00000002.pdf;pdf;1;0;2\nnotes.txt;txt;1;0;2\n");
         var results = _engine.Search([catalog], new()
         {
-            Text = @"^file_\\d+\\.",
+            Text = @"^file_\d+\.",
             UseRegex = true,
             MaxResults = 1000
         });
