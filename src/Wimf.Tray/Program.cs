@@ -7,11 +7,30 @@ namespace Wimf.Tray;
 
 internal static class Program
 {
+    private static Mutex? _singleton;
+
     [STAThread]
     private static void Main(string[] args)
     {
-        ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApplication(args));
+        // Prevent a second tray host from starting another server on the same port.
+        _singleton = new Mutex(true, @"Local\\Wimf2.Tray.Instance", out var firstInstance);
+        if (!firstInstance)
+        {
+            _singleton.Dispose();
+            MessageBox.Show("Wimf 2 est déjà lancé dans la zone de notification.", "Wimf 2",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            ApplicationConfiguration.Initialize();
+            Application.Run(new TrayApplication(args));
+        }
+        finally
+        {
+            _singleton.ReleaseMutex();
+            _singleton.Dispose();
+        }
     }
 }
 
@@ -69,7 +88,10 @@ internal sealed class TrayApplication : ApplicationContext
         }
         server ??= new[] {
             Path.Combine(AppContext.BaseDirectory, "Wimf.Server.exe"),
-            Path.Combine(AppContext.BaseDirectory, "Wimf.Server.dll")
+            Path.Combine(AppContext.BaseDirectory, "Wimf.Server.dll"),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Wimf.Server", "Wimf.Server.exe")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Wimf.Server", "Wimf.Server.dll")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Wimf.Server", "bin", "Release", "net10.0", "Wimf.Server.dll"))
         }.FirstOrDefault(File.Exists);
         if (server is null || !File.Exists(server))
             throw new FileNotFoundException("Placez Wimf.Server.exe ou Wimf.Server.dll à côté de Wimf.Tray, ou utilisez --server CHEMIN.");
@@ -84,6 +106,13 @@ internal sealed class TrayApplication : ApplicationContext
             WorkingDirectory = Environment.CurrentDirectory
         };
         if (dll) start.ArgumentList.Add(Path.GetFullPath(server));
+        // Auto-detect a packaged config alongside the launcher when not specified.
+        if (!forwarded.Contains("--config") &&
+            File.Exists(Path.Combine(AppContext.BaseDirectory, "wimf.json")))
+        {
+            forwarded.Add("--config");
+            forwarded.Add(Path.Combine(AppContext.BaseDirectory, "wimf.json"));
+        }
         foreach (var arg in forwarded) start.ArgumentList.Add(arg);
         start.ArgumentList.Add("--tray-managed");
         _server.StartInfo = start;
