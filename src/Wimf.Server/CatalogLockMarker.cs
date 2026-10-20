@@ -18,7 +18,7 @@ public static class CatalogLockMarker
             using var reader = new StreamReader(stream);
             var buffer = new char[1024];
             var count = reader.ReadBlock(buffer, 0, buffer.Length);
-            var text = new string(buffer, 0, count).Replace("\\\\n", "\\n");
+            var text = new string(buffer, 0, count).Replace("\\n", "\n");
             string? owner = null;
             DateTimeOffset? acquired = null;
             foreach (var line in text.Split('\n'))
