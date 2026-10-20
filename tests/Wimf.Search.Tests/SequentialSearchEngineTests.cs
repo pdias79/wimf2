@@ -82,7 +82,7 @@ public class SequentialSearchEngineTests
     [Fact]
     public void RegexMatchesSyntheticBenchmarkStyleNames()
     {
-        var catalog = Read("file_00000001.txt;txt;1;0;2\\nfile_00000002.pdf;pdf;1;0;2\\nnotes.txt;txt;1;0;2\\n");
+        var catalog = Read("file_00000001.txt;txt;1;0;2\nfile_00000002.pdf;pdf;1;0;2\nnotes.txt;txt;1;0;2\n");
         var results = _engine.Search([catalog], new()
         {
             Text = @"^file_\\d+\\.",
