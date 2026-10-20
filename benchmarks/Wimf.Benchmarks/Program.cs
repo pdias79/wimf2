@@ -73,12 +73,14 @@ if (searchMatrix)
                 ("rare", new() { Text = "needle_rare", MaxResults = limit }),
                 ("common", new() { Text = "file", MaxResults = limit }),
                 ("extension", new() { Text = "file", Extensions = ["pdf"], MaxResults = limit }),
-                ("regex", new() { Text = @"^file_\\d+\\.", UseRegex = true, MaxResults = limit })
+                ("regex", new() { Text = @"^file_\d+\.", UseRegex = true, MaxResults = limit })
             };
             foreach (var (label, query) in cases)
             {
                 // Warm the JIT independently for each combination.
                 var expected = engineForMatrix.Search([source], query).Count;
+                if (label == "regex" && expected == 0)
+                    throw new InvalidOperationException("Regex benchmark should match synthetic filenames; verify escaping.");
                 var samples = new double[iterations];
                 var bytes = new long[iterations];
                 var beforeGc = Collections();

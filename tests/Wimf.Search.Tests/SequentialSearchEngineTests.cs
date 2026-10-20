@@ -80,6 +80,20 @@ public class SequentialSearchEngineTests
     }
 
     [Fact]
+    public void RegexMatchesSyntheticBenchmarkStyleNames()
+    {
+        var catalog = Read("file_00000001.txt;txt;1;0;2\nfile_00000002.pdf;pdf;1;0;2\nnotes.txt;txt;1;0;2\n");
+        var results = _engine.Search([catalog], new()
+        {
+            Text = @"^file_\d+\.",
+            UseRegex = true,
+            MaxResults = 1000
+        });
+        Assert.Equal(new[] { "file_00000001.txt", "file_00000002.pdf" },
+            results.Select(result => result.Entry.Name));
+    }
+
+    [Fact]
     public void RegexTimeoutPropagates()
     {
         var catalog = Read(new string('a', 100_000) + "!;txt;1;0;1\n");
