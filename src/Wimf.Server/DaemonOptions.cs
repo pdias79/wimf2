@@ -26,6 +26,7 @@ public sealed class IndexingJobConfiguration
     public int? IntervalHours { get; init; }
     public int? IntervalDays { get; init; }
     public int? Workers { get; init; }
+    public int? LockTimeoutMinutes { get; init; }
     public int? IncrementalIntervalMinutes { get; init; }
     public int? IncrementalIntervalHours { get; init; }
     public int? IncrementalIntervalDays { get; init; }
@@ -35,7 +36,8 @@ public sealed class IndexingJobConfiguration
 }
 
 public sealed record IndexingJob(string Root, string Output, string? Name,
-    string[] Exclude, TimeSpan Interval, int Workers = 1, TimeSpan? IncrementalInterval = null);
+    string[] Exclude, TimeSpan Interval, int Workers = 1, TimeSpan? IncrementalInterval = null,
+    TimeSpan? LockTimeout = null);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DaemonConfiguration))]
@@ -138,8 +140,11 @@ public sealed record DaemonOptions(
                 var workers = job.Workers ?? 1;
                 if (workers is < 1 or > 50)
                     throw new ArgumentException("indexing.workers must be between 1 and 50.");
+                if (job.LockTimeoutMinutes is < 1 or > 10080)
+                    throw new ArgumentException("indexing.lockTimeoutMinutes must be between 1 and 10080.");
                 indexing.Add(new IndexingJob(root, output, job.Name, exclusions,
-                    fullInterval, workers, incremental));
+                    fullInterval, workers, incremental,
+                    TimeSpan.FromMinutes(job.LockTimeoutMinutes ?? 30)));
             }
         }
 

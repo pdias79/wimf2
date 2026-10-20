@@ -1,3 +1,11 @@
+## Shared catalog locking (PR #98)
+
+When several WIMF2 instances point to the same **output catalog on shared storage**, full and incremental publication attempts use an OS-enforced byte-range lock on `<output>.wimf.lock`. This is a cooperative protocol: all writers must use WIMF2 with this feature. A competing instance skips incremental work or reports a failed full attempt, without overwriting the other writer's publication. The marker contains diagnostic ownership metadata and is intentionally **not deleted** to avoid lock-file replacement races.
+
+For each `indexing` entry, optional `"lockTimeoutMinutes": 30` (default: 30; accepted: 1–10080) defines when leftover owner metadata is considered stale. **An active OS/SMB lock is never forcibly stolen, even after the timeout**; OS locks are released when a process crashes or closes its handle. This protects legitimately long scans. A file system or SMB endpoint that does not support the lock fails closed.
+
+Full and incremental staged publications also check whether the target file's length or last-write time changed during preparation. This is an additional safeguard, not protection from noncooperating writers that deliberately bypass the lock. SMB/OS lock interoperability across actual heterogeneous client/server systems should be verified before production deployment.
+
 # Wimf 2
 
 Wimf 2 is a cross-platform file catalog indexing and search daemon under development. The original VB.NET application is at [pdias79/WIMF](https://github.com/pdias79/WIMF).

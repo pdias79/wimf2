@@ -18,6 +18,7 @@ public static class ScheduledCatalogPublication
         var target = Path.GetFullPath(output);
         var directory = Path.GetDirectoryName(target)!;
         Directory.CreateDirectory(directory);
+        var originalStamp = CatalogFileStamp.Read(target);
         var suffix = target.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? ".txt.gz" : ".txt";
         var staging = Path.Combine(directory, ".wimf-staging-" + Guid.NewGuid().ToString("N") + suffix);
         try
@@ -42,6 +43,8 @@ public static class ScheduledCatalogPublication
                 throw new InvalidDataException("Staged catalog validation failed; existing catalog preserved.");
             cancellationToken.ThrowIfCancellationRequested();
             EnsureRootAccessible(root);
+            if (!CatalogFileStamp.Read(target).Equals(originalStamp))
+                throw new IOException("Catalog changed during full-scan preparation; publication refused.");
             File.Move(staging, target, overwrite: true);
             return count;
         }
