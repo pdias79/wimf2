@@ -1092,7 +1092,7 @@ public static class WebUi
       // Keep a pointer-sized tolerance around both the trigger and the
       // fixed-position menu. This also bridges tiny gaps between the two.
       let closeTimer;
-      const stopClosing = () => { clearTimeout(closeTimer); };
+      const stopClosing = () => { clearTimeout(closeTimer); closeTimer = undefined; };
       const insideTolerance = (x, y) => {
         const anchor = menuToggle.getBoundingClientRect();
         const popup = menu.getBoundingClientRect();
