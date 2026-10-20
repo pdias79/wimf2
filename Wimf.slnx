@@ -11,5 +11,6 @@
     <Project Path="tests/Wimf.Catalog.Tests/Wimf.Catalog.Tests.csproj" />
     <Project Path="tests/Wimf.Search.Tests/Wimf.Search.Tests.csproj" />
     <Project Path="tests/Wimf.Server.Tests/Wimf.Server.Tests.csproj" />
+    <Project Path="tests/Wimf.LockProbe/Wimf.LockProbe.csproj" />
   </Folder>
 </Solution>
