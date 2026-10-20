@@ -23,6 +23,10 @@ La réponse `POST /api/search` fournit un en-tête standard `Server-Timing: sear
 
 Pour comparer des requêtes, utiliser les mêmes catalogues chargés et répéter plusieurs recherches après échauffement. L'en-tête mesure uniquement `engine.Search` ; la sérialisation HTTP n'est pas incluse dans cette phase.
 
+## HTTP JSON compression diagnostics (PR #93)
+
+The localhost API negotiates response compression through the browser's standard `Accept-Encoding` header; clients that do not request supported compression still receive ordinary JSON. The browser console's `[WIMF-PERF] recherche` line includes resource timing byte counts: `transfertOctets` (including protocol overhead), `corpsCompresseOctets` and `corpsDecompresseOctets`. The values are browser estimates and can include cache behavior; use the Network panel to verify `Content-Encoding` and compare response sizes. Run identical searches with 100, 1,000 and 10,000 results several times before interpreting a performance difference.
+
 ## Goals
 
 - Native Windows and Linux distribution, small binary and bounded memory use.
