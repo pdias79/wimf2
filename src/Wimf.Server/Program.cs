@@ -518,7 +518,7 @@ catch (Exception ex) when (ex is ArgumentException or IOException or Unauthorize
                            or System.Text.Json.JsonException or InvalidDataException)
 {
     Console.Error.WriteLine($"Invalid server configuration: {ex.Message}");
-    Console.Error.WriteLine("Usage: wimfd [--config config.json] [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--disable-file-actions] [--force-birthday-cake]");
+    Console.Error.WriteLine("Usage: wimfd [--config config.json] [--catalog local.gz]... [--source network.gz]... [--cache-dir directory] [--refresh-seconds N] [--disable-file-actions] [--force-birthday-cake] [--tray-managed]");
     return 2;
 }
 
@@ -1016,5 +1016,23 @@ setInterval(refresh, 2000);
 
 Console.WriteLine($"Wimf daemon loaded {store.Snapshot.Length} catalog(s). Listening on http://127.0.0.1:5080");
 if (enableFileActions) Console.WriteLine("Local file actions enabled (requires an interactive desktop session).");
+// Only the tray-managed child listens on redirected stdin for graceful exit.
+// The ordinary server mode never relies on console input.
+if (options.TrayManaged)
+{
+    _ = Task.Run(() =>
+    {
+        while (true)
+        {
+            var command = Console.ReadLine();
+            if (command is null) return;
+            if (command == "quit")
+            {
+                app.Lifetime.StopApplication();
+                return;
+            }
+        }
+    });
+}
 await app.RunAsync();
 return 0;
