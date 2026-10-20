@@ -18,9 +18,11 @@ public class SharedCatalogLockTests
                 Assert.NotNull(first);
                 Assert.Null(SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)));
             }
-            using var second = SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30));
-            Assert.NotNull(second);
-            Assert.True(File.Exists(catalog + ".wimf.lock"));
+            using (var second = SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)))
+            {
+                Assert.NotNull(second);
+                Assert.True(File.Exists(catalog + ".wimf.lock"));
+            }
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -33,10 +35,12 @@ public class SharedCatalogLockTests
         try
         {
             var catalog = Path.Combine(directory, "database.txt.gz");
-            using var first = SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30));
-            Assert.NotNull(first);
-            File.SetLastWriteTimeUtc(catalog + ".wimf.lock", DateTime.UtcNow.AddHours(-2));
-            Assert.Null(SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)));
+            using (var first = SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)))
+            {
+                Assert.NotNull(first);
+                File.SetLastWriteTimeUtc(catalog + ".wimf.lock", DateTime.UtcNow.AddHours(-2));
+                Assert.Null(SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)));
+            }
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
