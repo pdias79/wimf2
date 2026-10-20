@@ -1304,7 +1304,12 @@ public static class WebUi
       displayResults();
       const renderedAt = performance.now();
       const backend = response.headers.get("Server-Timing") || "indisponible";
+      const resources = performance.getEntriesByName(new URL("/api/search", location.href).href, "resource");
+      const resource = resources.length ? resources[resources.length - 1] : null;
       console.info("[WIMF-PERF] recherche", {
+        transfertOctets: resource?.transferSize ?? null,
+        corpsCompresseOctets: resource?.encodedBodySize ?? null,
+        corpsDecompresseOctets: resource?.decodedBodySize ?? null,
         serveur: backend,
         reseauEtServeurMs: +(responseAt - timingStart).toFixed(2),
         lectureEtJsonMs: +(parsedAt - responseAt).toFixed(2),
