@@ -80,10 +80,12 @@ internal sealed class TrayApplication : ApplicationContext
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = true,
             WorkingDirectory = Environment.CurrentDirectory
         };
         if (dll) start.ArgumentList.Add(Path.GetFullPath(server));
         foreach (var arg in forwarded) start.ArgumentList.Add(arg);
+        start.ArgumentList.Add("--tray-managed");
         _server.StartInfo = start;
         _server.OutputDataReceived += (_, e) => { if (e.Data is not null) AddLog(e.Data); };
         _server.ErrorDataReceived += (_, e) => { if (e.Data is not null) AddLog("[ERROR] " + e.Data); };
@@ -190,8 +192,23 @@ internal sealed class TrayApplication : ApplicationContext
         _tray.Dispose();
         if (_started)
         {
-            try { if (!_server.HasExited) _server.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { }
+            try
+            {
+                if (!_server.HasExited)
+                {
+                    _server.StandardInput.WriteLine("quit");
+                    _server.StandardInput.Flush();
+                    if (!_server.WaitForExit(8000))
+                    {
+                        AddLog("Délai d'arrêt du serveur dépassé : arrêt forcé.");
+                        _server.Kill(entireProcessTree: true);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException)
+            {
+                AddLog("Arrêt du serveur : " + ex.Message);
+            }
         }
         _server.Dispose();
         base.ExitThreadCore();
