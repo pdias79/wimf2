@@ -127,6 +127,12 @@ dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --search-matrix --
 
 La sortie est au format CSV : nombre d'entrées, scénario, limite, résultats, temps médian en millisecondes, octets alloués médians et collectes GC. Les données sont générées en mémoire ; **aucun répertoire ni partage SMB n'est parcouru**. Les temps dépendent de la machine et de la version de .NET : comparer les résultats uniquement sur un matériel similaire et avec la même configuration. Cette PR établit un protocole reproductible, **pas une mesure de production déjà réalisée**.
 
+### Menu d'actions et anniversaire (PR #87)
+
+Le menu d'actions associé à chaque résultat accepte une marge de déplacement du pointeur voisine de la taille de son bouton, afin de limiter les fermetures involontaires.
+
+Un gâteau SVG apparaît à côté du titre « Wimf 2 » le **28 octobre**, selon la date locale du serveur, avec une infobulle au survol. Pour tester cet affichage un autre jour, démarrer le serveur avec `--force-birthday-cake` (en plus des options habituelles). Le gâteau n'utilise aucun service distant.
+
 ### Recherche sans espaces ni tirets (option facultative)
 
 Cocher **Ignorer les espaces et tirets** dans les options de recherche permet de comparer les noms après suppression des espaces (y compris tabulations) et des caractères `-`. L'option est désactivée par défaut et n'affecte pas le nom des fichiers, seulement la comparaison. Par exemple, la recherche `"NE-P DC 71"` retrouve `NEPDC71`, `NEP---DC 71` et `N-E--  P  DC7-1`. Les recherches entre guillemets conservent leur traitement comme expression unique ; l'option est également enregistrée dans l'historique et les favoris. En mode **expression régulière**, le motif et les noms ne sont pas modifiés pour préserver la syntaxe regex.
