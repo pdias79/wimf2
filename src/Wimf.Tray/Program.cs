@@ -13,7 +13,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         // Prevent a second tray host from starting another server on the same port.
-        _singleton = new Mutex(true, @"Local\\Wimf2.Tray.Instance", out var firstInstance);
+        _singleton = new Mutex(true, @"Local\Wimf2.Tray.Instance", out var firstInstance);
         if (!firstInstance)
         {
             _singleton.Dispose();
