@@ -17,6 +17,12 @@ dotnet run --project src/Wimf.Tray -c Release -- --server "C:\\chemin\\vers\\Wim
 
 Le lanceur nécessite une session Windows interactive. Il démarre le serveur en tâche de fond sans console et affiche une loupe dans la zone de notification. Clic gauche : recherche dans le navigateur ; clic droit : ouvrir la recherche, messages du serveur, À propos, quitter. Le chemin du serveur peut être omis lorsqu'un `Wimf.Server.exe` ou `Wimf.Server.dll` est à côté de l'exécutable du lanceur. Les arguments supplémentaires sont transférés au serveur. « Quitter » demande un arrêt gracieux du serveur via son entrée standard (mode interne `--tray-managed`) ; un arrêt forcé n'est utilisé qu'après un délai de 8 secondes.
 
+## Diagnostic des performances Web (PR #92)
+
+La réponse `POST /api/search` fournit un en-tête standard `Server-Timing: search;dur=...` : durée de recherche pure côté serveur, en millisecondes. Le navigateur écrit une ligne `[WIMF-PERF] recherche` dans sa console de développement (F12), détaillant : attente de la réponse HTTP (serveur + réseau local), lecture/parsing JSON, tri/rendu de la page, total et nombre de résultats. Les mesures utilisent `performance.now()`, n'enregistrent ni requête textuelle ni chemins de fichiers, et n'activent aucun rafraîchissement ou scan.
+
+Pour comparer des requêtes, utiliser les mêmes catalogues chargés et répéter plusieurs recherches après échauffement. L'en-tête mesure uniquement `engine.Search` ; la sérialisation HTTP n'est pas incluse dans cette phase.
+
 ## Goals
 
 - Native Windows and Linux distribution, small binary and bounded memory use.
