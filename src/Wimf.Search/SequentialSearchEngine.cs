@@ -47,6 +47,13 @@ public sealed class SequentialSearchEngine
             extensions.Add(extension.TrimStart('.'));
         }
         var results = new List<SearchResult>();
+        var hasExtensionFilter = extensions.Count != 0;
+        var hasMinDate = query.ModifiedFrom.HasValue;
+        var hasMaxDate = query.ModifiedTo.HasValue;
+        var minDate = query.ModifiedFrom.GetValueOrDefault();
+        var maxDate = query.ModifiedTo.GetValueOrDefault();
+        var hasCancellation = cancellationToken.CanBeCanceled;
+        var singleWord = words.Length == 1 ? words[0] : null;
         if (query.MaxResults == 0) return results;
 
         foreach (var catalog in catalogs)
@@ -56,22 +63,18 @@ public sealed class SequentialSearchEngine
             // Walk slots directly so cancellation is checked even across malformed records.
             for (var id = 1; id <= catalog.RecordCount; id++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                if (hasCancellation) cancellationToken.ThrowIfCancellationRequested();
                 if (!catalog.TryGetEntryData(id, out var entry) ||
-                    (entry.IsDirectory && extensions.Count != 0) ||
-                    (!entry.IsDirectory && extensions.Count != 0 && !extensions.Contains(entry.Extension.TrimStart('.'))) ||
+                    (entry.IsDirectory && hasExtensionFilter) ||
+                    (!entry.IsDirectory && hasExtensionFilter && !extensions.Contains(entry.Extension.TrimStart('.'))) ||
                     (!entry.IsDirectory && (entry.Size < query.MinSize || entry.Size > query.MaxSize)) ||
-                    (query.ModifiedFrom.HasValue && entry.ModifiedAt < query.ModifiedFrom.Value) ||
-                    (query.ModifiedTo.HasValue && entry.ModifiedAt > query.ModifiedTo.Value))
+                    (hasMinDate && entry.ModifiedAt < minDate) ||
+                    (hasMaxDate && entry.ModifiedAt > maxDate))
                     continue;
                 var name = query.IgnoreSeparators && !query.UseRegex ? RemoveSeparators(entry.Name) : entry.Name;
-                var matches = true;
-                foreach (var word in words)
-                    if (!name.Contains(word, StringComparison.OrdinalIgnoreCase))
-                    {
-                        matches = false;
-                        break;
-                    }
+                var matches = singleWord is not null
+                    ? name.Contains(singleWord, StringComparison.OrdinalIgnoreCase)
+                    : MatchesAllTerms(name, words);
                 if (!matches || (regex is not null && !regex.IsMatch(entry.Name))) continue;
                 cancellationToken.ThrowIfCancellationRequested();
                 results.Add(new SearchResult(catalog, catalog.GetEntry(id)!, catalog.GetFullPath(id)));
@@ -79,6 +82,13 @@ public sealed class SequentialSearchEngine
             }
         }
         return results;
+    }
+
+    private static bool MatchesAllTerms(string name, string[] words)
+    {
+        foreach (var word in words)
+            if (!name.Contains(word, StringComparison.OrdinalIgnoreCase)) return false;
+        return true;
     }
 
     private static string RemoveSeparators(string value) =>
