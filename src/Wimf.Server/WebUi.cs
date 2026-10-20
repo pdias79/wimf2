@@ -19,6 +19,8 @@ public static class WebUi
     main { max-width: 1600px; margin: auto; padding: 28px 22px 48px; }
     header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 24px; }
     h1 { margin: 0; font-size: 1.75rem; }
+    .birthday-cake { display: inline-flex; vertical-align: middle; margin-left: 10px; cursor: help; }
+    .birthday-cake svg { width: 34px; height: 34px; }
     .wimf-brand { display: inline-flex; align-items: baseline; gap: 0; }
     .wimf-meaning { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; vertical-align: baseline; transition: max-width .45s ease, opacity .3s ease, margin .45s ease; font-size: .56em; font-weight: 400; }
     .wimf-brand:hover .wimf-meaning, .wimf-brand:focus-within .wimf-meaning { max-width: 260px; opacity: 1; margin-left: 9px; }
@@ -114,7 +116,7 @@ public static class WebUi
 </head>
 <body>
 <main>
-  <header><h1><span class="wimf-brand" tabindex="0">Wimf<span class="wimf-meaning">Where is my file</span></span> <span class="muted">2</span></h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
+  <header><h1><span class="wimf-brand" tabindex="0">Wimf<span class="wimf-meaning">Where is my file</span></span> <span class="muted">2</span>__BIRTHDAY_CAKE__</h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
   <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
     <div class="bar"><h2>Catalogues et actualisation</h2><div class="catalog-buttons"><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
@@ -1087,7 +1089,42 @@ public static class WebUi
         menu.style.top = Math.max(4, Math.min(top, window.innerHeight - height - 4)) + "px";
         menu.style.left = Math.max(4, Math.min(anchor.right - width, window.innerWidth - width - 4)) + "px";
       });
-      actions.addEventListener("mouseleave", () => { actions.open = false; });
+      // Keep a pointer-sized tolerance around both the trigger and the
+      // fixed-position menu. This also bridges tiny gaps between the two.
+      let closeTimer;
+      const insideTolerance = (x, y) => {
+        const anchor = menuToggle.getBoundingClientRect();
+        const popup = menu.getBoundingClientRect();
+        const margin = Math.max(anchor.width, anchor.height);
+        const within = rect => x >= rect.left - margin && x <= rect.right + margin &&
+          y >= rect.top - margin && y <= rect.bottom + margin;
+        return within(anchor) || within(popup);
+      };
+      const stopClosing = () => { clearTimeout(closeTimer); };
+      actions.addEventListener("mouseleave", event => {
+        stopClosing();
+        if (!actions.open) return;
+        // Pointer movements over the tolerance region must not close the menu.
+        const track = move => {
+          if (insideTolerance(move.clientX, move.clientY)) {
+            stopClosing();
+          } else {
+            stopClosing();
+            closeTimer = setTimeout(() => {
+              actions.open = false;
+              document.removeEventListener("pointermove", track);
+            }, 180);
+          }
+        };
+        document.addEventListener("pointermove", track);
+        track(event);
+        closeTimer = setTimeout(() => {
+          actions.open = false;
+          document.removeEventListener("pointermove", track);
+        }, 360);
+      });
+      actions.addEventListener("mouseenter", stopClosing);
+      menu.addEventListener("mouseenter", stopClosing);
       actions.addEventListener("keydown", event => {
         if (event.key === "Escape") { actions.open = false; menuToggle.focus(); }
       });
@@ -1291,6 +1328,24 @@ public static class WebUi
 </html>
 """;
 
-    public static IResult GetPage() =>
-        Results.Content(Html, "text/html; charset=utf-8");
+    private const string BirthdayMarkup = """
+<span class="birthday-cake" title="C'est l'anniversaire de mon créateur Philippe DIAS, offrez lui une chocolatine. Il est gourmand, ça lui fera plaisir" aria-label="Gâteau d'anniversaire">
+  <svg role="img" aria-label="Gâteau d'anniversaire" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+    <rect x="6" y="18" width="28" height="17" rx="3" fill="#f2b4c4"/>
+    <path d="M6 22 Q10 16 14 22 T22 22 T30 22 T34 22" fill="none" stroke="#fff4e8" stroke-width="5"/>
+    <rect x="18" y="8" width="4" height="10" rx="1" fill="#4c9ab0"/>
+    <path d="M20 2 C15 7 18 10 20 10 C24 9 24 5 20 2Z" fill="#f7b733"/>
+    <path d="M6 35 H34" stroke="#a75b6b" stroke-width="3"/>
+  </svg>
+</span>
+""";
+
+    public static bool ShowBirthdayCake(DateTime localDate, bool force) =>
+        force || (localDate.Month == 10 && localDate.Day == 28);
+
+    public static string RenderPage(DateTime localDate, bool force = false) =>
+        Html.Replace("__BIRTHDAY_CAKE__", ShowBirthdayCake(localDate, force) ? BirthdayMarkup : "", StringComparison.Ordinal);
+
+    public static IResult GetPage(bool forceBirthdayCake = false) =>
+        Results.Content(RenderPage(DateTime.Now, forceBirthdayCake), "text/html; charset=utf-8");
 }
