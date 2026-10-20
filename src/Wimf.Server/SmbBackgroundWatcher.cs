@@ -24,6 +24,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     private volatile bool _watchFailed;
     private volatile bool _recovered;
     private volatile bool _continuityBroken;
+    private long _continuityEpoch;
     private readonly string _stateDirectory;
 
     public static string GetJournalPath(string root, string stateDirectory)
@@ -87,13 +88,14 @@ public sealed class SmbBackgroundWatcher : IDisposable
     public bool Recovered => _recovered;
     // A recovered watcher can observe new events but cannot prove what was missed during downtime.
     public bool CanPublishIncremental => !_watchFailed && !_continuityBroken;
+    public long ContinuityEpoch => Interlocked.Read(ref _continuityEpoch);
 
     /// <summary>Re-enable incremental work only after a scheduled or manual full reconciliation.</summary>
-    public void MarkFullScanReconciled()
+    public void MarkFullScanReconciled(long epochAtStart)
     {
         lock (_sync)
         {
-            if (!_disposed && !_watchFailed && _stream is { CanWrite: true })
+            if (!_disposed && !_watchFailed && ContinuityEpoch == epochAtStart && _stream is { CanWrite: true })
                 _continuityBroken = false;
         }
     }
@@ -118,6 +120,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
             {
                 _watchFailed = true;
                 _continuityBroken = true;
+                Interlocked.Increment(ref _continuityEpoch);
                 _needsFullScan = true;
                 Interlocked.Increment(ref _errors);
                 Console.Error.WriteLine($"[SMB-WATCH-ERROR] Marker write failed: {ex.Message}");
@@ -203,6 +206,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
                 _needsFullScan = true;
                 _watchFailed = true;
                 _continuityBroken = true;
+                Interlocked.Increment(ref _continuityEpoch);
                 Interlocked.Increment(ref _errors);
                 Console.Error.WriteLine($"[SMB-WATCH-ERROR] {_root}: journal write failed: {ex.Message}; full rescan required.");
             }
@@ -234,6 +238,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
             if (_disposed || !ReferenceEquals(sender, _watcher)) return;
             _watchFailed = true;
             _continuityBroken = true;
+            Interlocked.Increment(ref _continuityEpoch);
             _needsFullScan = true;
             Marker("error");
             Interlocked.Increment(ref _errors);
