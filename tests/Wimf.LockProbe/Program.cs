@@ -12,7 +12,7 @@ try
     Console.Out.Flush();
     var command = Console.ReadLine();
     if (command == "crash")
-        Environment.FailFast("Intentional lock recovery test");
+        Environment.Exit(137); // Abrupt termination: no managed disposal, no core dump.
     return command == "release" ? 0 : 3;
 }
 catch (Exception e)
