@@ -553,6 +553,7 @@ var app = builder.Build();
 
 // The UI and API are deliberately bound to localhost until authentication is implemented.
 app.MapGet("/", () => WebUi.GetPage(options.ForceBirthdayCake));
+app.MapGet("/favicon.svg", () => Results.Content(WebUi.LogoSvg, "image/svg+xml; charset=utf-8"));
 var engine = new SequentialSearchEngine();
 
 app.MapGet("/api/health", () =>

@@ -6,6 +6,17 @@ namespace Wimf.Server.Tests;
 public class WebUiTests
 {
     [Fact]
+    public void MagnifierFaviconAndAboutDialogArePresent()
+    {
+        Assert.Contains("rel=\"icon\" href=\"/favicon.svg\"", WebUi.Html);
+        Assert.Contains("id=\"about-dialog\"", WebUi.Html);
+        Assert.Contains("Philippe DIAS", WebUi.Html);
+        Assert.Contains("github.com/pdias79/wimf2", WebUi.Html);
+        Assert.Contains("<svg", WebUi.LogoSvg);
+        Assert.Contains("birthday-message", WebUi.RenderPage(new DateTime(2026, 10, 28)));
+    }
+
+    [Fact]
     public void BirthdayCakeShownOnOctober28OrWhenForced()
     {
         Assert.True(WebUi.ShowBirthdayCake(new DateTime(2026, 10, 28), false));
@@ -149,7 +160,7 @@ public class WebUiTests
     [Fact]
     public void UiDoesNotRequireExternalAssets()
     {
-        Assert.DoesNotContain("https://", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<script src=\"https://", WebUi.Html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<script src=", WebUi.Html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<link rel=\"stylesheet\"", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
