@@ -40,6 +40,33 @@ public class SequentialSearchEngineTests
     }
 
     [Fact]
+    public void SeparatorInsensitiveQuotedPhraseMatchesAllFileNameVariants()
+    {
+        var catalog = Read("NEPDC71.txt;txt;1;0;2\nNEP---DC 71.txt;txt;1;0;2\nN-E--  P  DC7-1.txt;txt;1;0;2\nNEPDC72.txt;txt;1;0;2\n");
+        var results = _engine.Search([catalog], new()
+        {
+            Text = "\"NE-P DC 71\"",
+            IgnoreSeparators = true
+        });
+        Assert.Equal(new[] { "NEPDC71.txt", "NEP---DC 71.txt", "N-E--  P  DC7-1.txt" },
+            results.Select(result => result.Entry.Name));
+        Assert.Empty(_engine.Search([catalog], new() { Text = "\"NE-P DC 71\"" }));
+    }
+
+    [Fact]
+    public void SeparatorInsensitiveModeDoesNotRewriteRegularExpressions()
+    {
+        var catalog = Read("NE-P DC 71.txt;txt;1;0;2\nNEPDC71.txt;txt;1;0;2\n");
+        var results = _engine.Search([catalog], new()
+        {
+            Text = @"^NEPDC71",
+            UseRegex = true,
+            IgnoreSeparators = true
+        });
+        Assert.Equal("NEPDC71.txt", Assert.Single(results).Entry.Name);
+    }
+
+    [Fact]
     public void CombinesInclusiveExtensionSizeAndDateFilters()
     {
         var catalog = Read("a.pdf;pdf;10;0;2\nb.PDF;PDF;20;0;3\nc.txt;txt;15;0;2\nd.pdf;pdf;9;0;2\ne.pdf;pdf;21;0;2\nf.pdf;pdf;15;0;1\ng.pdf;pdf;15;0;4\n");
