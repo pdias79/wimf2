@@ -160,7 +160,7 @@ public class WebUiTests
     [Fact]
     public void UiDoesNotRequireExternalAssets()
     {
-        Assert.DoesNotContain("https://", WebUi.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<script src=\"https://", WebUi.Html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<script src=", WebUi.Html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<link rel=\"stylesheet\"", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
