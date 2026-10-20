@@ -27,6 +27,10 @@ Pour comparer des requêtes, utiliser les mêmes catalogues chargés et répéte
 
 The localhost API negotiates response compression through the browser's standard `Accept-Encoding` header; clients that do not request supported compression still receive ordinary JSON. The browser console's `[WIMF-PERF] recherche` line includes resource timing byte counts: `transfertOctets` (including protocol overhead), `corpsCompresseOctets` and `corpsDecompresseOctets`. The values are browser estimates and can include cache behavior; use the Network panel to verify `Content-Encoding` and compare response sizes. Run identical searches with 100, 1,000 and 10,000 results several times before interpreting a performance difference.
 
+## JSON phase diagnostics (PR #94)
+
+The browser console's `[WIMF-PERF] recherche` event now breaks `lectureEtJsonMs` into `lectureEtDecompressionMs` (waiting for the body via `Response.text()`, which includes network transfer, decompression and text decoding) and `parsingJsonMs` (explicit `JSON.parse`). Both values use `performance.now()`; `lectureEtJsonMs` and other existing keys remain available for comparison. This instrumentation does not claim to measure decompression in isolation and retains the same parsed response object and search logic.
+
 ## Goals
 
 - Native Windows and Linux distribution, small binary and bounded memory use.
