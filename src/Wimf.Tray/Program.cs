@@ -24,6 +24,7 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly object _gate = new();
     private Form? _logs;
     private bool _quitting;
+    private bool _started;
 
     public TrayApplication(string[] args)
     {
@@ -92,6 +93,7 @@ internal sealed class TrayApplication : ApplicationContext
             if (!_quitting) AddLog("Le serveur Wimf s'est arrêté.");
         };
         if (!_server.Start()) throw new InvalidOperationException("Démarrage du processus impossible.");
+        _started = true;
         _server.BeginOutputReadLine();
         _server.BeginErrorReadLine();
         AddLog("Serveur démarré (PID " + _server.Id + "). URL : " + ServerUrl);
@@ -161,7 +163,7 @@ internal sealed class TrayApplication : ApplicationContext
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Transparent);
         using var bg = new SolidBrush(Color.FromArgb(21, 91, 188));
-        g.FillRoundedRectangle(bg, new Rectangle(0, 0, size, size), size / 5);
+        g.FillRectangle(bg, 0, 0, size, size);
         using var glass = new Pen(Color.White, size * .07f);
         g.DrawEllipse(glass, size * .19f, size * .17f, size * .43f, size * .43f);
         using var handle = new Pen(Color.FromArgb(255, 194, 71), size * .14f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
@@ -186,7 +188,7 @@ internal sealed class TrayApplication : ApplicationContext
         _quitting = true;
         _tray.Visible = false;
         _tray.Dispose();
-        if (_server.StartInfo is not null && _server.Id != 0)
+        if (_started)
         {
             try { if (!_server.HasExited) _server.Kill(entireProcessTree: true); }
             catch (InvalidOperationException) { }
