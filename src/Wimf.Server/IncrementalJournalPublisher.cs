@@ -141,6 +141,7 @@ public static class IncrementalJournalPublisher
         // A successful full or incremental publication must observe an accessible root.
         EnsureRootAccessible(root);
         var target = Path.GetFullPath(catalog);
+        var originalStamp = CatalogFileStamp.Read(target);
         var marker = Path.Combine(Path.GetDirectoryName(target)!,
             "." + Path.GetFileName(target) + ".incremental-cursor");
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
@@ -176,6 +177,8 @@ public static class IncrementalJournalPublisher
             var result = JournalIncrementalRefresh.Run(root, target, journal, staging, position, end, token, exclusions);
             token.ThrowIfCancellationRequested();
             EnsureRootAccessible(root);
+            if (!CatalogFileStamp.Read(target).Equals(originalStamp))
+                throw new IOException("Catalog changed during incremental preparation; publication refused.");
             if (result.Hints == 0)
                 File.Delete(staging);
             else
