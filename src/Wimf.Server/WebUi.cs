@@ -1294,7 +1294,11 @@ public static class WebUi
         signal: controller.signal
       });
       const responseAt = performance.now();
-      const data = await response.json();
+      // Response.text includes transfer and browser-side decompression.
+      // JSON.parse is timed independently; the two phases must not be conflated.
+      const jsonText = await response.text();
+      const downloadedAt = performance.now();
+      const data = JSON.parse(jsonText);
       const parsedAt = performance.now();
       if (!response.ok) throw new Error(data.error || "Erreur de recherche.");
       if (activeController !== controller) return;
@@ -1313,6 +1317,8 @@ public static class WebUi
         serveur: backend,
         reseauEtServeurMs: +(responseAt - timingStart).toFixed(2),
         lectureEtJsonMs: +(parsedAt - responseAt).toFixed(2),
+        lectureEtDecompressionMs: +(downloadedAt - responseAt).toFixed(2),
+        parsingJsonMs: +(parsedAt - downloadedAt).toFixed(2),
         renduEtTriMs: +(renderedAt - parsedAt).toFixed(2),
         totalMs: +(renderedAt - timingStart).toFixed(2),
         resultats: currentHits.length
