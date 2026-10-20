@@ -57,6 +57,30 @@ public class SmbBackgroundWatcherTests
     }
 
     [Fact]
+    public void FailedJournalMarkerDisablesWatcherInsteadOfPretendingToRecover()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "wimf-marker-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(directory, "share");
+        var state = Path.Combine(directory, "state");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var watcher = new SmbBackgroundWatcher(root, state);
+            var stream = (FileStream)typeof(SmbBackgroundWatcher)
+                .GetField("_stream", System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic)!.GetValue(watcher)!;
+            stream.Dispose(); // Simulate persistent journal storage becoming unavailable.
+            watcher.Start();
+            Assert.True(watcher.WatchFailed);
+            Assert.True(watcher.NeedsFullScan);
+            Assert.False(watcher.TryRecover());
+            Assert.True(watcher.WatchFailed);
+            Assert.False(watcher.Recovered);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
     public void UnavailableRootCannotStartWatcherUntilDirectoryReturns()
     {
         var directory = Path.Combine(Path.GetTempPath(), "wimf-recover-" + Guid.NewGuid().ToString("N"));
