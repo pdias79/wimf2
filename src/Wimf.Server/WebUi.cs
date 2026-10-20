@@ -467,6 +467,15 @@ public static class WebUi
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
       item.append(heading, path, metadata, smbPending);
+      if (catalog.lockMarker && catalog.lockMarker.present) {
+        const marker = document.createElement("div");
+        marker.className = "catalog-details";
+        marker.textContent = "Marqueur de verrou (activité non vérifiée) : " +
+          (catalog.lockMarker.owner || "propriétaire inconnu") +
+          " · Acquisition déclarée : " + formatDate(catalog.lockMarker.acquiredUtc) +
+          (catalog.lockMarker.readError ? " · " + catalog.lockMarker.readError : "");
+        item.appendChild(marker);
+      }
       if (catalog.scanMetrics) {
         const metrics = catalog.scanMetrics;
         const timing = document.createElement("div");
