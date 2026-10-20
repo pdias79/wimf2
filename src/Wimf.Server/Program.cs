@@ -587,6 +587,7 @@ app.MapPost("/api/search", (SearchRequest request, CancellationToken cancellatio
         {
             Text = request.Text,
             UseRegex = request.UseRegex,
+            IgnoreSeparators = request.IgnoreSeparators,
             RegexTimeout = TimeSpan.FromMilliseconds(100),
             Extensions = request.Extensions ?? [],
             MinSize = request.MinSize,
