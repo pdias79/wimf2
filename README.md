@@ -11,7 +11,7 @@ dotnet build src/Wimf.Tray/Wimf.Tray.csproj -c Release
 dotnet run --project src/Wimf.Tray -c Release -- --server "C:\\chemin\\vers\\Wimf.Server.dll" --config "C:\\chemin\\vers\\wimf.json"
 ```
 
-Le lanceur nécessite une session Windows interactive. Il démarre le serveur en tâche de fond sans console et affiche une loupe dans la zone de notification. Clic gauche : recherche dans le navigateur ; clic droit : ouvrir la recherche, messages du serveur, À propos, quitter. Le chemin du serveur peut être omis lorsqu'un `Wimf.Server.exe` ou `Wimf.Server.dll` est à côté de l'exécutable du lanceur. Les arguments supplémentaires sont transférés au serveur. « Quitter » termine actuellement le processus enfant ; cette limitation devra être levée avant la distribution finale.
+Le lanceur nécessite une session Windows interactive. Il démarre le serveur en tâche de fond sans console et affiche une loupe dans la zone de notification. Clic gauche : recherche dans le navigateur ; clic droit : ouvrir la recherche, messages du serveur, À propos, quitter. Le chemin du serveur peut être omis lorsqu'un `Wimf.Server.exe` ou `Wimf.Server.dll` est à côté de l'exécutable du lanceur. Les arguments supplémentaires sont transférés au serveur. « Quitter » demande un arrêt gracieux du serveur via son entrée standard (mode interne `--tray-managed`) ; un arrêt forcé n'est utilisé qu'après un délai de 8 secondes.
 
 ## Goals
 
