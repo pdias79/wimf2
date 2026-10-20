@@ -44,7 +44,7 @@ internal partial class DaemonConfigurationJsonContext : JsonSerializerContext;
 public sealed record DaemonOptions(
     string[] Catalogs, string[] Sources, string? CacheDirectory,
     int RefreshSeconds, bool EnableFileActions, IndexingJob[]? Indexing = null,
-    string[]? WatchRoots = null)
+    string[]? WatchRoots = null, bool ForceBirthdayCake = false)
 {
     /// <summary>Find a relative config in the daemon's working directory or its ancestors.</summary>
     public static string ResolveConfigurationFilePath(string path, string workingDirectory)
@@ -144,6 +144,7 @@ public sealed record DaemonOptions(
         }
 
         var fileActions = true;
+        var forceBirthdayCake = false;
         var cliCatalogs = new List<string>();
         var cliSources = new List<string>();
         string? cliCache = null;
@@ -154,6 +155,9 @@ public sealed record DaemonOptions(
             {
                 case "--config" when i + 1 < args.Length:
                     i++;
+                    break;
+                case "--force-birthday-cake":
+                    forceBirthdayCake = true;
                     break;
                 case "--enable-file-actions":
                     fileActions = true;
@@ -200,6 +204,6 @@ public sealed record DaemonOptions(
             if (!indexedOutputs.Add(job.Output))
                 throw new ArgumentException("Each indexing output must be configured only once.");
         }
-        return new DaemonOptions(catalogs.ToArray(), sources.ToArray(), cache, refresh, fileActions, indexing.ToArray(), watchRoots.Distinct(comparer).ToArray());
+        return new DaemonOptions(catalogs.ToArray(), sources.ToArray(), cache, refresh, fileActions, indexing.ToArray(), watchRoots.Distinct(comparer).ToArray(), forceBirthdayCake);
     }
 }
