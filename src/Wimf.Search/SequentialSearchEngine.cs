@@ -34,8 +34,12 @@ public sealed class SequentialSearchEngine
                 throw new ArgumentOutOfRangeException(nameof(query), "Regex timeout must be finite and positive.");
             regex = new Regex(query.Text, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, query.RegexTimeout);
         }
+        // Regex patterns keep their syntax; separator-insensitive mode applies only
+        // to literal words and quoted phrases.
         var words = query.UseRegex ? Array.Empty<string>() :
             SearchTerms.Parse(query.Text);
+        if (query.IgnoreSeparators && !query.UseRegex)
+            words = words.Select(RemoveSeparators).Where(word => word.Length > 0).ToArray();
         var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var extension in query.Extensions)
         {
@@ -60,9 +64,10 @@ public sealed class SequentialSearchEngine
                     (query.ModifiedFrom.HasValue && entry.ModifiedAt < query.ModifiedFrom.Value) ||
                     (query.ModifiedTo.HasValue && entry.ModifiedAt > query.ModifiedTo.Value))
                     continue;
+                var name = query.IgnoreSeparators && !query.UseRegex ? RemoveSeparators(entry.Name) : entry.Name;
                 var matches = true;
                 foreach (var word in words)
-                    if (!entry.Name.Contains(word, StringComparison.OrdinalIgnoreCase))
+                    if (!name.Contains(word, StringComparison.OrdinalIgnoreCase))
                     {
                         matches = false;
                         break;
@@ -75,4 +80,7 @@ public sealed class SequentialSearchEngine
         }
         return results;
     }
+
+    private static string RemoveSeparators(string value) =>
+        string.Concat(value.Where(c => !char.IsWhiteSpace(c) && c != '-'));
 }
