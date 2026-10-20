@@ -1,4 +1,5 @@
 using System.Text;
+using System.Collections.Concurrent;
 
 namespace Wimf.Server;
 
@@ -9,6 +10,8 @@ namespace Wimf.Server;
 /// </summary>
 public sealed class SharedCatalogLock : IDisposable
 {
+    private static readonly ConcurrentDictionary<string, byte> HeldLocally = new(
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly FileStream _stream;
     private bool _disposed;
     public string LockPath { get; }
@@ -24,6 +27,9 @@ public sealed class SharedCatalogLock : IDisposable
         if (staleAfter <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(staleAfter));
         var path = Path.GetFullPath(catalogPath) + ".wimf.lock";
+        // Linux fcntl locks can be process-wide, so guard independent holders
+        // inside this process as well as taking the network-visible OS lock.
+        if (!HeldLocally.TryAdd(path, 0)) return null;
         // Never delete the lock file: another host might already have it open.
         // A surviving marker is harmless after a crash, since the OS releases its lock.
         FileStream? stream = null;
@@ -32,7 +38,7 @@ public sealed class SharedCatalogLock : IDisposable
             stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite,
                 FileShare.ReadWrite, 4096, FileOptions.None);
             try { stream.Lock(0, 1); }
-            catch (IOException) { stream.Dispose(); return null; }
+            catch (IOException) { stream.Dispose(); HeldLocally.TryRemove(path, out _); return null; }
             // Metadata is informational. A timed-out owner cannot be evicted while
             // its kernel/SMB lock is still held, including when a scan exceeds the TTL.
             var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(path);
@@ -49,6 +55,7 @@ public sealed class SharedCatalogLock : IDisposable
         catch
         {
             stream?.Dispose();
+            HeldLocally.TryRemove(path, out _);
             throw;
         }
     }
@@ -58,6 +65,10 @@ public sealed class SharedCatalogLock : IDisposable
         if (_disposed) return;
         _disposed = true;
         try { _stream.Unlock(0, 1); }
-        finally { _stream.Dispose(); }
+        finally
+        {
+            _stream.Dispose();
+            HeldLocally.TryRemove(LockPath, out _);
+        }
     }
 }
