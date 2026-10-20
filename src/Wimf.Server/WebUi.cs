@@ -1092,6 +1092,7 @@ public static class WebUi
       // Keep a pointer-sized tolerance around both the trigger and the
       // fixed-position menu. This also bridges tiny gaps between the two.
       let closeTimer;
+      const stopClosing = () => { clearTimeout(closeTimer); };
       const insideTolerance = (x, y) => {
         const anchor = menuToggle.getBoundingClientRect();
         const popup = menu.getBoundingClientRect();
@@ -1100,31 +1101,33 @@ public static class WebUi
           y >= rect.top - margin && y <= rect.bottom + margin;
         return within(anchor) || within(popup);
       };
-      const stopClosing = () => { clearTimeout(closeTimer); };
+      const trackPointer = event => {
+        if (!actions.open) {
+          stopClosing();
+          document.removeEventListener("pointermove", trackPointer);
+        } else if (insideTolerance(event.clientX, event.clientY)) {
+          stopClosing();
+        } else if (!closeTimer) {
+          closeTimer = setTimeout(() => {
+            actions.open = false;
+            closeTimer = undefined;
+            document.removeEventListener("pointermove", trackPointer);
+          }, 180);
+        }
+      };
       actions.addEventListener("mouseleave", event => {
-        stopClosing();
         if (!actions.open) return;
-        // Pointer movements over the tolerance region must not close the menu.
-        const track = move => {
-          if (insideTolerance(move.clientX, move.clientY)) {
-            stopClosing();
-          } else {
-            stopClosing();
-            closeTimer = setTimeout(() => {
-              actions.open = false;
-              document.removeEventListener("pointermove", track);
-            }, 180);
-          }
-        };
-        document.addEventListener("pointermove", track);
-        track(event);
-        closeTimer = setTimeout(() => {
-          actions.open = false;
-          document.removeEventListener("pointermove", track);
-        }, 360);
+        document.addEventListener("pointermove", trackPointer);
+        trackPointer(event);
       });
       actions.addEventListener("mouseenter", stopClosing);
       menu.addEventListener("mouseenter", stopClosing);
+      actions.addEventListener("toggle", () => {
+        if (!actions.open) {
+          stopClosing();
+          document.removeEventListener("pointermove", trackPointer);
+        }
+      });
       actions.addEventListener("keydown", event => {
         if (event.key === "Escape") { actions.open = false; menuToggle.focus(); }
       });
