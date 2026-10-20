@@ -110,13 +110,13 @@ public static class IncrementalJournalPublisher
         return lastComplete;
     }
 
-    public static void AcknowledgeFullScan(string catalog, string journal, long beforeScanLength)
+    public static bool AcknowledgeFullScan(string catalog, string journal, long beforeScanLength)
     {
-        if (!File.Exists(catalog) || !File.Exists(journal)) return;
+        if (!File.Exists(catalog) || !File.Exists(journal)) return false;
         var target = Path.GetFullPath(catalog);
         var currentLength = new FileInfo(journal).Length;
         // If journal was truncated/replaced, replay rather than silently lose events.
-        if (beforeScanLength < 0 || beforeScanLength > currentLength) return;
+        if (beforeScanLength < 0 || beforeScanLength > currentLength) return false;
         var marker = Path.Combine(Path.GetDirectoryName(target)!,
             "." + Path.GetFileName(target) + ".incremental-cursor");
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
@@ -127,6 +127,7 @@ public static class IncrementalJournalPublisher
             File.WriteAllText(temp, signature + "\t" + beforeScanLength + "\t" +
                 File.GetLastWriteTimeUtc(target).Ticks);
             File.Move(temp, marker, overwrite: true);
+            return true;
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
