@@ -20,7 +20,8 @@ public sealed class CatalogLockMarkerTests
         try
         {
             var catalog = Path.Combine(folder, "catalog.gz");
-            using var held = SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30));
+            using (var held = SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)))
+            {
             Assert.NotNull(held);
             var result = CatalogLockMarker.Read(catalog);
             Assert.True(result.Present);
@@ -29,11 +30,9 @@ public sealed class CatalogLockMarkerTests
             Assert.Null(result.ReadError);
             Assert.Null(SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)));
             Assert.True(File.Exists(catalog + ".wimf.lock"));
+            }
         }
-        finally
-        {
-            // Dispose the lock before cleanup to support Windows.
-        }
+        finally { Directory.Delete(folder, true); }
     }
 
     [Fact]
