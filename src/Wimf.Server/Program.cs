@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.ResponseCompression;
 using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
@@ -549,7 +550,14 @@ builder.WebHost.UseUrls("http://127.0.0.1:5080");
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, WimfJsonContext.Default));
 
+// Compress sizeable JSON responses only when clients negotiate gzip or Brotli.
+builder.Services.AddResponseCompression(compression =>
+{
+    compression.EnableForHttps = false; // HTTP localhost only.
+    compression.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]);
+});
 var app = builder.Build();
+app.UseResponseCompression();
 
 // The UI and API are deliberately bound to localhost until authentication is implemented.
 app.MapGet("/", () => WebUi.GetPage(options.ForceBirthdayCake));
