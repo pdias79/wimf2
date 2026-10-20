@@ -304,6 +304,9 @@ public sealed class CatalogIndexScheduler
                 State = "running", LastError = null, QueuedAt = null, ScanMetrics = null, ScannedEntries = 0, SkippedEntries = 0, SkippedDetails = [],
                 StartedAt = DateTimeOffset.UtcNow
             });
+            using var catalogLock = SharedCatalogLock.TryAcquire(job.Output,
+                job.LockTimeout ?? TimeSpan.FromMinutes(30))
+                ?? throw new IOException($"Catalog is locked by another indexer: {job.Output}");
             var fullBoundary = _beforeFull?.Invoke(job) ?? 0;
             await _execute(job, token);
             _afterFull?.Invoke(job, fullBoundary);
@@ -388,7 +391,11 @@ public sealed class CatalogIndexScheduler
                 string? error = null;
                 try
                 {
-                    if (await _incremental(job, token) && _afterSuccess is not null)
+                    using var catalogLock = SharedCatalogLock.TryAcquire(job.Output,
+                        job.LockTimeout ?? TimeSpan.FromMinutes(30));
+                    if (catalogLock is null)
+                        Console.WriteLine($"[CATALOG-LOCK] incremental postponed | {job.Output}");
+                    else if (await _incremental(job, token) && _afterSuccess is not null)
                         await _afterSuccess(job, token);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
