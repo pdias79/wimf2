@@ -69,6 +69,14 @@ public class WebUiTests
     }
 
     [Fact]
+    public void OptionalSeparatorInsensitiveSearchIsIncludedInApiAndSavedSearches()
+    {
+        Assert.Contains("id=\"ignore-separators\"", WebUi.Html);
+        Assert.Contains("ignoreSeparators: byId(\"ignore-separators\").checked", WebUi.Html);
+        Assert.Contains("byId(\"ignore-separators\").checked = Boolean(entry.ignoreSeparators)", WebUi.Html);
+    }
+
+    [Fact]
     public void DirectoryResultsAndLargePageAreVisible()
     {
         Assert.Contains("<option value=\"500\">500</option>", WebUi.Html);

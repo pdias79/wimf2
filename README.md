@@ -127,6 +127,10 @@ dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --search-matrix --
 
 La sortie est au format CSV : nombre d'entrées, scénario, limite, résultats, temps médian en millisecondes, octets alloués médians et collectes GC. Les données sont générées en mémoire ; **aucun répertoire ni partage SMB n'est parcouru**. Les temps dépendent de la machine et de la version de .NET : comparer les résultats uniquement sur un matériel similaire et avec la même configuration. Cette PR établit un protocole reproductible, **pas une mesure de production déjà réalisée**.
 
+### Recherche sans espaces ni tirets (option facultative)
+
+Cocher **Ignorer les espaces et tirets** dans les options de recherche permet de comparer les noms après suppression des espaces (y compris tabulations) et des caractères `-`. L'option est désactivée par défaut et n'affecte pas le nom des fichiers, seulement la comparaison. Par exemple, la recherche `"NE-P DC 71"` retrouve `NEPDC71`, `NEP---DC 71` et `N-E--  P  DC7-1`. Les recherches entre guillemets conservent leur traitement comme expression unique ; l'option est également enregistrée dans l'historique et les favoris. En mode **expression régulière**, le motif et les noms ne sont pas modifiés pour préserver la syntaxe regex.
+
 ### Performance baseline: synthetic benchmark
 
 Use the standalone .NET 10 benchmark tool in **Release** mode. It generates WIMF UTF-8 catalog records in a streaming source, loads them with the production legacy reader, then measures median sequential-search latency and process working set. The benchmark is not an index format or a replacement for the application.

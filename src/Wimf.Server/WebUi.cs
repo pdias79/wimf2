@@ -136,6 +136,7 @@ public static class WebUi
       <label for="extensions">Extensions <input id="extensions" placeholder="pdf, docx" aria-label="Extensions (séparées par virgules)"></label>
       <label for="max-results">Max <input id="max-results" type="number" min="1" max="10000" value="1000"></label>
       <label for="regex"><input id="regex" type="checkbox"> Expression régulière</label>
+      <label for="ignore-separators"><input id="ignore-separators" type="checkbox"> Ignorer les espaces et tirets</label>
     </div>
     <div class="options advanced" aria-label="Filtres supplémentaires">
       <label for="min-size">Taille min. (Ko) <input id="min-size" type="number" min="0" step="1" placeholder="0"></label>
@@ -809,6 +810,7 @@ public static class WebUi
     return {
       text: byId("query").value,
       regex: byId("regex").checked,
+      ignoreSeparators: byId("ignore-separators").checked,
       extensions: byId("extensions").value.split(",").map(x => x.trim()).filter(Boolean),
       maxResults: byId("max-results").value,
       minSizeKo: byId("min-size").value,
@@ -823,11 +825,13 @@ public static class WebUi
   function searchTitle(entry) {
     const description = entry.text.trim() || "(tous les fichiers)";
     return description + (entry.extensions.length ? " · " + entry.extensions.join(", ") : "") +
-      (entry.regex ? " · regex" : "");
+      (entry.regex ? " · regex" : "") +
+      (entry.ignoreSeparators ? " · sans espaces/tirets" : "");
   }
   function restoreSearch(entry) {
     byId("query").value = entry.text;
     byId("regex").checked = Boolean(entry.regex);
+    byId("ignore-separators").checked = Boolean(entry.ignoreSeparators);
     byId("extensions").value = entry.extensions.join(", ");
     byId("max-results").value = entry.maxResults;
     savePreference("maxResults", Number(entry.maxResults));
@@ -1192,6 +1196,7 @@ public static class WebUi
     const modifiedToText = byId("modified-to").value;
     const payload = {
       text: byId("query").value, useRegex: byId("regex").checked,
+      ignoreSeparators: byId("ignore-separators").checked,
       extensions, maxResults,
       catalogIndices: [...catalogSelection]
     };
