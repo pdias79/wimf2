@@ -89,7 +89,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
         get { lock (_sync) return _directories.OrderBy(x => x, StringComparer.Ordinal).ToArray(); }
     }
 
-    private void Marker(string kind)
+    private bool Marker(string kind)
     {
         lock (_sync)
         {
@@ -99,19 +99,22 @@ public sealed class SmbBackgroundWatcher : IDisposable
                     DateTimeOffset.UtcNow.ToString("O") + "\n");
                 _stream!.Write(bytes);
                 _stream.Flush(flushToDisk: true);
+                return true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
             {
+                _watchFailed = true;
                 _needsFullScan = true;
                 Interlocked.Increment(ref _errors);
                 Console.Error.WriteLine($"[SMB-WATCH-ERROR] Marker write failed: {ex.Message}");
+                return false;
             }
         }
     }
 
     public void Start()
     {
-        Marker("start");
+        if (!Marker("start")) return;
         _watcher.EnableRaisingEvents = true;
         Console.WriteLine($"[SMB-WATCH] started | {_root} | persisted hints; full rescan required");
     }
@@ -130,10 +133,12 @@ public sealed class SmbBackgroundWatcher : IDisposable
                 replacement.EnableRaisingEvents = true;
                 var previous = _watcher;
                 _watcher = replacement;
+                previous.Dispose();
+                // A failed recovery marker means the notification gap is not durably recorded.
+                // Keep the watcher failed so incremental publication remains disabled.
+                if (!Marker("recovered")) return false;
                 _watchFailed = false;
                 _recovered = true;
-                previous.Dispose();
-                Marker("recovered");
                 Console.WriteLine($"[SMB-WATCH] recovered | {_root}");
                 return true;
             }
