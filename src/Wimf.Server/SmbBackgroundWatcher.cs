@@ -23,6 +23,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
     private bool _disposed;
     private volatile bool _watchFailed;
     private volatile bool _recovered;
+    private volatile bool _continuityBroken;
     private readonly string _stateDirectory;
 
     public static string GetJournalPath(string root, string stateDirectory)
@@ -84,6 +85,18 @@ public sealed class SmbBackgroundWatcher : IDisposable
     public bool NeedsFullScan => _needsFullScan;
     public bool WatchFailed => _watchFailed;
     public bool Recovered => _recovered;
+    // A recovered watcher can observe new events but cannot prove what was missed during downtime.
+    public bool CanPublishIncremental => !_watchFailed && !_continuityBroken;
+
+    /// <summary>Re-enable incremental work only after a scheduled or manual full reconciliation.</summary>
+    public void MarkFullScanReconciled()
+    {
+        lock (_sync)
+        {
+            if (!_disposed && !_watchFailed && _stream is { CanWrite: true })
+                _continuityBroken = false;
+        }
+    }
     public string[] AffectedDirectories
     {
         get { lock (_sync) return _directories.OrderBy(x => x, StringComparer.Ordinal).ToArray(); }
@@ -104,6 +117,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
             {
                 _watchFailed = true;
+                _continuityBroken = true;
                 _needsFullScan = true;
                 Interlocked.Increment(ref _errors);
                 Console.Error.WriteLine($"[SMB-WATCH-ERROR] Marker write failed: {ex.Message}");
@@ -187,6 +201,8 @@ public sealed class SmbBackgroundWatcher : IDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ObjectDisposedException)
             {
                 _needsFullScan = true;
+                _watchFailed = true;
+                _continuityBroken = true;
                 Interlocked.Increment(ref _errors);
                 Console.Error.WriteLine($"[SMB-WATCH-ERROR] {_root}: journal write failed: {ex.Message}; full rescan required.");
             }
@@ -217,6 +233,7 @@ public sealed class SmbBackgroundWatcher : IDisposable
             // Ignore callbacks from a watcher already superseded by recovery.
             if (_disposed || !ReferenceEquals(sender, _watcher)) return;
             _watchFailed = true;
+            _continuityBroken = true;
             _needsFullScan = true;
             Marker("error");
             Interlocked.Increment(ref _errors);
