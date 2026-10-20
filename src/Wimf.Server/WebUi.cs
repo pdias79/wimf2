@@ -13,6 +13,7 @@ public static class WebUi
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Wimf 2 — Recherche</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, sans-serif; color-scheme: light dark; }
     body { margin: 0; background: Canvas; color: CanvasText; }
@@ -20,7 +21,23 @@ public static class WebUi
     header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 24px; }
     h1 { margin: 0; font-size: 1.75rem; }
     .birthday-cake { display: inline-flex; vertical-align: middle; margin-left: 10px; cursor: help; }
-    .birthday-cake svg { width: 34px; height: 34px; }
+    .birthday-cake { position: relative; align-items: center; outline-offset: 5px; }
+    .birthday-cake svg { width: 39px; height: 39px; }
+    .birthday-message { position: absolute; top: calc(100% + 8px); left: 0; z-index: 1050; width: min(355px, 80vw);
+      padding: 18px 22px; border: 1px solid GrayText; border-radius: 12px; background: Canvas; color: CanvasText;
+      font-size: .9rem; font-weight: 400; line-height: 1.5; box-shadow: 0 8px 28px #0004;
+      visibility: hidden; opacity: 0; transform: translateY(-5px); pointer-events: none;
+      transition: opacity .55s ease, transform .55s ease, visibility .55s ease; }
+    .birthday-cake:hover .birthday-message, .birthday-cake:focus-within .birthday-message {
+      visibility: visible; opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .about-dialog { max-width: min(420px, 90vw); border: 1px solid GrayText; border-radius: 14px;
+      background: Canvas; color: CanvasText; box-shadow: 0 12px 40px #0005; padding: 25px; }
+    .about-dialog::backdrop { background: #0008; }
+    .about-logo { width: 90px; height: 90px; display: block; margin: 0 auto 16px; }
+    .about-dialog h2, .about-dialog p { text-align: center; }
+    .about-dialog a { color: #1871d3; }
+    .about-close { display: block; margin: 18px auto 0; }
+    @media (prefers-reduced-motion: reduce) { .birthday-message { transition: none; } }
     .wimf-brand { display: inline-flex; align-items: baseline; gap: 0; }
     .wimf-meaning { display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap; vertical-align: baseline; transition: max-width .45s ease, opacity .3s ease, margin .45s ease; font-size: .56em; font-weight: 400; }
     .wimf-brand:hover .wimf-meaning, .wimf-brand:focus-within .wimf-meaning { max-width: 260px; opacity: 1; margin-left: 9px; }
@@ -116,7 +133,15 @@ public static class WebUi
 </head>
 <body>
 <main>
-  <header><h1><span class="wimf-brand" tabindex="0">Wimf<span class="wimf-meaning">Where is my file</span></span> <span class="muted">2</span>__BIRTHDAY_CAKE__</h1><div class="header-controls"><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
+  <header><h1><span class="wimf-brand" tabindex="0">Wimf<span class="wimf-meaning">Where is my file</span></span> <span class="muted">2</span>__BIRTHDAY_CAKE__</h1><div class="header-controls"><button type="button" class="copy" id="about-toggle">À propos</button><button id="indexing-toggle" type="button" class="copy" aria-controls="indexing-panel" aria-expanded="false">Catalogues et actualisation</button></div></header>
+  <dialog class="about-dialog" id="about-dialog" aria-labelledby="about-heading">
+    <img class="about-logo" src="/favicon.svg" alt="Logo Wimf : une loupe">
+    <h2 id="about-heading">Wimf 2</h2>
+    <p>Version <span id="about-version">2</span></p>
+    <p>Auteur : Philippe DIAS</p>
+    <p><a href="https://github.com/pdias79/wimf2" target="_blank" rel="noopener noreferrer">GitHub — Wimf 2</a></p>
+    <button class="about-close" id="about-close" type="button">Fermer</button>
+  </dialog>
   <section id="indexing-panel" class="panel" aria-label="Catalogues et actualisation" hidden>
     <div class="bar"><h2>Catalogues et actualisation</h2><div class="catalog-buttons"><button id="refresh" type="button" class="copy">Recharger les catalogues</button><button id="reindex-all" type="button" class="copy">Réindexer tous les catalogues</button></div></div>
     <p class="status"><span id="catalogs"></span><span id="refresh-time"></span><span id="refresh-errors" class="status" role="status"></span></p>
@@ -212,6 +237,9 @@ public static class WebUi
 (() => {
   "use strict";
   const byId = id => document.getElementById(id);
+  const aboutDialog = byId("about-dialog");
+  byId("about-toggle").addEventListener("click", () => aboutDialog.showModal());
+  byId("about-close").addEventListener("click", () => aboutDialog.close());
   const form = byId("search-form");
   const submit = byId("submit");
   const toast = byId("toast");
@@ -1331,16 +1359,37 @@ public static class WebUi
 </html>
 """;
 
+    // Original vector illustration inspired by the user-provided birthday cake.
     private const string BirthdayMarkup = """
-<span class="birthday-cake" title="C'est l'anniversaire de mon créateur Philippe DIAS, offrez lui une chocolatine. Il est gourmand, ça lui fera plaisir" aria-label="Gâteau d'anniversaire">
-  <svg role="img" aria-label="Gâteau d'anniversaire" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
-    <rect x="6" y="18" width="28" height="17" rx="3" fill="#f2b4c4"/>
-    <path d="M6 22 Q10 16 14 22 T22 22 T30 22 T34 22" fill="none" stroke="#fff4e8" stroke-width="5"/>
-    <rect x="18" y="8" width="4" height="10" rx="1" fill="#4c9ab0"/>
-    <path d="M20 2 C15 7 18 10 20 10 C24 9 24 5 20 2Z" fill="#f7b733"/>
-    <path d="M6 35 H34" stroke="#a75b6b" stroke-width="3"/>
+<span class="birthday-cake" tabindex="0" aria-label="Gâteau d'anniversaire">
+  <svg role="img" aria-label="Gâteau d'anniversaire" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="48" cy="85" rx="46" ry="9" fill="#e8b28d"/>
+    <path d="M13 50 Q48 35 83 50 L80 78 Q48 95 16 78 Z" fill="#8e4848"/>
+    <path d="M14 58 Q22 70 30 58 T47 60 T64 59 T81 58 L80 68 Q72 60 64 70 T47 71 T30 69 T16 70Z" fill="#f4c8aa"/>
+    <ellipse cx="48" cy="50" rx="36" ry="15" fill="#492020"/>
+    <path d="M13 49 Q10 68 20 65 Q25 63 28 56 Q33 72 40 65 Q47 55 53 67 Q60 75 67 58 Q76 70 83 54 L83 49 Q48 37 13 49" fill="#542021"/>
+    <path d="M31 44 L28 18 M48 43 L48 11 M65 44 L68 18" stroke="#159b97" stroke-width="5" stroke-linecap="round"/>
+    <path d="M48 43 L48 11" stroke="#ec4733" stroke-width="6" stroke-linecap="round"/>
+    <path d="M68 43 L68 18" stroke="#ffc042" stroke-width="5" stroke-linecap="round"/>
+    <path d="M28 15 Q21 9 28 2 Q35 10 28 15 M48 9 Q41 3 48 -4 Q55 4 48 9 M68 15 Q61 9 68 2 Q75 10 68 15" fill="#ffba11"/>
+    <g fill="#ffb72c"><circle cx="47" cy="24" r="2"/><circle cx="49" cy="33" r="2"/><circle cx="46" cy="39" r="2"/></g>
+    <g fill="#e84b27"><circle cx="20" cy="45" r="4"/><circle cx="75" cy="45" r="4"/><circle cx="48" cy="51" r="4"/></g>
+    <g stroke="#ffad24" stroke-width="2.5" stroke-linecap="round"><path d="M22 53 l4 2 M36 48 l-3 -2 M58 54 l4 -2 M70 52 l4 2"/></g>
+    <g fill="#ffbb0e"><path d="M14 28 L19 34 L26 32 L23 39 L27 45 L19 43 L14 48 L13 39 L6 35 L13 34Z"/><path d="M82 28 L77 34 L70 32 L73 39 L69 45 L77 43 L82 48 L83 39 L90 35 L83 34Z"/></g>
   </svg>
+  <span class="birthday-message" role="tooltip">C'est l'anniversaire de mon créateur Philippe DIAS, offrez lui une chocolatine. Il est gourmand, ça lui fera plaisir</span>
 </span>
+""";
+
+    // Same magnifier serves the browser favicon and the About dialog.
+    public const string LogoSvg = """
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Wimf">
+  <rect width="64" height="64" rx="14" fill="#155bbc"/>
+  <circle cx="27" cy="26" r="15" fill="#e9f4ff" stroke="#fff" stroke-width="4"/>
+  <circle cx="27" cy="26" r="9" fill="none" stroke="#46a6d9" stroke-width="3"/>
+  <path d="M38 38 L54 54" stroke="#ffc247" stroke-width="9" stroke-linecap="round"/>
+  <path d="M18 23 Q21 17 28 17" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+</svg>
 """;
 
     public static bool ShowBirthdayCake(DateTime localDate, bool force) =>
