@@ -9,11 +9,14 @@ var iterations = 5;
 var maxResults = 100;
 string? existingCatalog = null;
 var profileRefresh = false;
+var searchMatrix = false;
 var folders = 0;
 var depth = 8;
 for (var i = 0; i < args.Length; i++)
 {
-    if (args[i] == "--profile-refresh")
+    if (args[i] == "--search-matrix")
+        searchMatrix = true;
+    else if (args[i] == "--profile-refresh")
         profileRefresh = true;
     else if (args[i] == "--folders" && i + 1 < args.Length &&
              int.TryParse(args[++i], out var parsedFolders) && parsedFolders >= 0)
@@ -34,7 +37,7 @@ for (var i = 0; i < args.Length; i++)
         existingCatalog = args[++i];
     else
     {
-        Console.Error.WriteLine("Usage: [--count N --folders N --depth N | --catalog path] [--iterations N] [--max-results N] [--profile-refresh]");
+        Console.Error.WriteLine("Usage: [--count N --folders N --depth N | --catalog path] [--iterations N] [--max-results N] [--profile-refresh] [--search-matrix]");
         return 2;
     }
 }
@@ -44,6 +47,61 @@ if ((existingCatalog is not null && (folders > 0 || depth != 8)) ||
 {
     Console.Error.WriteLine("Folders require a synthetic catalog, with 0 <= folders < count and depth <= folders.");
     return 2;
+}
+
+if (searchMatrix && (existingCatalog is not null || folders > 0 || count != 100_000))
+{
+    Console.Error.WriteLine("--search-matrix uses synthetic catalog sizes 50000, 100000, 500000, 1000000; omit --count, --folders and --catalog.");
+    return 2;
+}
+
+if (searchMatrix)
+{
+    // Each measurement uses an already-loaded catalog. Only synthetic in-memory
+    // records are scanned; no local files or SMB shares are enumerated.
+    Console.WriteLine("records,query,max_results,hits,median_ms,median_allocated_bytes,gen0,gen1,gen2");
+    var engineForMatrix = new SequentialSearchEngine();
+    foreach (var entries in new[] { 50_000, 100_000, 500_000, 1_000_000 })
+    {
+        using var stream = new SyntheticCatalogStream(entries);
+        var source = LegacyCatalogReader.Read(stream, compressed: false);
+        foreach (var limit in new[] { 100, 1_000, 10_000 })
+        {
+            var cases = new (string Label, SearchQuery Query)[]
+            {
+                ("no-hits", new() { Text = "not_existing_9e710be2", MaxResults = limit }),
+                ("rare", new() { Text = "needle_rare", MaxResults = limit }),
+                ("common", new() { Text = "file", MaxResults = limit }),
+                ("extension", new() { Text = "file", Extensions = ["pdf"], MaxResults = limit }),
+                ("regex", new() { Text = @"^file_\\d+\\.", UseRegex = true, MaxResults = limit })
+            };
+            foreach (var (label, query) in cases)
+            {
+                // Warm the JIT independently for each combination.
+                var expected = engineForMatrix.Search([source], query).Count;
+                var samples = new double[iterations];
+                var bytes = new long[iterations];
+                var beforeGc = Collections();
+                for (var iteration = 0; iteration < iterations; iteration++)
+                {
+                    var allocatedBefore = Allocated();
+                    var timer = Stopwatch.StartNew();
+                    var actual = engineForMatrix.Search([source], query).Count;
+                    timer.Stop();
+                    if (actual != expected) throw new InvalidOperationException("Search changed results during benchmark.");
+                    samples[iteration] = timer.Elapsed.TotalMilliseconds;
+                    bytes[iteration] = Allocated() - allocatedBefore;
+                }
+                Array.Sort(samples);
+                Array.Sort(bytes);
+                var afterGc = Collections();
+                Console.WriteLine(FormattableString.Invariant(
+                    $"{entries},{label},{limit},{expected},{samples[iterations / 2]:F3},{bytes[iterations / 2]},{afterGc.Gen0 - beforeGc.Gen0},{afterGc.Gen1 - beforeGc.Gen1},{afterGc.Gen2 - beforeGc.Gen2}"));
+            }
+        }
+        GC.KeepAlive(source);
+    }
+    return 0;
 }
 
 var process = Process.GetCurrentProcess();

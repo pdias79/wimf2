@@ -117,6 +117,16 @@ dotnet run --project src/Wimf.Server -- --source "\\\\server\\share\\catalog.gz"
 
 Failed sources retain their last usable in-memory version. A source can reappear on a later refresh. Direct `--catalog` files remain static; only `--source` files are polled. Polling can still perform expensive file-system operations and parser work and does not yet support progress reporting or configuration through the browser.
 
+### PR #84 — Matrice de performance de la recherche
+
+La commande suivante mesure le moteur de recherche sur des catalogues synthétiques de **50 000, 100 000, 500 000 et 1 000 000 entrées**, pour trois limites de résultats (100, 1 000 et 10 000) et cinq requêtes (aucun résultat, nom rare, nom fréquent, extension et expression régulière) :
+
+```powershell
+dotnet run --project benchmarks/Wimf.Benchmarks -c Release -- --search-matrix --iterations 5
+```
+
+La sortie est au format CSV : nombre d'entrées, scénario, limite, résultats, temps médian en millisecondes, octets alloués médians et collectes GC. Les données sont générées en mémoire ; **aucun répertoire ni partage SMB n'est parcouru**. Les temps dépendent de la machine et de la version de .NET : comparer les résultats uniquement sur un matériel similaire et avec la même configuration. Cette PR établit un protocole reproductible, **pas une mesure de production déjà réalisée**.
+
 ### Performance baseline: synthetic benchmark
 
 Use the standalone .NET 10 benchmark tool in **Release** mode. It generates WIMF UTF-8 catalog records in a streaming source, loads them with the production legacy reader, then measures median sequential-search latency and process working set. The benchmark is not an index format or a replacement for the application.
