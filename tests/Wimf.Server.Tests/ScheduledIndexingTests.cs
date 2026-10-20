@@ -234,6 +234,10 @@ public sealed class ScheduledIndexingTests
                 await Task.Delay(20);
             Assert.Equal("completed", scheduler.Status[0].State);
             Assert.Equal(1, count);
+            // Completion is observable before the background task finishes disposing
+            // its cancellation source and releasing the scheduler's running flag.
+            for (var attempt = 0; attempt < 100 && !scheduler.Status[0].CanStart; attempt++)
+                await Task.Delay(20);
             Assert.True(scheduler.Status[0].CanStart);
         }
         finally { Directory.Delete(folder, true); }
