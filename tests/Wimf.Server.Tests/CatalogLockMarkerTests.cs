@@ -25,9 +25,19 @@ public sealed class CatalogLockMarkerTests
             Assert.NotNull(held);
             var result = CatalogLockMarker.Read(catalog);
             Assert.True(result.Present);
-            Assert.Contains(Environment.MachineName, result.Owner);
-            Assert.NotNull(result.AcquiredUtc);
-            Assert.Null(result.ReadError);
+            // Windows prevents reading a byte-range locked by another handle.
+            // This diagnostic must fail closed rather than interpret the marker as free.
+            if (result.ReadError is null)
+            {
+                Assert.Contains(Environment.MachineName, result.Owner);
+                Assert.NotNull(result.AcquiredUtc);
+            }
+            else
+            {
+                Assert.Null(result.Owner);
+                Assert.Null(result.AcquiredUtc);
+                Assert.Equal("Marqueur inaccessible", result.ReadError);
+            }
             Assert.Null(SharedCatalogLock.TryAcquire(catalog, TimeSpan.FromMinutes(30)));
             Assert.True(File.Exists(catalog + ".wimf.lock"));
             }
