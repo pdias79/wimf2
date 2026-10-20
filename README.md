@@ -2,6 +2,17 @@
 
 Wimf 2 is a cross-platform file catalog indexing and search daemon under development. The original VB.NET application is at [pdias79/WIMF](https://github.com/pdias79/WIMF).
 
+## Windows systray (PR #89 — expérimental)
+
+Le serveur `Wimf.Server` reste multiplateforme et autonome. Un lanceur graphique Windows facultatif est dans `src/Wimf.Tray` et se compile avec :
+
+```powershell
+dotnet build src/Wimf.Tray/Wimf.Tray.csproj -c Release
+dotnet run --project src/Wimf.Tray -c Release -- --server "C:\\chemin\\vers\\Wimf.Server.dll" --config "C:\\chemin\\vers\\wimf.json"
+```
+
+Le lanceur nécessite une session Windows interactive. Il démarre le serveur en tâche de fond sans console et affiche une loupe dans la zone de notification. Clic gauche : recherche dans le navigateur ; clic droit : ouvrir la recherche, messages du serveur, À propos, quitter. Le chemin du serveur peut être omis lorsqu'un `Wimf.Server.exe` ou `Wimf.Server.dll` est à côté de l'exécutable du lanceur. Les arguments supplémentaires sont transférés au serveur. « Quitter » demande un arrêt gracieux du serveur via son entrée standard (mode interne `--tray-managed`) ; un arrêt forcé n'est utilisé qu'après un délai de 8 secondes.
+
 ## Goals
 
 - Native Windows and Linux distribution, small binary and bounded memory use.

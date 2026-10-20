@@ -21,6 +21,9 @@ jobs:
         run: dotnet restore Wimf.slnx
       - name: Build
         run: dotnet build Wimf.slnx --configuration Release --no-restore
+      - name: Build Windows tray launcher
+        if: runner.os == 'Windows'
+        run: dotnet build src/Wimf.Tray/Wimf.Tray.csproj --configuration Release
       - name: Test
         run: dotnet test Wimf.slnx --configuration Release --no-build
       - name: Benchmark smoke test
