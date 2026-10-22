@@ -22,11 +22,29 @@ public sealed record CatalogEntry(
 /// In-array representation: no per-entry object, ID field or DateTimeOffset object.
 /// A default value represents an invalid/missing legacy slot.
 /// </summary>
-public readonly record struct CatalogEntryData(
-    string Name, string Extension, ulong Size, int ParentId, long ModifiedUnixDays)
+public readonly record struct CatalogEntryData
 {
+    // Unix calendar days fit in Int32 for all dates supported by DateTimeOffset.
+    // Keeping this packed preserves an eight-byte saving per record (~75 MiB / 10M records).
+    private readonly int _modifiedUnixDays;
+
+    public string Name { get; }
+    public string Extension { get; }
+    public ulong Size { get; }
+    public int ParentId { get; }
+    public long ModifiedUnixDays => _modifiedUnixDays;
+
+    public CatalogEntryData(string name, string extension, ulong size, int parentId, long modifiedUnixDays)
+    {
+        _modifiedUnixDays = checked((int)modifiedUnixDays);
+        Name = name;
+        Extension = extension;
+        Size = size;
+        ParentId = parentId;
+    }
+
     public bool IsDirectory => string.Equals(Extension, "folder", StringComparison.OrdinalIgnoreCase);
-    public DateTimeOffset ModifiedAt => DateTimeOffset.FromUnixTimeSeconds(checked(ModifiedUnixDays * 86400));
+    public DateTimeOffset ModifiedAt => DateTimeOffset.FromUnixTimeSeconds(checked((long)_modifiedUnixDays * 86400));
 }
 
 public sealed record CatalogDiagnostic(int LineNumber, string Message);
