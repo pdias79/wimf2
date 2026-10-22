@@ -24,6 +24,9 @@ public sealed class SharedCatalogLock : IDisposable
 
     public static SharedCatalogLock? TryAcquire(string catalogPath, TimeSpan staleAfter)
     {
+        // Byte-range FileStream locks are supported on Windows and Linux, not macOS.
+        if (OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("Shared catalog locking requires Windows or Linux.");
         if (staleAfter <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(staleAfter));
         var path = Path.GetFullPath(catalogPath) + ".wimf.lock";
@@ -64,7 +67,11 @@ public sealed class SharedCatalogLock : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        try { _stream.Unlock(0, 1); }
+        try
+        {
+            if (!OperatingSystem.IsMacOS())
+                _stream.Unlock(0, 1);
+        }
         finally
         {
             _stream.Dispose();
