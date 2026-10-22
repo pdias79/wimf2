@@ -64,18 +64,18 @@ public sealed class Catalog
 
     public CatalogHeader Header { get; }
     public IReadOnlyList<CatalogDiagnostic> Diagnostics { get; }
-    public int RecordCount => _entries.Length - 1;
+    public int RecordCount => _entries.Count - 1;
 
     internal Catalog(CatalogHeader header, IReadOnlyList<CatalogEntryData> entries, IReadOnlyList<CatalogDiagnostic> diagnostics)
     {
         Header = header;
         Diagnostics = diagnostics;
-        _entries = new CompactEntry[entries.Length];
-        _splitSuffixes = new System.Collections.BitArray(entries.Length);
+        _entries = new CompactEntry[entries.Count];
+        _splitSuffixes = new System.Collections.BitArray(entries.Count);
         var extensionLookup = new Dictionary<string, int>(StringComparer.Ordinal);
         var extensions = new List<string>();
-        var ids = new int[entries.Length];
-        for (var i = 1; i < entries.Length; i++)
+        var ids = new int[entries.Count];
+        for (var i = 1; i < entries.Count; i++)
         {
             var entry = entries[i];
             if (entry.Name is null) continue;
@@ -103,12 +103,12 @@ public sealed class Catalog
         _extensions = extensions.ToArray();
         if (extensions.Count <= 256)
         {
-            _byteExtensionIds = new byte[entries.Length];
+            _byteExtensionIds = new byte[entries.Count];
             for (var i = 1; i < ids.Length; i++) _byteExtensionIds[i] = checked((byte)ids[i]);
         }
         else if (extensions.Count <= 65536)
         {
-            _shortExtensionIds = new ushort[entries.Length];
+            _shortExtensionIds = new ushort[entries.Count];
             for (var i = 1; i < ids.Length; i++) _shortExtensionIds[i] = checked((ushort)ids[i]);
         }
         else
@@ -118,7 +118,7 @@ public sealed class Catalog
     /// <summary>Fast search access without constructing complete filename strings.</summary>
     public bool TryGetSearchParts(int id, out CatalogEntryData data, out bool suffixSplit)
     {
-        if (id > 0 && id < _entries.Length && _entries[id].Name is not null)
+        if (id > 0 && id < _entries.Count && _entries[id].Name is not null)
         {
             var entry = _entries[id];
             var extensionId = _byteExtensionIds is not null ? _byteExtensionIds[id] :
@@ -136,7 +136,7 @@ public sealed class Catalog
     /// <summary>Access a record, reconstructing its public data without allocating a new object.</summary>
     public bool TryGetEntryData(int id, out CatalogEntryData data)
     {
-        if (id > 0 && id < _entries.Length && _entries[id].Name is not null)
+        if (id > 0 && id < _entries.Count && _entries[id].Name is not null)
         {
             var entry = _entries[id];
             var extensionId = _byteExtensionIds is not null ? _byteExtensionIds[id] :
@@ -211,7 +211,7 @@ public sealed class Catalog
 
     public IEnumerable<CatalogEntry> EnumerateEntries()
     {
-        for (int i = 1; i < _entries.Length; i++)
+        for (int i = 1; i < _entries.Count; i++)
             if (TryGetEntryData(i, out var data))
                 yield return new CatalogEntry(i, data.Name, data.Extension, data.Size, data.ParentId, data.ModifiedAt);
     }
