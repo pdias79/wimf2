@@ -8,8 +8,11 @@ namespace Wimf.Catalog.Tests;
 public sealed class AdaptiveExtensionIdTests
 {
     [Theory]
-    [InlineData(255, true)]
-    [InlineData(256, true)]
+    [InlineData(240, true)]
+    [InlineData(241, true)]
+    [InlineData(242, false)]
+    [InlineData(255, false)]
+    [InlineData(256, false)]
     [InlineData(257, false)]
     [InlineData(300, false)]
     public void ExtensionIdsWidenWithoutLosingPreviousRecords(int count, bool expectedByte)
