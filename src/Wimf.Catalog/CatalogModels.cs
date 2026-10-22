@@ -58,6 +58,7 @@ public sealed class Catalog
     private readonly byte[]? _byteExtensionIds;
     private readonly ushort[]? _shortExtensionIds;
     private readonly int[]? _intExtensionIds;
+    private readonly System.Collections.BitArray _splitSuffixes;
 
     private readonly record struct CompactEntry(string Name, ulong Size, int ParentId, int ModifiedUnixDays);
 
@@ -70,6 +71,7 @@ public sealed class Catalog
         Header = header;
         Diagnostics = diagnostics;
         _entries = new CompactEntry[entries.Length];
+        _splitSuffixes = new System.Collections.BitArray(entries.Length);
         var extensionLookup = new Dictionary<string, int>(StringComparer.Ordinal);
         var extensions = new List<string>();
         var ids = new int[entries.Length];
@@ -77,7 +79,18 @@ public sealed class Catalog
         {
             var entry = entries[i];
             if (entry.Name is null) continue;
-            _entries[i] = new CompactEntry(entry.Name, entry.Size, entry.ParentId,
+            var storedName = entry.Name;
+            var suffixLength = entry.Extension.Length + 1;
+            if (!entry.IsDirectory && entry.Extension.Length > 0 &&
+                storedName.Length > suffixLength &&
+                storedName[storedName.Length - suffixLength] == '.' &&
+                storedName.AsSpan(storedName.Length - entry.Extension.Length)
+                    .SequenceEqual(entry.Extension.AsSpan()))
+            {
+                storedName = storedName[..^suffixLength];
+                _splitSuffixes[i] = true;
+            }
+            _entries[i] = new CompactEntry(storedName, entry.Size, entry.ParentId,
                 checked((int)entry.ModifiedUnixDays));
             if (!extensionLookup.TryGetValue(entry.Extension, out var index))
             {
@@ -102,6 +115,24 @@ public sealed class Catalog
             _intExtensionIds = ids;
     }
 
+    /// <summary>Fast search access without constructing complete filename strings.</summary>
+    public bool TryGetSearchParts(int id, out CatalogEntryData data, out bool suffixSplit)
+    {
+        if (id > 0 && id < _entries.Length && _entries[id].Name is not null)
+        {
+            var entry = _entries[id];
+            var extensionId = _byteExtensionIds is not null ? _byteExtensionIds[id] :
+                _shortExtensionIds is not null ? _shortExtensionIds[id] : _intExtensionIds![id];
+            data = new CatalogEntryData(entry.Name, _extensions[extensionId],
+                entry.Size, entry.ParentId, entry.ModifiedUnixDays);
+            suffixSplit = _splitSuffixes[id];
+            return true;
+        }
+        data = default;
+        suffixSplit = false;
+        return false;
+    }
+
     /// <summary>Access a record, reconstructing its public data without allocating a new object.</summary>
     public bool TryGetEntryData(int id, out CatalogEntryData data)
     {
@@ -110,7 +141,9 @@ public sealed class Catalog
             var entry = _entries[id];
             var extensionId = _byteExtensionIds is not null ? _byteExtensionIds[id] :
                 _shortExtensionIds is not null ? _shortExtensionIds[id] : _intExtensionIds![id];
-            data = new CatalogEntryData(entry.Name, _extensions[extensionId],
+            var extension = _extensions[extensionId];
+            var name = _splitSuffixes[id] ? string.Concat(entry.Name, ".", extension) : entry.Name;
+            data = new CatalogEntryData(name, extension,
                 entry.Size, entry.ParentId, entry.ModifiedUnixDays);
             return true;
         }
