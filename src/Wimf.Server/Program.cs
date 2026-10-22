@@ -660,6 +660,23 @@ app.UseResponseCompression();
 app.MapGet("/", () => WebUi.GetPage(options.ForceBirthdayCake));
 app.MapGet("/favicon.svg", () => Results.Content(WebUi.LogoSvg, "image/svg+xml; charset=utf-8"));
 var engine = new SequentialSearchEngine();
+var catalogLifecycle = options.CatalogMemory?.IdleUnloadEnabled == false
+    ? null
+    : new CatalogIdleLifecycle(store,
+        TimeSpan.FromMinutes(options.CatalogMemory?.IdleTimeoutMinutes ?? 15));
+if (catalogLifecycle is not null)
+    app.Lifetime.ApplicationStopped.Register(() => catalogLifecycle.DisposeAsync().AsTask().GetAwaiter().GetResult());
+
+app.MapPost("/api/catalog-input", async () =>
+{
+    if (catalogLifecycle is not null && options.CatalogMemory?.ReloadOnSearchInput != false)
+        await catalogLifecycle.TouchAsync();
+    return Results.NoContent();
+});
+app.MapGet("/api/catalog-memory-state", () =>
+    Results.Json(new CatalogMemoryState(catalogLifecycle?.IsUnloaded ?? false,
+        catalogLifecycle?.IsLoading ?? false), WimfJsonContext.Default.CatalogMemoryState));
+
 
 app.MapGet("/api/memory-diagnostics", () =>
     Results.Json(ServerMemoryDiagnostics.Capture(store.Snapshot), WimfJsonContext.Default.Sample));
@@ -687,7 +704,7 @@ app.MapGet("/api/catalogs", () =>
             c.Diagnostics.Count, c.Header.CreatedAt)).ToArray(),
         WimfJsonContext.Default.CatalogSummaryArray));
 
-app.MapPost("/api/search", (HttpContext http, SearchRequest request, CancellationToken cancellationToken) =>
+app.MapPost("/api/search", async (HttpContext http, SearchRequest request, CancellationToken cancellationToken) =>
 {
     if (request.Text is null || request.Text.Length > 1024 ||
         request.MaxResults < 0 || request.MaxResults > 10000 ||
@@ -711,6 +728,8 @@ app.MapPost("/api/search", (HttpContext http, SearchRequest request, Cancellatio
             ModifiedTo = request.ModifiedTo,
             MaxResults = request.MaxResults == 0 ? 0 : request.MaxResults + 1
         };
+        using var searchLease = catalogLifecycle is null ? null :
+            await catalogLifecycle.BeginSearchAsync(cancellationToken);
         var snapshot = store.Snapshot;
         var indices = CatalogSelection.Resolve(snapshot.Length, request.CatalogIndices);
         var selected = indices.Select(index => snapshot[index]).ToArray();
