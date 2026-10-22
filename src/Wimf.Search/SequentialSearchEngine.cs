@@ -78,12 +78,21 @@ public sealed class SequentialSearchEngine
                     var fullLength = entry.Name.Length + entry.Extension.Length + 1;
                     // Most filenames fit the reusable stack buffer; very long names
                     // fall back to a temporary allocation only for this record.
-                    Span<char> target = fullLength <= filenameBuffer.Length
-                        ? filenameBuffer : new char[fullLength];
-                    entry.Name.AsSpan().CopyTo(target);
-                    target[entry.Name.Length] = '.';
-                    entry.Extension.AsSpan().CopyTo(target[(entry.Name.Length + 1)..]);
-                    name = target[..fullLength];
+                    if (fullLength <= filenameBuffer.Length)
+                    {
+                        entry.Name.AsSpan().CopyTo(filenameBuffer);
+                        filenameBuffer[entry.Name.Length] = '.';
+                        entry.Extension.AsSpan().CopyTo(filenameBuffer[(entry.Name.Length + 1)..]);
+                        name = filenameBuffer[..fullLength];
+                    }
+                    else
+                    {
+                        var longName = new char[fullLength];
+                        entry.Name.AsSpan().CopyTo(longName);
+                        longName[entry.Name.Length] = '.';
+                        entry.Extension.AsSpan().CopyTo(longName.AsSpan(entry.Name.Length + 1));
+                        name = longName;
+                    }
                 }
                 var searchableName = query.IgnoreSeparators && !query.UseRegex
                     ? RemoveSeparators(name.ToString()).AsSpan() : name;
