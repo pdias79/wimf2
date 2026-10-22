@@ -14,8 +14,7 @@ public static class OfflineJournalCompaction
         var status = JournalStorageStatus.Read(catalog, journal);
         if (!status.CursorValid || status.AcknowledgedBytes < minimumBytes) return false;
         var target = Path.GetFullPath(catalog);
-        var marker = Path.Combine(Path.GetDirectoryName(target)!,
-            "." + Path.GetFileName(target) + ".incremental-cursor");
+        var marker = IncrementalCursorPath.For(catalog, journal);
         var journalPath = Path.GetFullPath(journal);
         var staging = journalPath + "." + Guid.NewGuid().ToString("N") + ".compact-tmp";
         // A competing writer must never be allowed to append while we copy.
