@@ -21,6 +21,7 @@ public sealed record SearchRequest
 public sealed record SearchHit(string Catalog, int CatalogIndex, int Id, string Name, string FullPath, string Extension, ulong Size, DateTimeOffset ModifiedAt);
 public sealed record SearchResponse(int Count, SearchHit[] Results, bool Truncated = false);
 public sealed record ErrorResponse(string Error);
+public sealed record CatalogMemoryState(bool Unloaded, bool Loading);
 public sealed record FileActionRequest(string Action, int CatalogIndex, int Id, string FullPath);
 public sealed record FileActionResponse(bool Success);
 public sealed record ManagedCatalogStatus(string Name, string Path, string? Root,
@@ -42,6 +43,7 @@ public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOf
 [JsonSerializable(typeof(SearchRequest))]
 [JsonSerializable(typeof(SearchResponse))]
 [JsonSerializable(typeof(ErrorResponse))]
+[JsonSerializable(typeof(CatalogMemoryState))]
 [JsonSerializable(typeof(FileActionRequest))]
 [JsonSerializable(typeof(FileActionResponse))]
 [JsonSerializable(typeof(RefreshSummary))]
