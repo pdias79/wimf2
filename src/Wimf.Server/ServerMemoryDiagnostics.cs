@@ -11,6 +11,30 @@ public static class ServerMemoryDiagnostics
         long WorkingSetBytes, long PrivateBytes, int Gen0Collections,
         int Gen1Collections, int Gen2Collections);
 
+    public sealed record Comparison(Sample Before, Sample After,
+        long ManagedHeapReclaimedBytes, long WorkingSetChangeBytes,
+        long GcCommittedChangeBytes);
+
+    private static readonly object DiagnosticGate = new();
+
+    /// <summary>Explicit diagnostic only. This pauses managed threads for a full blocking GC.</summary>
+    public static Comparison CaptureAfterFullCollection(IReadOnlyCollection<Wimf.Catalog.Catalog> catalogs)
+    {
+        ArgumentNullException.ThrowIfNull(catalogs);
+        lock (DiagnosticGate)
+        {
+            var before = Capture(catalogs);
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            var after = Capture(catalogs);
+            return new Comparison(before, after,
+                before.ManagedHeapBytes - after.ManagedHeapBytes,
+                after.WorkingSetBytes - before.WorkingSetBytes,
+                after.GcCommittedBytes - before.GcCommittedBytes);
+        }
+    }
+
     public static Sample Capture(IReadOnlyCollection<Wimf.Catalog.Catalog> catalogs)
     {
         ArgumentNullException.ThrowIfNull(catalogs);

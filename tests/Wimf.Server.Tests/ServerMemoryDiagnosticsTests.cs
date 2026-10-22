@@ -21,6 +21,25 @@ public sealed class ServerMemoryDiagnosticsTests
     }
 
     [Fact]
+    public void ExplicitCollectionReturnsComparableSnapshots()
+    {
+        var result = ServerMemoryDiagnostics.CaptureAfterFullCollection(
+            Array.Empty<Wimf.Catalog.Catalog>());
+        Assert.Equal(0, result.Before.EntryCount);
+        Assert.Equal(0, result.After.EntryCount);
+        Assert.True(result.After.Gen2Collections >= result.Before.Gen2Collections + 1);
+        Assert.Equal(result.Before.ManagedHeapBytes - result.After.ManagedHeapBytes,
+            result.ManagedHeapReclaimedBytes);
+        Assert.Equal(result.After.WorkingSetBytes - result.Before.WorkingSetBytes,
+            result.WorkingSetChangeBytes);
+    }
+
+    [Fact]
+    public void ExplicitCollectionRejectsNull() =>
+        Assert.Throws<ArgumentNullException>(() =>
+            ServerMemoryDiagnostics.CaptureAfterFullCollection(null!));
+
+    [Fact]
     public void RejectsNullCatalogCollection() =>
         Assert.Throws<ArgumentNullException>(() => ServerMemoryDiagnostics.Capture(null!));
 }

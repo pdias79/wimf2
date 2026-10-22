@@ -664,6 +664,12 @@ var engine = new SequentialSearchEngine();
 app.MapGet("/api/memory-diagnostics", () =>
     Results.Json(ServerMemoryDiagnostics.Capture(store.Snapshot), WimfJsonContext.Default.Sample));
 
+// Explicit POST avoids a disruptive full collection during routine polling.
+// Accessible only on the existing localhost-bound diagnostic server.
+app.MapPost("/api/memory-diagnostics/collect", () =>
+    Results.Json(ServerMemoryDiagnostics.CaptureAfterFullCollection(store.Snapshot),
+        WimfJsonContext.Default.Comparison));
+
 app.MapGet("/api/health", () =>
     Results.Json(new HealthResponse("ok", store.Snapshot.Length, enableFileActions), WimfJsonContext.Default.HealthResponse));
 
