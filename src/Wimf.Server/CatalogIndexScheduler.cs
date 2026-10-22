@@ -160,7 +160,7 @@ public sealed class CatalogIndexScheduler
                 entryCount = ScheduledCatalogPublication.Refresh(job.Root, job.Output, job.Name,
                     cancellationToken: token, onSkipped: skipped, exclusions: job.Exclude,
                     onProgress: progress, onMetrics: metrics, directoryPrefetch: prefetch,
-                    onDirectoriesEnumerated: enumerated);
+                    onDirectoriesEnumerated: enumerated, extensions: job.Extensions);
             }
             finally
             {

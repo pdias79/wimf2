@@ -918,7 +918,8 @@ if (options.Indexing is { Length: > 0 })
             if (outputPath.StartsWith(rootPrefix, pathComparison))
                 return false;
             var result = await Task.Run(() => IncrementalJournalPublisher.Publish(
-                job.Root, job.Output, watcher.JournalPath, token, job.Exclude), token);
+                job.Root, job.Output, watcher.JournalPath, token, job.Exclude,
+                extensions: job.Extensions), token);
             incrementalMetrics[job.Output] = (result.EventRecords, result.DistinctPaths, result.Hints);
             if (result.Changed)
                 Console.WriteLine($"[INCREMENTAL] {job.Root} | events={result.EventRecords} | distinct={result.DistinctPaths} | paths={result.Hints} | elapsed={result.ElapsedMilliseconds} ms | entries={result.Entries}");
