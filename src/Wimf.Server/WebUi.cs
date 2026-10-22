@@ -240,6 +240,15 @@ public static class WebUi
   const aboutDialog = byId("about-dialog");
   byId("about-toggle").addEventListener("click", () => aboutDialog.showModal());
   byId("about-close").addEventListener("click", () => aboutDialog.close());
+  // Typing merely wakes catalog storage; no UI change unless search has to wait.
+  const queryField = byId("query");
+  queryField.addEventListener("input", () => {
+    fetch("/api/catalog-input", { method: "POST", keepalive: true }).catch(() => {});
+  });
+  const loadingDialog = document.createElement("dialog");
+  loadingDialog.textContent = "Chargement des catalogues…";
+  loadingDialog.setAttribute("aria-label", "Chargement des catalogues");
+  document.body.append(loadingDialog);
   const form = byId("search-form");
   const submit = byId("submit");
   const toast = byId("toast");
@@ -1337,6 +1346,15 @@ public static class WebUi
       if (modifiedToText) payload.modifiedTo = modifiedToText + "T23:59:59.999Z";
       if (modifiedFromText && modifiedToText && modifiedFromText > modifiedToText)
         throw new Error("La date de début ne peut pas dépasser la date de fin.");
+      // Show the popup only if a submitted search will wait on catalog loading.
+      try {
+        const stateResponse = await fetch("/api/catalog-memory-state", { signal: controller.signal });
+        if (stateResponse.ok) {
+          const memoryState = await stateResponse.json();
+          if ((memoryState.unloaded || memoryState.loading) && !loadingDialog.open)
+            loadingDialog.showModal();
+        }
+      } catch (error) { if (error.name === "AbortError") throw error; }
       const submittedSearch = captureSearch();
       const timingStart = performance.now();
       const response = await fetch("/api/search", {
@@ -1386,7 +1404,10 @@ public static class WebUi
         message(error.message || "Erreur réseau.", true);
       }
     } finally {
-      if (activeController === controller) submit.disabled = false;
+      if (activeController === controller) {
+        if (loadingDialog.open) loadingDialog.close();
+        submit.disabled = false;
+      }
     }
   });
 
