@@ -23,9 +23,8 @@ public sealed class CatalogExtensionStatisticsTests
             var catalog = LegacyCatalogReader.ReadFile(catalogPath);
             var stats = CatalogExtensionStatistics.Calculate(catalog);
             Assert.Equal(4, stats.FileCount);
-            Assert.Equal(["pdf", "docx", "(sans extension)"],
-                stats.Extensions.Select(item => item.Extension).ToArray().OrderByDescending(x => x == "pdf" ? 2 : 1)
-                    .ThenBy(x => x, StringComparer.Ordinal).ToArray());
+            Assert.Equal(["pdf", "(sans extension)", "docx"],
+                stats.Extensions.Select(item => item.Extension).ToArray());
             Assert.Equal(2, stats.Extensions[0].Count);
             Assert.Equal(4, stats.Extensions.Sum(item => item.Count));
             Assert.DoesNotContain(stats.Extensions, item => item.Extension == "folder");
