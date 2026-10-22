@@ -4,6 +4,31 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Read-only feasibility check for byte-sized extension IDs.
+if (args.Length > 0 && args[0] == "--extension-id-profile")
+{
+    if (args.Length != 3 || args[1] != "--config")
+    {
+        Console.Error.WriteLine("Usage: wimfd --extension-id-profile --config config.json");
+        return 2;
+    }
+    try
+    {
+        var configuration = DaemonOptions.Parse(["--config", args[2]]);
+        var catalogs = configuration.Catalogs.Concat(configuration.Sources)
+            .Select(LegacyCatalogReader.ReadFile).ToArray();
+        var report = ExtensionIdFeasibility.Analyze(catalogs);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, WimfJsonContext.Default.ExtensionIdFeasibilityReport));
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                               InvalidDataException or ArgumentException)
+    {
+        Console.Error.WriteLine("[EXTENSION-ID-PROFILE-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Isolated multi-catalog profile; never starts watchers or changes the catalog files.
 if (args.Length > 0 && args[0] == "--catalog-memory-profile")
 {
