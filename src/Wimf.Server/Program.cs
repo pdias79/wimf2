@@ -612,7 +612,7 @@ app.MapGet("/favicon.svg", () => Results.Content(WebUi.LogoSvg, "image/svg+xml; 
 var engine = new SequentialSearchEngine();
 
 app.MapGet("/api/memory-diagnostics", () =>
-    Results.Json(ServerMemoryDiagnostics.Capture(store.Snapshot), WimfJsonContext.Default.Snapshot1));
+    Results.Json(ServerMemoryDiagnostics.Capture(store.Snapshot), WimfJsonContext.Default.Sample));
 
 app.MapGet("/api/health", () =>
     Results.Json(new HealthResponse("ok", store.Snapshot.Length, enableFileActions), WimfJsonContext.Default.HealthResponse));
