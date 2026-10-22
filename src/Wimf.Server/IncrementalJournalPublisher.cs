@@ -131,7 +131,8 @@ public static class IncrementalJournalPublisher
     }
 
     public static Result Publish(string root, string catalog, string journal, CancellationToken token = default,
-        IEnumerable<string>? exclusions = null, Action? afterJournalSnapshot = null)
+        IEnumerable<string>? exclusions = null, Action? afterJournalSnapshot = null,
+        IEnumerable<string>? extensions = null)
     {
         if (!File.Exists(catalog) || !File.Exists(journal))
             return new(0, 0, 0, false);
@@ -171,7 +172,7 @@ public static class IncrementalJournalPublisher
             (target.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? ".txt.gz" : ".txt"));
         try
         {
-            var result = JournalIncrementalRefresh.Run(root, target, journal, staging, position, end, token, exclusions);
+            var result = JournalIncrementalRefresh.Run(root, target, journal, staging, position, end, token, exclusions, extensions);
             token.ThrowIfCancellationRequested();
             EnsureRootAccessible(root);
             if (!CatalogFileStamp.Read(target).Equals(originalStamp))
