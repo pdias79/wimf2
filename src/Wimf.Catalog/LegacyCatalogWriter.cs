@@ -13,7 +13,7 @@ public static class LegacyCatalogWriter
         CancellationToken cancellationToken = default, Action<string>? onSkipped = null,
         IEnumerable<string>? excludePaths = null, Action<int>? onProgress = null,
         Action<CatalogScanMetrics>? onMetrics = null, int directoryPrefetch = 1,
-        Action<int>? onDirectoriesEnumerated = null)
+        Action<int>? onDirectoriesEnumerated = null, IEnumerable<string>? extensions = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -214,6 +214,17 @@ public static class LegacyCatalogWriter
                 file.Flush(flushToDisk: true);
                 // Writer scopes close before committing the finished gzip/plain file.
                 // Number of records is derived later via the reader.
+            }
+            if (extensions is not null)
+            {
+                var filtered = temporary + ".filtered";
+                try
+                {
+                    nextId = CatalogExtensionFilter.Prune(temporary, filtered, extensions,
+                        output.EndsWith(".gz", StringComparison.OrdinalIgnoreCase));
+                    File.Move(filtered, temporary, overwrite: true);
+                }
+                finally { if (File.Exists(filtered)) File.Delete(filtered); }
             }
             File.Move(temporary, output, overwrite: true);
             onProgress?.Invoke(nextId);
