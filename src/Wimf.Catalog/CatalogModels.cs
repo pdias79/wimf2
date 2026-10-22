@@ -66,7 +66,7 @@ public sealed class Catalog
     public IReadOnlyList<CatalogDiagnostic> Diagnostics { get; }
     public int RecordCount => _entries.Length - 1;
 
-    internal Catalog(CatalogHeader header, CatalogEntryData[] entries, IReadOnlyList<CatalogDiagnostic> diagnostics)
+    internal Catalog(CatalogHeader header, IReadOnlyList<CatalogEntryData> entries, IReadOnlyList<CatalogDiagnostic> diagnostics)
     {
         Header = header;
         Diagnostics = diagnostics;
