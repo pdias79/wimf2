@@ -93,7 +93,9 @@ public static class LegacyCatalogReader
             }
         }
 
-        var slots = entries.ToArray();
+        // Validate in the existing List and feed it directly into compact storage.
+        // Avoid allocating a second ~32-byte-per-entry array during initial load.
+        var slots = entries;
         for (var id = 1; id < slots.Length; id++)
         {
             var entry = slots[id];
