@@ -7,7 +7,7 @@ public static class ExtensionIdFeasibility
 {
     public sealed record CatalogResult(string Name, long Entries, int DistinctExtensions,
         bool FitsInByte, long EntriesWithExtensions);
-    public sealed record Report(int CatalogCount, long Entries, int MaximumDistinctExtensions,
+    public sealed record ExtensionIdReport(int CatalogCount, long Entries, int MaximumDistinctExtensions,
         bool AllFitInByte, CatalogResult[] Catalogs);
 
     public static Report Analyze(IReadOnlyList<Wimf.Catalog.Catalog> catalogs)
