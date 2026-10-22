@@ -10,9 +10,18 @@ public sealed class DaemonConfiguration
     public string[] Catalogs { get; init; } = [];
     public string[] Sources { get; init; } = [];
     public string? CacheDirectory { get; init; }
+    public CatalogMemoryConfiguration CatalogMemory { get; init; } = new();
     public int RefreshSeconds { get; init; } = 300;
     public string[] WatchRoots { get; init; } = [];
     public IndexingJobConfiguration[] Indexing { get; init; } = [];
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class CatalogMemoryConfiguration
+{
+    public bool IdleUnloadEnabled { get; init; } = true;
+    public int IdleTimeoutMinutes { get; init; } = 15;
+    public bool ReloadOnSearchInput { get; init; } = true;
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -47,7 +56,8 @@ internal partial class DaemonConfigurationJsonContext : JsonSerializerContext;
 public sealed record DaemonOptions(
     string[] Catalogs, string[] Sources, string? CacheDirectory,
     int RefreshSeconds, bool EnableFileActions, IndexingJob[]? Indexing = null,
-    string[]? WatchRoots = null, bool ForceBirthdayCake = false, bool TrayManaged = false)
+    string[]? WatchRoots = null, bool ForceBirthdayCake = false, bool TrayManaged = false,
+    CatalogMemoryConfiguration? CatalogMemory = null)
 {
     /// <summary>Find a relative config in the daemon's working directory or its ancestors.</summary>
     public static string ResolveConfigurationFilePath(string path, string workingDirectory)
@@ -85,6 +95,7 @@ public sealed record DaemonOptions(
         var sources = new List<string>();
         string? cache = null;
         var refresh = 300;
+        var catalogMemory = new CatalogMemoryConfiguration();
         var indexing = new List<IndexingJob>();
         var watchRoots = new List<string>();
         if (configurationFile is not null)
@@ -106,6 +117,9 @@ public sealed record DaemonOptions(
             sources.AddRange((document.Sources ?? []).Select(path => Resolve(baseDirectory, path)));
             cache = document.CacheDirectory is null ? null : Resolve(baseDirectory, document.CacheDirectory);
             refresh = document.RefreshSeconds;
+            catalogMemory = document.CatalogMemory ?? new CatalogMemoryConfiguration();
+            if (catalogMemory.IdleTimeoutMinutes is < 1 or > 10080)
+                throw new ArgumentException("catalogMemory.idleTimeoutMinutes must be between 1 and 10080.");
             watchRoots.AddRange((document.WatchRoots ?? []).Select(path => Resolve(baseDirectory, path)));
             foreach (var job in document.Indexing ?? [])
             {
@@ -215,6 +229,6 @@ public sealed record DaemonOptions(
             if (!indexedOutputs.Add(job.Output))
                 throw new ArgumentException("Each indexing output must be configured only once.");
         }
-        return new DaemonOptions(catalogs.ToArray(), sources.ToArray(), cache, refresh, fileActions, indexing.ToArray(), watchRoots.Distinct(comparer).ToArray(), forceBirthdayCake, trayManaged);
+        return new DaemonOptions(catalogs.ToArray(), sources.ToArray(), cache, refresh, fileActions, indexing.ToArray(), watchRoots.Distinct(comparer).ToArray(), forceBirthdayCake, trayManaged, catalogMemory);
     }
 }
