@@ -711,8 +711,8 @@ app.MapGet("/api/indexing-history", () =>
     Results.Json(indexingScheduler?.History ?? [], WimfJsonContext.Default.IndexingRunHistoryEntryArray));
 
 // Count entries only once per immutable catalog snapshot, not every UI poll.
-var fileCounts = new System.Runtime.CompilerServices.ConditionalWeakTable<
-    Wimf.Catalog.Catalog, System.Runtime.CompilerServices.StrongBox<int>>();
+var catalogStatistics = new System.Runtime.CompilerServices.ConditionalWeakTable<
+    Wimf.Catalog.Catalog, CatalogExtensionStatistics>();
 // Catalog management includes configured local files that have not yet been generated.
 app.MapGet("/api/catalog-management", () =>
 {
@@ -726,15 +726,14 @@ app.MapGet("/api/catalog-management", () =>
         return new ManagedCatalogStatus(
             catalog?.Header.Name ?? job?.Name ?? Path.GetFileName(entry.Path),
             entry.Path, catalog?.Header.RootPath ?? job?.Root,
-            catalog is null ? null : fileCounts.GetValue(catalog,
-                loaded => new System.Runtime.CompilerServices.StrongBox<int>(
-                    loaded.EnumerateEntries().Count(e => e.Extension != "folder"))).Value,
+            catalog is null ? null : catalogStatistics.GetValue(catalog, CatalogExtensionStatistics.Calculate).FileCount,
             catalog?.Header.CreatedAt, catalog is not null,
             index >= 0 ? index : null, job?.State, job?.NextUpdate, job?.LastError,
             job?.CanStart ?? false, job?.ScannedEntries ?? 0, job?.StartedAt,
             job?.LastSuccess, job?.SkippedEntries ?? 0, job?.SkippedDetails,
             job?.EffectiveExclusions, job?.QueuedAt, job?.ScanMetrics, job?.EnumeratedDirectories ?? 0,
-            CatalogLockMarker.Read(entry.Path));
+            CatalogLockMarker.Read(entry.Path),
+            catalog is null ? null : catalogStatistics.GetValue(catalog, CatalogExtensionStatistics.Calculate).Extensions);
     }).ToArray();
     return Results.Json(managed, WimfJsonContext.Default.ManagedCatalogStatusArray);
 });
