@@ -4,6 +4,28 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Isolated memory benchmark. Never starts the daemon or modifies catalogs.
+if (args.Length > 0 && args[0] == "--catalog-memory")
+{
+    if (args.Length != 2)
+    {
+        Console.Error.WriteLine("Usage: wimfd --catalog-memory CATALOG.txt[.gz]");
+        return 2;
+    }
+    try
+    {
+        var result = CatalogMemoryBenchmark.Measure(args[1]);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                               InvalidDataException or ArgumentException)
+    {
+        Console.Error.WriteLine("[CATALOG-MEMORY-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Select validated incremental candidate or a complete fallback, always to a NEW output.
 if (args.Length > 0 && args[0] == "--incremental-safe-refresh")
 {
