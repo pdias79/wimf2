@@ -19,7 +19,7 @@ public sealed class IndexingExtensionConfigurationTests
             Assert.Equal(CatalogExtensionFilter.DefaultExtensions.OrderBy(x => x),
                 Assert.Single(DaemonOptions.Parse(["--config", config]).Indexing!).Extensions!.OrderBy(x => x));
             File.WriteAllText(config, """{"catalogs":["cat.gz"],"indexing":[{"root":"root","output":"cat.gz","intervalDays":1,"extensions":[".PDF","DoCx"]}]}""");
-            Assert.Equal(["docx", "pdf"], Assert.Single(DaemonOptions.Parse(["--config", config]).Indexing!).Extensions);
+            Assert.Equal(["docx", "pdf"], Assert.Single(DaemonOptions.Parse(["--config", config]).Indexing!).Extensions!);
             File.WriteAllText(config, """{"catalogs":["cat.gz"],"indexing":[{"root":"root","output":"cat.gz","intervalDays":1,"extensions":[]}]}""");
             Assert.Empty(Assert.Single(DaemonOptions.Parse(["--config", config]).Indexing!).Extensions!);
             File.WriteAllText(config, """{"catalogs":["cat.gz"],"indexing":[{"root":"root","output":"cat.gz","intervalDays":1,"extensions":["pdf;bad"]}]}""");
