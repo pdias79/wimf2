@@ -11,7 +11,8 @@ public static class JournalIncrementalRefresh
 
     public static Result Run(string rootPath, string catalogPath, string journalPath,
         string outputPath, long fromOffset = 0, long? untilOffset = null,
-        CancellationToken cancellationToken = default, IEnumerable<string>? exclusions = null)
+        CancellationToken cancellationToken = default, IEnumerable<string>? exclusions = null,
+        IEnumerable<string>? extensions = null)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var eventRecords = 0;
@@ -19,6 +20,8 @@ public static class JournalIncrementalRefresh
         var cmp = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var excluded = new CatalogPathExclusions(root, exclusions);
+        var allowed = extensions is null ? null : new HashSet<string>(
+            CatalogExtensionFilter.Normalize(extensions), StringComparer.OrdinalIgnoreCase);
         var source = LegacyCatalogReader.ReadFile(catalogPath);
         if (source.Diagnostics.Count != 0 ||
             !string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(source.Header.RootPath)), root, comparison))
@@ -115,6 +118,24 @@ public static class JournalIncrementalRefresh
                 }
             }
         }
+        if (allowed is not null)
+        {
+            foreach (var path in entries.Where(pair => pair.Value.Extension != "folder" &&
+                !allowed.Contains(pair.Value.Extension)).Select(pair => pair.Key).ToArray())
+                entries.Remove(path);
+            // Remove all directories without a retained file descendant, deepest first.
+            var required = new HashSet<string>(cmp);
+            foreach (var filePath in entries.Where(pair => pair.Value.Extension != "folder").Select(pair => pair.Key))
+            {
+                for (var parent = Path.GetDirectoryName(filePath);
+                     parent is not null && !parent.Equals(root, comparison);
+                     parent = Path.GetDirectoryName(parent))
+                    required.Add(parent);
+            }
+            foreach (var path in entries.Where(pair => pair.Value.Extension == "folder" &&
+                !required.Contains(pair.Key)).Select(pair => pair.Key).ToArray())
+                entries.Remove(path);
+        }
         // The staged output is a sibling of production; never publish it before validation.
         var output = Path.GetFullPath(outputPath);
         var count = IncrementalCatalogSerializer.Write(root, source.Header.Name, entries, output);
@@ -133,6 +154,7 @@ public static class JournalIncrementalRefresh
             var name = Path.GetFileName(path);
             if (name.IndexOfAny([';', '\n', '\r']) >= 0) return;
             var info = new FileInfo(path);
+            if (allowed is not null && !allowed.Contains(info.Extension.TrimStart('.'))) return;
             entries[path] = new(info.Extension.TrimStart('.'), checked((ulong)info.Length),
                 Day(info.LastWriteTimeUtc));
         }
