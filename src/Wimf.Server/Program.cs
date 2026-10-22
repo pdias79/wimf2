@@ -7,14 +7,17 @@ using Wimf.Server;
 // Isolated multi-catalog profile; never starts watchers or changes the catalog files.
 if (args.Length > 0 && args[0] == "--catalog-memory-profile")
 {
-    if (args.Length < 2)
+    if (args.Length != 3 || args[1] != "--config")
     {
-        Console.Error.WriteLine("Usage: wimfd --catalog-memory-profile CATALOG [CATALOG ...]");
+        Console.Error.WriteLine("Usage: wimfd --catalog-memory-profile --config config.json");
         return 2;
     }
     try
     {
-        var report = CatalogMemoryProfile.Measure(args[1..]);
+        // Resolve paths exactly as the daemon does, but do not start it.
+        var configuration = DaemonOptions.Parse(["--config", args[2]]);
+        var catalogPaths = configuration.Catalogs.Concat(configuration.Sources).ToArray();
+        var report = CatalogMemoryProfile.Measure(catalogPaths);
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, WimfJsonContext.Default.Report));
         return 0;
     }
