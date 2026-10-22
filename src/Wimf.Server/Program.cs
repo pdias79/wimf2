@@ -611,6 +611,9 @@ app.MapGet("/", () => WebUi.GetPage(options.ForceBirthdayCake));
 app.MapGet("/favicon.svg", () => Results.Content(WebUi.LogoSvg, "image/svg+xml; charset=utf-8"));
 var engine = new SequentialSearchEngine();
 
+app.MapGet("/api/memory-diagnostics", () =>
+    Results.Json(ServerMemoryDiagnostics.Capture(store.Snapshot), WimfJsonContext.Default.Sample));
+
 app.MapGet("/api/health", () =>
     Results.Json(new HealthResponse("ok", store.Snapshot.Length, enableFileActions), WimfJsonContext.Default.HealthResponse));
 
