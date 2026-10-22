@@ -11,6 +11,35 @@ public class LiveCatalogStoreTests
         $"[WIMF Catalog]\n{name}\nC:\\Fixture\n0\ntxt\n{name}.txt;txt;1;0;2\n";
 
     [Fact]
+    public async Task UnloadKeepsPersistentCacheAndReloadReadsLatestSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "wimf-unload-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "source.txt");
+            var cache = Path.Combine(root, "cache");
+            File.WriteAllText(source, Fixture("First"), Encoding.UTF8);
+            var store = new LiveCatalogStore([], [source], cache);
+            await store.RefreshAsync();
+            var cacheFile = CatalogCache.CachePath(source, cache);
+            Assert.True(File.Exists(cacheFile));
+            await store.UnloadAsync();
+            Assert.True(store.IsUnloaded);
+            Assert.Empty(store.Snapshot);
+            await store.RefreshAsync();
+            Assert.Empty(store.Snapshot); // background polling must not reload
+            Assert.True(File.Exists(cacheFile));
+            File.WriteAllText(source, Fixture("Second"), Encoding.UTF8);
+            File.SetLastWriteTimeUtc(source, DateTime.UtcNow.AddMinutes(2));
+            await store.ReloadAsync();
+            Assert.False(store.IsUnloaded);
+            Assert.Equal("Second", Assert.Single(store.Snapshot).Header.Name);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task NewCatalogBecomesVisibleWithoutRestart()
     {
         var root = Path.Combine(Path.GetTempPath(), "wimf-refresh-" + Guid.NewGuid().ToString("N"));
