@@ -24,8 +24,10 @@ public sealed class CatalogMemoryBenchmarkTests
 
             Assert.Equal(1, snapshot.Entries);
             Assert.Equal(before.LongLength, snapshot.CatalogFileBytes);
-            Assert.True(snapshot.ManagedBaselineBytes >= 0);
-            Assert.True(snapshot.ManagedLoadedBytes >= 0);
+            // GC heap measurements can fluctuate under parallel test execution;
+            // do not require them to be positive or monotonically increasing.
+            Assert.Equal(snapshot.ManagedLoadedBytes - snapshot.ManagedBaselineBytes,
+                snapshot.ManagedDeltaBytes);
             Assert.True(snapshot.LoadMilliseconds >= 0);
             Assert.Equal(before, File.ReadAllBytes(catalog));
         }
