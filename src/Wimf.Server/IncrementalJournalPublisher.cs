@@ -19,8 +19,7 @@ public static class IncrementalJournalPublisher
     {
         if (!File.Exists(journal)) return new(0, 0);
         var target = Path.GetFullPath(catalog);
-        var marker = Path.Combine(Path.GetDirectoryName(target)!,
-            "." + Path.GetFileName(target) + ".incremental-cursor");
+        var marker = IncrementalCursorPath.For(catalog, journal);
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             Path.GetFullPath(journal).ToUpperInvariant())));
         var offset = 0L;
@@ -117,8 +116,7 @@ public static class IncrementalJournalPublisher
         var currentLength = new FileInfo(journal).Length;
         // If journal was truncated/replaced, replay rather than silently lose events.
         if (beforeScanLength < 0 || beforeScanLength > currentLength) return false;
-        var marker = Path.Combine(Path.GetDirectoryName(target)!,
-            "." + Path.GetFileName(target) + ".incremental-cursor");
+        var marker = IncrementalCursorPath.For(catalog, journal);
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             Path.GetFullPath(journal).ToUpperInvariant())));
         var temp = marker + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -142,8 +140,7 @@ public static class IncrementalJournalPublisher
         EnsureRootAccessible(root);
         var target = Path.GetFullPath(catalog);
         var originalStamp = CatalogFileStamp.Read(target);
-        var marker = Path.Combine(Path.GetDirectoryName(target)!,
-            "." + Path.GetFileName(target) + ".incremental-cursor");
+        var marker = IncrementalCursorPath.For(catalog, journal);
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             Path.GetFullPath(journal).ToUpperInvariant())));
         var position = 0L;
