@@ -13,7 +13,8 @@ public static class ScheduledCatalogPublication
         CancellationToken cancellationToken = default,
         Action<string>? onSkipped = null, IEnumerable<string>? exclusions = null,
         Action<int>? onProgress = null, Action<CatalogScanMetrics>? onMetrics = null,
-        int directoryPrefetch = 1, Action<int>? onDirectoriesEnumerated = null)
+        int directoryPrefetch = 1, Action<int>? onDirectoriesEnumerated = null,
+        IEnumerable<string>? extensions = null)
     {
         var target = Path.GetFullPath(output);
         var directory = Path.GetDirectoryName(target)!;
@@ -34,7 +35,7 @@ public static class ScheduledCatalogPublication
                         EnsureRootAccessible(root);
                     onSkipped?.Invoke(message);
                 }, exclusions, onProgress, onMetrics, directoryPrefetch,
-                onDirectoriesEnumerated);
+                onDirectoriesEnumerated, extensions);
             cancellationToken.ThrowIfCancellationRequested();
             // A share may disconnect while children are being enumerated.
             EnsureRootAccessible(root);
