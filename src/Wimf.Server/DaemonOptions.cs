@@ -22,6 +22,7 @@ public sealed class IndexingJobConfiguration
     public string Output { get; init; } = "";
     public string? Name { get; init; }
     public string[]? Exclude { get; init; }
+    public string[]? Extensions { get; init; }
     public int? IntervalMinutes { get; init; }
     public int? IntervalHours { get; init; }
     public int? IntervalDays { get; init; }
@@ -37,7 +38,7 @@ public sealed class IndexingJobConfiguration
 
 public sealed record IndexingJob(string Root, string Output, string? Name,
     string[] Exclude, TimeSpan Interval, int Workers = 1, TimeSpan? IncrementalInterval = null,
-    TimeSpan? LockTimeout = null);
+    TimeSpan? LockTimeout = null, string[]? Extensions = null);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DaemonConfiguration))]
@@ -144,7 +145,8 @@ public sealed record DaemonOptions(
                     throw new ArgumentException("indexing.lockTimeoutMinutes must be between 1 and 10080.");
                 indexing.Add(new IndexingJob(root, output, job.Name, exclusions,
                     fullInterval, workers, incremental,
-                    TimeSpan.FromMinutes(job.LockTimeoutMinutes ?? 30)));
+                    TimeSpan.FromMinutes(job.LockTimeoutMinutes ?? 30),
+                    Wimf.Catalog.CatalogExtensionFilter.Normalize(job.Extensions ?? Wimf.Catalog.CatalogExtensionFilter.DefaultExtensions)));
             }
         }
 
