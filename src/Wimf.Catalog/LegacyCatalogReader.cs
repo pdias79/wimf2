@@ -93,12 +93,14 @@ public static class LegacyCatalogReader
             }
         }
 
-        var slots = entries.ToArray();
-        for (var id = 1; id < slots.Length; id++)
+        // Validate in the existing List and feed it directly into compact storage.
+        // Avoid allocating a second ~32-byte-per-entry array during initial load.
+        var slots = entries;
+        for (var id = 1; id < slots.Count; id++)
         {
             var entry = slots[id];
             if (entry.Name is null || entry.ParentId == 0) continue;
-            if (entry.ParentId >= slots.Length || !slots[entry.ParentId].IsDirectory)
+            if (entry.ParentId >= slots.Count || !slots[entry.ParentId].IsDirectory)
                 diagnostics.Add(new CatalogDiagnostic(id + 5, $"Invalid parent reference {entry.ParentId}."));
         }
 

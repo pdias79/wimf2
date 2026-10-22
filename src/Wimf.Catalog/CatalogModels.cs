@@ -66,16 +66,16 @@ public sealed class Catalog
     public IReadOnlyList<CatalogDiagnostic> Diagnostics { get; }
     public int RecordCount => _entries.Length - 1;
 
-    internal Catalog(CatalogHeader header, CatalogEntryData[] entries, IReadOnlyList<CatalogDiagnostic> diagnostics)
+    internal Catalog(CatalogHeader header, IReadOnlyList<CatalogEntryData> entries, IReadOnlyList<CatalogDiagnostic> diagnostics)
     {
         Header = header;
         Diagnostics = diagnostics;
-        _entries = new CompactEntry[entries.Length];
-        _splitSuffixes = new System.Collections.BitArray(entries.Length);
+        _entries = new CompactEntry[entries.Count];
+        _splitSuffixes = new System.Collections.BitArray(entries.Count);
         var extensionLookup = new Dictionary<string, int>(StringComparer.Ordinal);
         var extensions = new List<string>();
-        var ids = new int[entries.Length];
-        for (var i = 1; i < entries.Length; i++)
+        var ids = new int[entries.Count];
+        for (var i = 1; i < entries.Count; i++)
         {
             var entry = entries[i];
             if (entry.Name is null) continue;
@@ -103,12 +103,12 @@ public sealed class Catalog
         _extensions = extensions.ToArray();
         if (extensions.Count <= 256)
         {
-            _byteExtensionIds = new byte[entries.Length];
+            _byteExtensionIds = new byte[entries.Count];
             for (var i = 1; i < ids.Length; i++) _byteExtensionIds[i] = checked((byte)ids[i]);
         }
         else if (extensions.Count <= 65536)
         {
-            _shortExtensionIds = new ushort[entries.Length];
+            _shortExtensionIds = new ushort[entries.Count];
             for (var i = 1; i < ids.Length; i++) _shortExtensionIds[i] = checked((ushort)ids[i]);
         }
         else
