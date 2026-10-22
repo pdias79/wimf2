@@ -40,7 +40,6 @@ public static class LegacyCatalogWriter
             throw new ArgumentOutOfRangeException(nameof(directoryPrefetch), "Directory prefetch must be between 1 and 50.");
         var nextId = 0;
         var extensionTable = FixedExtensionTable.CreateSet();
-        var skippedExtensionLimit = 0;
         long enumerationTicks = 0, metadataTicks = 0, sortTicks = 0;
         var directoryCount = 0;
         var overallTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -198,7 +197,6 @@ public static class LegacyCatalogWriter
                         {
                             if (extensionTable.Count == FixedExtensionTable.Capacity)
                             {
-                                skippedExtensionLimit++;
                                 onSkipped?.Invoke($"Skipped extension table limit (256): {childPath} (extension '{extension}')");
                                 continue;
                             }
