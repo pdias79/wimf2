@@ -51,7 +51,16 @@ public sealed record CatalogDiagnostic(int LineNumber, string Message);
 
 public sealed class Catalog
 {
-    private readonly CatalogEntryData[] _entries;
+    // Store extension IDs separately to avoid an 8-byte reference per record.
+    // All arrays are immutable after construction and indexed by legacy record ID.
+    private readonly CompactEntry[] _entries;
+    private readonly string[] _extensions;
+    private readonly byte[]? _byteExtensionIds;
+    private readonly ushort[]? _shortExtensionIds;
+    private readonly int[]? _intExtensionIds;
+
+    private readonly record struct CompactEntry(string Name, ulong Size, int ParentId, int ModifiedUnixDays);
+
     public CatalogHeader Header { get; }
     public IReadOnlyList<CatalogDiagnostic> Diagnostics { get; }
     public int RecordCount => _entries.Length - 1;
@@ -59,16 +68,50 @@ public sealed class Catalog
     internal Catalog(CatalogHeader header, CatalogEntryData[] entries, IReadOnlyList<CatalogDiagnostic> diagnostics)
     {
         Header = header;
-        _entries = entries;
         Diagnostics = diagnostics;
+        _entries = new CompactEntry[entries.Length];
+        var extensionLookup = new Dictionary<string, int>(StringComparer.Ordinal);
+        var extensions = new List<string>();
+        var ids = new int[entries.Length];
+        for (var i = 1; i < entries.Length; i++)
+        {
+            var entry = entries[i];
+            if (entry.Name is null) continue;
+            _entries[i] = new CompactEntry(entry.Name, entry.Size, entry.ParentId,
+                checked((int)entry.ModifiedUnixDays));
+            if (!extensionLookup.TryGetValue(entry.Extension, out var index))
+            {
+                index = extensions.Count;
+                extensionLookup.Add(entry.Extension, index);
+                extensions.Add(entry.Extension);
+            }
+            ids[i] = index;
+        }
+        _extensions = extensions.ToArray();
+        if (extensions.Count <= 256)
+        {
+            _byteExtensionIds = new byte[entries.Length];
+            for (var i = 1; i < ids.Length; i++) _byteExtensionIds[i] = checked((byte)ids[i]);
+        }
+        else if (extensions.Count <= 65536)
+        {
+            _shortExtensionIds = new ushort[entries.Length];
+            for (var i = 1; i < ids.Length; i++) _shortExtensionIds[i] = checked((ushort)ids[i]);
+        }
+        else
+            _intExtensionIds = ids;
     }
 
-    /// <summary>Access a stored record without allocating a CatalogEntry object.</summary>
+    /// <summary>Access a record, reconstructing its public data without allocating a new object.</summary>
     public bool TryGetEntryData(int id, out CatalogEntryData data)
     {
         if (id > 0 && id < _entries.Length && _entries[id].Name is not null)
         {
-            data = _entries[id];
+            var entry = _entries[id];
+            var extensionId = _byteExtensionIds is not null ? _byteExtensionIds[id] :
+                _shortExtensionIds is not null ? _shortExtensionIds[id] : _intExtensionIds![id];
+            data = new CatalogEntryData(entry.Name, _extensions[extensionId],
+                entry.Size, entry.ParentId, entry.ModifiedUnixDays);
             return true;
         }
         data = default;
