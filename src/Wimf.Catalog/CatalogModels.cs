@@ -126,6 +126,93 @@ public sealed class Catalog
         _intExtensionIds = intIds;
     }
 
+    /// <summary>Builds compact storage directly from the parsed legacy fields.</summary>
+    internal sealed class Builder
+    {
+        private readonly List<CompactEntry> _records = [default];
+        private readonly List<int> _extensionIds = [0];
+        private readonly List<bool> _suffixes = [false];
+        private readonly List<string> _extensions = new(FixedExtensionTable.Reserved);
+        private readonly Dictionary<string, int> _lookup = new(StringComparer.Ordinal);
+
+        internal Builder()
+        {
+            for (var i = 0; i < _extensions.Count; i++)
+                _lookup.Add(_extensions[i], i);
+        }
+
+        internal void AddInvalid()
+        {
+            _records.Add(default);
+            _extensionIds.Add(0);
+            _suffixes.Add(false);
+        }
+
+        internal void Add(ReadOnlySpan<char> name, string extension, ulong size, int parentId, int days)
+        {
+            var isDirectory = string.Equals(extension, "folder", StringComparison.OrdinalIgnoreCase);
+            var suffixLength = extension.Length + 1;
+            var split = !isDirectory && extension.Length > 0 && name.Length > suffixLength &&
+                name[name.Length - suffixLength] == '.' &&
+                name[^extension.Length..].SequenceEqual(extension.AsSpan());
+            var stored = split ? name[..^suffixLength].ToString() : name.ToString();
+            if (!_lookup.TryGetValue(extension, out var extensionId))
+            {
+                extensionId = _extensions.Count;
+                _lookup.Add(extension, extensionId);
+                _extensions.Add(extension);
+            }
+            _records.Add(new CompactEntry(stored, size, parentId, days));
+            _extensionIds.Add(extensionId);
+            _suffixes.Add(split);
+        }
+
+        internal void ValidateParents(List<CatalogDiagnostic> diagnostics)
+        {
+            for (var id = 1; id < _records.Count; id++)
+            {
+                var entry = _records[id];
+                if (entry.Name is null || entry.ParentId == 0) continue;
+                var parent = entry.ParentId;
+                if (parent >= _records.Count || _records[parent].Name is null ||
+                    !string.Equals(_extensions[_extensionIds[parent]], "folder",
+                        StringComparison.OrdinalIgnoreCase))
+                    diagnostics.Add(new CatalogDiagnostic(id + 5, $"Invalid parent reference {parent}."));
+            }
+        }
+
+        internal Catalog Build(CatalogHeader header, IReadOnlyList<CatalogDiagnostic> diagnostics)
+        {
+            var count = _records.Count;
+            var byteIds = _extensions.Count <= 256 ? new byte[count] : null;
+            var shortIds = _extensions.Count > 256 && _extensions.Count <= 65536 ? new ushort[count] : null;
+            var intIds = _extensions.Count > 65536 ? new int[count] : null;
+            for (var id = 1; id < count; id++)
+            {
+                var extensionId = _extensionIds[id];
+                if (byteIds is not null) byteIds[id] = checked((byte)extensionId);
+                else if (shortIds is not null) shortIds[id] = checked((ushort)extensionId);
+                else intIds![id] = extensionId;
+            }
+            return new Catalog(header, _records.ToArray(), _extensions.ToArray(),
+                byteIds, shortIds, intIds, new System.Collections.BitArray(_suffixes.ToArray()), diagnostics);
+        }
+    }
+
+    private Catalog(CatalogHeader header, CompactEntry[] entries, string[] extensions,
+        byte[]? byteIds, ushort[]? shortIds, int[]? intIds,
+        System.Collections.BitArray suffixes, IReadOnlyList<CatalogDiagnostic> diagnostics)
+    {
+        Header = header;
+        Diagnostics = diagnostics;
+        _entries = entries;
+        _extensions = extensions;
+        _byteExtensionIds = byteIds;
+        _shortExtensionIds = shortIds;
+        _intExtensionIds = intIds;
+        _splitSuffixes = suffixes;
+    }
+
     /// <summary>Fast search access without constructing complete filename strings.</summary>
     public bool TryGetSearchParts(int id, out CatalogEntryData data, out bool suffixSplit)
     {
