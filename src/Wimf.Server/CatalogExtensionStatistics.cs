@@ -7,7 +7,7 @@ public sealed record CatalogExtensionCount(string Extension, int Count);
 
 public sealed record CatalogExtensionStatistics(int FileCount, CatalogExtensionCount[] Extensions)
 {
-    public static CatalogExtensionStatistics Calculate(Catalog catalog)
+    public static CatalogExtensionStatistics Calculate(Wimf.Catalog.Catalog catalog)
     {
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var total = 0;
