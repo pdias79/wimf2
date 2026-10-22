@@ -74,7 +74,11 @@ public sealed class Catalog
         _splitSuffixes = new System.Collections.BitArray(entries.Count);
         var extensionLookup = new Dictionary<string, int>(StringComparer.Ordinal);
         var extensions = new List<string>();
-        var ids = new int[entries.Count];
+        // Begin with byte IDs. Widen only when the number of distinct extensions
+        // exceeds the current tier; avoid a full int[] for common catalogs.
+        byte[]? byteIds = new byte[entries.Count];
+        ushort[]? shortIds = null;
+        int[]? intIds = null;
         for (var i = 1; i < entries.Count; i++)
         {
             var entry = entries[i];
@@ -98,21 +102,26 @@ public sealed class Catalog
                 extensionLookup.Add(entry.Extension, index);
                 extensions.Add(entry.Extension);
             }
-            ids[i] = index;
+            if (byteIds is not null && index > byte.MaxValue)
+            {
+                shortIds = new ushort[entries.Count];
+                for (var j = 1; j < i; j++) shortIds[j] = byteIds[j];
+                byteIds = null;
+            }
+            if (shortIds is not null && index > ushort.MaxValue)
+            {
+                intIds = new int[entries.Count];
+                for (var j = 1; j < i; j++) intIds[j] = shortIds[j];
+                shortIds = null;
+            }
+            if (byteIds is not null) byteIds[i] = (byte)index;
+            else if (shortIds is not null) shortIds[i] = (ushort)index;
+            else intIds![i] = index;
         }
         _extensions = extensions.ToArray();
-        if (extensions.Count <= 256)
-        {
-            _byteExtensionIds = new byte[entries.Count];
-            for (var i = 1; i < ids.Length; i++) _byteExtensionIds[i] = checked((byte)ids[i]);
-        }
-        else if (extensions.Count <= 65536)
-        {
-            _shortExtensionIds = new ushort[entries.Count];
-            for (var i = 1; i < ids.Length; i++) _shortExtensionIds[i] = checked((ushort)ids[i]);
-        }
-        else
-            _intExtensionIds = ids;
+        _byteExtensionIds = byteIds;
+        _shortExtensionIds = shortIds;
+        _intExtensionIds = intIds;
     }
 
     /// <summary>Fast search access without constructing complete filename strings.</summary>
