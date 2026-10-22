@@ -39,6 +39,9 @@ public static class LegacyCatalogWriter
         if (directoryPrefetch < 1 || directoryPrefetch > 50)
             throw new ArgumentOutOfRangeException(nameof(directoryPrefetch), "Directory prefetch must be between 1 and 50.");
         var nextId = 0;
+        var extensionTable = FixedExtensionTable.CreateSet();
+        var allowedExtensions = extensions is null ? null :
+            new HashSet<string>(CatalogExtensionFilter.Normalize(extensions), StringComparer.OrdinalIgnoreCase);
         long enumerationTicks = 0, metadataTicks = 0, sortTicks = 0;
         var directoryCount = 0;
         var overallTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -189,6 +192,18 @@ public static class LegacyCatalogWriter
                         {
                             onSkipped?.Invoke($"Skipped inaccessible entry: {childPath} ({ex.Message})");
                             continue;
+                        }
+                        // Reserve common extensions, then admit new ones up to 256.
+                        // Do not increment the record ID when skipping a file.
+                        if (!isDirectory && (allowedExtensions is null || allowedExtensions.Contains(extension)) &&
+                            !extensionTable.Contains(extension))
+                        {
+                            if (extensionTable.Count == FixedExtensionTable.Capacity)
+                            {
+                                onSkipped?.Invoke($"Skipped extension table limit (256): {childPath} (extension '{extension}')");
+                                continue;
+                            }
+                            extensionTable.Add(extension);
                         }
                         metadataTicks += System.Diagnostics.Stopwatch.GetTimestamp() - metadataStart;
                         writer.Write(childName);

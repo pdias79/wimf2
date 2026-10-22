@@ -73,7 +73,9 @@ public sealed class Catalog
         _entries = new CompactEntry[entries.Count];
         _splitSuffixes = new System.Collections.BitArray(entries.Count);
         var extensionLookup = new Dictionary<string, int>(StringComparer.Ordinal);
-        var extensions = new List<string>();
+        var extensions = new List<string>(FixedExtensionTable.Reserved);
+        for (var i = 0; i < extensions.Count; i++)
+            extensionLookup.Add(extensions[i], i);
         // Begin with byte IDs. Widen only when the number of distinct extensions
         // exceeds the current tier; avoid a full int[] for common catalogs.
         byte[]? byteIds = new byte[entries.Count];
