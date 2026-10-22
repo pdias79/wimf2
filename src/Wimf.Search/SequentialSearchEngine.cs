@@ -56,7 +56,7 @@ public sealed class SequentialSearchEngine
         var singleWord = words.Length == 1 ? words[0] : null;
         if (query.MaxResults == 0) return results;
 
-        Span<char> filenameBuffer = stackalloc char[512];
+        char[] filenameBuffer = new char[512];
         foreach (var catalog in catalogs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -78,21 +78,14 @@ public sealed class SequentialSearchEngine
                     var fullLength = entry.Name.Length + entry.Extension.Length + 1;
                     // Most filenames fit the reusable stack buffer; very long names
                     // fall back to a temporary allocation only for this record.
-                    if (fullLength <= filenameBuffer.Length)
-                    {
-                        entry.Name.AsSpan().CopyTo(filenameBuffer);
-                        filenameBuffer[entry.Name.Length] = '.';
-                        entry.Extension.AsSpan().CopyTo(filenameBuffer[(entry.Name.Length + 1)..]);
-                        name = filenameBuffer[..fullLength];
-                    }
-                    else
-                    {
-                        var longName = new char[fullLength];
-                        entry.Name.AsSpan().CopyTo(longName);
-                        longName[entry.Name.Length] = '.';
-                        entry.Extension.AsSpan().CopyTo(longName.AsSpan(entry.Name.Length + 1));
-                        name = longName;
-                    }
+                    // Use one reusable heap buffer per search, not one array per entry.
+                    // This avoids ref-struct escape restrictions across the loop.
+                    if (filenameBuffer.Length < fullLength)
+                        filenameBuffer = new char[fullLength];
+                    entry.Name.AsSpan().CopyTo(filenameBuffer);
+                    filenameBuffer[entry.Name.Length] = '.';
+                    entry.Extension.AsSpan().CopyTo(filenameBuffer.AsSpan(entry.Name.Length + 1));
+                    name = filenameBuffer.AsSpan(0, fullLength);
                 }
                 var searchableName = query.IgnoreSeparators && !query.UseRegex
                     ? RemoveSeparators(name.ToString()).AsSpan() : name;
