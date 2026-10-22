@@ -4,6 +4,31 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Inspect whether filenames can be split losslessly into base name plus extension.
+if (args.Length > 0 && args[0] == "--filename-suffix-profile")
+{
+    if (args.Length != 3 || args[1] != "--config")
+    {
+        Console.Error.WriteLine("Usage: wimfd --filename-suffix-profile --config config.json");
+        return 2;
+    }
+    try
+    {
+        var configuration = DaemonOptions.Parse(["--config", args[2]]);
+        var catalogs = configuration.Catalogs.Concat(configuration.Sources)
+            .Select(LegacyCatalogReader.ReadFile).ToArray();
+        var report = FilenameSuffixProfile.Analyze(catalogs);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, WimfJsonContext.Default.SuffixReport));
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                               InvalidDataException or ArgumentException)
+    {
+        Console.Error.WriteLine("[FILENAME-SUFFIX-PROFILE-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Read-only feasibility check for byte-sized extension IDs.
 if (args.Length > 0 && args[0] == "--extension-id-profile")
 {
