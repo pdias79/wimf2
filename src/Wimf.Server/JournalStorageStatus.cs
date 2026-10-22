@@ -16,8 +16,7 @@ public static class JournalStorageStatus
         if (!File.Exists(journal)) return new(0, 0, 0, false);
         var length = new FileInfo(journal).Length;
         var target = Path.GetFullPath(catalog);
-        var marker = Path.Combine(Path.GetDirectoryName(target)!,
-            "." + Path.GetFileName(target) + ".incremental-cursor");
+        var marker = IncrementalCursorPath.For(catalog, journal);
         if (!File.Exists(target) || !File.Exists(marker))
             return new(length, 0, length, false);
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
