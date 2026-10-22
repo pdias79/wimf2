@@ -5,6 +5,7 @@ public sealed class CatalogIdleLifecycle : IAsyncDisposable
 {
     private readonly LiveCatalogStore _store;
     private readonly TimeSpan _timeout;
+    private readonly TimeSpan _checkInterval;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _monitor;
@@ -12,10 +13,11 @@ public sealed class CatalogIdleLifecycle : IAsyncDisposable
     private Task? _loading;
     private int _activeSearches;
 
-    public CatalogIdleLifecycle(LiveCatalogStore store, TimeSpan timeout)
+    public CatalogIdleLifecycle(LiveCatalogStore store, TimeSpan timeout, TimeSpan? checkInterval = null)
     {
         _store = store;
         _timeout = timeout;
+        _checkInterval = checkInterval ?? TimeSpan.FromSeconds(10);
         _monitor = MonitorAsync();
     }
 
@@ -65,7 +67,7 @@ public sealed class CatalogIdleLifecycle : IAsyncDisposable
     {
         try
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+            using var timer = new PeriodicTimer(_checkInterval);
             while (await timer.WaitForNextTickAsync(_stop.Token))
             {
                 if (Environment.TickCount64 - Interlocked.Read(ref _lastInput) < _timeout.TotalMilliseconds)
