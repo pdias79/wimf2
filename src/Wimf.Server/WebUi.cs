@@ -426,6 +426,8 @@ public static class WebUi
       .filter(details => details.open).map(details => details.dataset.catalogPath));
     const expandedExclusions = new Set(Array.from(indexingList.querySelectorAll("details[data-exclusion-path]"))
       .filter(details => details.open).map(details => details.dataset.exclusionPath));
+    const expandedStatistics = new Set(Array.from(indexingList.querySelectorAll("[data-statistics-path]"))
+      .filter(panel => !panel.hidden).map(panel => panel.dataset.statisticsPath));
     indexingList.replaceChildren();
     const runningCatalog = catalogs.find(c => c.state === "running");
     const active = catalogs.filter(c => c.state === "running").length;
@@ -467,6 +469,47 @@ public static class WebUi
       metadata.textContent = "Dernière actualisation : " + formatDate(catalog.lastUpdate) +
         " · Fichiers : " + (catalog.fileCount === null ? "—" : catalog.fileCount.toLocaleString("fr-FR"));
       item.append(heading, path, metadata, smbPending);
+      if (Array.isArray(catalog.extensionStatistics)) {
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "copy";
+        toggle.textContent = "Statistiques";
+        const statistics = document.createElement("div");
+        statistics.className = "catalog-details";
+        statistics.dataset.statisticsPath = catalog.path;
+        statistics.hidden = !expandedStatistics.has(catalog.path);
+        toggle.setAttribute("aria-expanded", String(!statistics.hidden));
+        toggle.addEventListener("click", () => {
+          statistics.hidden = !statistics.hidden;
+          toggle.setAttribute("aria-expanded", String(!statistics.hidden));
+        });
+        if (!catalog.extensionStatistics.length) {
+          statistics.textContent = "Aucun fichier indexé.";
+        } else {
+          const table = document.createElement("table");
+          const header = document.createElement("tr");
+          for (const label of ["Extension", "Fichiers", "Proportion"]) {
+            const cell = document.createElement("th");
+            cell.textContent = label;
+            header.appendChild(cell);
+          }
+          table.appendChild(header);
+          const total = Number(catalog.fileCount) || 0;
+          for (const entry of catalog.extensionStatistics) {
+            const row = document.createElement("tr");
+            for (const value of [entry.extension, Number(entry.count).toLocaleString("fr-FR"),
+              total ? (100 * Number(entry.count) / total).toLocaleString("fr-FR",
+                { maximumFractionDigits: 1 }) + " %" : "0 %"]) {
+              const cell = document.createElement("td");
+              cell.textContent = String(value);
+              row.appendChild(cell);
+            }
+            table.appendChild(row);
+          }
+          statistics.appendChild(table);
+        }
+        item.append(toggle, statistics);
+      }
       if (catalog.lockMarker && catalog.lockMarker.present) {
         const marker = document.createElement("div");
         marker.className = "catalog-details";
