@@ -15,7 +15,7 @@ if (args.Length > 0 && args[0] == "--catalog-memory")
     try
     {
         var result = CatalogMemoryBenchmark.Measure(args[1]);
-        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result, WimfJsonContext.Default.Snapshot));
         return 0;
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
