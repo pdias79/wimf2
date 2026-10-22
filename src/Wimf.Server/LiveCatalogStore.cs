@@ -76,7 +76,7 @@ public sealed class LiveCatalogStore
     }
 
     private static bool IsNetworkPath(string path) =>
-        path.StartsWith(@"\\\\", StringComparison.Ordinal) ||
+        path.StartsWith(@"\\", StringComparison.Ordinal) ||
         path.StartsWith("//", StringComparison.Ordinal);
 
     private FileCatalog LoadLocalCatalog(string path, FileCatalog? previous = null)
