@@ -64,7 +64,7 @@ public sealed class Catalog
 
     public CatalogHeader Header { get; }
     public IReadOnlyList<CatalogDiagnostic> Diagnostics { get; }
-    public int RecordCount => _entries.Count - 1;
+    public int RecordCount => _entries.Length - 1;
 
     internal Catalog(CatalogHeader header, IReadOnlyList<CatalogEntryData> entries, IReadOnlyList<CatalogDiagnostic> diagnostics)
     {
@@ -118,7 +118,7 @@ public sealed class Catalog
     /// <summary>Fast search access without constructing complete filename strings.</summary>
     public bool TryGetSearchParts(int id, out CatalogEntryData data, out bool suffixSplit)
     {
-        if (id > 0 && id < _entries.Count && _entries[id].Name is not null)
+        if (id > 0 && id < _entries.Length && _entries[id].Name is not null)
         {
             var entry = _entries[id];
             var extensionId = _byteExtensionIds is not null ? _byteExtensionIds[id] :
@@ -136,7 +136,7 @@ public sealed class Catalog
     /// <summary>Access a record, reconstructing its public data without allocating a new object.</summary>
     public bool TryGetEntryData(int id, out CatalogEntryData data)
     {
-        if (id > 0 && id < _entries.Count && _entries[id].Name is not null)
+        if (id > 0 && id < _entries.Length && _entries[id].Name is not null)
         {
             var entry = _entries[id];
             var extensionId = _byteExtensionIds is not null ? _byteExtensionIds[id] :
@@ -211,7 +211,7 @@ public sealed class Catalog
 
     public IEnumerable<CatalogEntry> EnumerateEntries()
     {
-        for (int i = 1; i < _entries.Count; i++)
+        for (int i = 1; i < _entries.Length; i++)
             if (TryGetEntryData(i, out var data))
                 yield return new CatalogEntry(i, data.Name, data.Extension, data.Size, data.ParentId, data.ModifiedAt);
     }
