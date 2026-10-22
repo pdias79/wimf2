@@ -12,7 +12,8 @@ public static class JournalIncrementalRefresh
     public static Result Run(string rootPath, string catalogPath, string journalPath,
         string outputPath, long fromOffset = 0, long? untilOffset = null,
         CancellationToken cancellationToken = default, IEnumerable<string>? exclusions = null,
-        IEnumerable<string>? extensions = null)
+        IEnumerable<string>? extensions = null,
+        Action<string>? onSkipped = null)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var eventRecords = 0;
@@ -30,6 +31,10 @@ public static class JournalIncrementalRefresh
             e => source.GetFullPath(e.Id),
             e => new IncrementalCatalogSerializer.Entry(e.Extension, e.Size,
                 e.ModifiedAt.ToUnixTimeSeconds() / 86400), cmp);
+        // Historical extensions remain valid, even above the new limit.
+        var knownExtensions = FixedExtensionTable.CreateSet();
+        foreach (var entry in source.EnumerateEntries())
+            knownExtensions.Add(entry.Extension);
         var hints = new HashSet<string>(cmp);
         using (var stream = new FileStream(journalPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
         {
@@ -155,7 +160,19 @@ public static class JournalIncrementalRefresh
             if (name.IndexOfAny([';', '\n', '\r']) >= 0) return;
             var info = new FileInfo(path);
             if (allowed is not null && !allowed.Contains(info.Extension.TrimStart('.'))) return;
-            entries[path] = new(info.Extension.TrimStart('.'), checked((ulong)info.Length),
+            var extension = info.Extension.TrimStart('.');
+            if (!knownExtensions.Contains(extension))
+            {
+                if (knownExtensions.Count >= FixedExtensionTable.Capacity)
+                {
+                    var warning = $"Skipped extension table limit (256): {path} (extension '{extension}')";
+                    onSkipped?.Invoke(warning);
+                    Console.Error.WriteLine(warning);
+                    return;
+                }
+                knownExtensions.Add(extension);
+            }
+            entries[path] = new(extension, checked((ulong)info.Length),
                 Day(info.LastWriteTimeUtc));
         }
     }
