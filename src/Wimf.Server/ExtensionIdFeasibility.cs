@@ -10,7 +10,7 @@ public static class ExtensionIdFeasibility
     public sealed record ExtensionIdReport(int CatalogCount, long Entries, int MaximumDistinctExtensions,
         bool AllFitInByte, CatalogResult[] Catalogs);
 
-    public static Report Analyze(IReadOnlyList<Wimf.Catalog.Catalog> catalogs)
+    public static ExtensionIdReport Analyze(IReadOnlyList<Wimf.Catalog.Catalog> catalogs)
     {
         ArgumentNullException.ThrowIfNull(catalogs);
         var output = new CatalogResult[catalogs.Count];
