@@ -40,6 +40,8 @@ public static class LegacyCatalogWriter
             throw new ArgumentOutOfRangeException(nameof(directoryPrefetch), "Directory prefetch must be between 1 and 50.");
         var nextId = 0;
         var extensionTable = FixedExtensionTable.CreateSet();
+        var allowedExtensions = extensions is null ? null :
+            new HashSet<string>(CatalogExtensionFilter.Normalize(extensions), StringComparer.OrdinalIgnoreCase);
         long enumerationTicks = 0, metadataTicks = 0, sortTicks = 0;
         var directoryCount = 0;
         var overallTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -193,7 +195,8 @@ public static class LegacyCatalogWriter
                         }
                         // Reserve common extensions, then admit new ones up to 256.
                         // Do not increment the record ID when skipping a file.
-                        if (!isDirectory && !extensionTable.Contains(extension))
+                        if (!isDirectory && (allowedExtensions is null || allowedExtensions.Contains(extension)) &&
+                            !extensionTable.Contains(extension))
                         {
                             if (extensionTable.Count == FixedExtensionTable.Capacity)
                             {
