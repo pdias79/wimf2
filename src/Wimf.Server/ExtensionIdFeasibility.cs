@@ -31,7 +31,7 @@ public static class ExtensionIdFeasibility
             output[i] = new CatalogResult(catalog.Header.Name, valid,
                 extensions.Count, extensions.Count <= byte.MaxValue + 1, nonEmpty);
         }
-        return new Report(output.Length, output.Sum(c => c.Entries),
+        return new ExtensionIdReport(output.Length, output.Sum(c => c.Entries),
             output.Length == 0 ? 0 : output.Max(c => c.DistinctExtensions),
             output.All(c => c.FitsInByte), output);
     }
