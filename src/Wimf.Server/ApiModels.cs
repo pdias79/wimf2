@@ -51,4 +51,5 @@ public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOf
 [JsonSerializable(typeof(IndexingRunHistoryEntry[]))]
 [JsonSerializable(typeof(ManagedCatalogStatus[]))]
 [JsonSerializable(typeof(CatalogMemoryBenchmark.Snapshot))]
+[JsonSerializable(typeof(CatalogMemoryProfile.Report))]
 public partial class WimfJsonContext : JsonSerializerContext;
