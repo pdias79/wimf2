@@ -18,7 +18,7 @@ if (args.Length > 0 && args[0] == "--extension-id-profile")
         var catalogs = configuration.Catalogs.Concat(configuration.Sources)
             .Select(LegacyCatalogReader.ReadFile).ToArray();
         var report = ExtensionIdFeasibility.Analyze(catalogs);
-        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, WimfJsonContext.Default.ExtensionIdFeasibilityReport));
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, WimfJsonContext.Default.ExtensionIdReport));
         return 0;
     }
     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
