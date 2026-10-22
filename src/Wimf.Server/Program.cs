@@ -4,6 +4,28 @@ using Wimf.Catalog;
 using Wimf.Search;
 using Wimf.Server;
 
+// Isolated multi-catalog profile; never starts watchers or changes the catalog files.
+if (args.Length > 0 && args[0] == "--catalog-memory-profile")
+{
+    if (args.Length < 2)
+    {
+        Console.Error.WriteLine("Usage: wimfd --catalog-memory-profile CATALOG [CATALOG ...]");
+        return 2;
+    }
+    try
+    {
+        var report = CatalogMemoryProfile.Measure(args[1..]);
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, WimfJsonContext.Default.Report));
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                               InvalidDataException or ArgumentException)
+    {
+        Console.Error.WriteLine("[CATALOG-MEMORY-PROFILE-ERROR] " + ex.Message);
+        return 2;
+    }
+}
+
 // Isolated memory benchmark. Never starts the daemon or modifies catalogs.
 if (args.Length > 0 && args[0] == "--catalog-memory")
 {
