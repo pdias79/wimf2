@@ -17,6 +17,7 @@ public sealed class LiveCatalogStore
     private FileCatalog?[] _sourceCatalogs;
     private FileCatalog[] _snapshot;
     private RefreshSummary? _lastSummary;
+    private volatile bool _unloaded;
 
     public LiveCatalogStore(IEnumerable<FileCatalog> fixedCatalogs, IEnumerable<string> sources,
         string? cacheDirectory)
@@ -83,6 +84,30 @@ public sealed class LiveCatalogStore
     }
 
     public FileCatalog[] Snapshot => Volatile.Read(ref _snapshot);
+    public bool IsUnloaded => _unloaded;
+
+    /// <summary>Drop all store-held catalog references, without touching disk caches.</summary>
+    public async Task UnloadAsync(CancellationToken cancellationToken = default)
+    {
+        await _refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            _unloaded = true;
+            _localCatalogs = new FileCatalog?[_localPaths.Length];
+            _sourceCatalogs = new FileCatalog?[_sources.Length];
+            Volatile.Write(ref _snapshot, Array.Empty<FileCatalog>());
+        }
+        finally { _refreshLock.Release(); }
+    }
+
+    /// <summary>Rehydrate from current catalog files, using persistent source caches.</summary>
+    public async Task<RefreshSummary> ReloadAsync(CancellationToken cancellationToken = default)
+    {
+        await _refreshLock.WaitAsync(cancellationToken);
+        try { _unloaded = false; }
+        finally { _refreshLock.Release(); }
+        return await RefreshAsync(cancellationToken);
+    }
     public DateTimeOffset? LastRefresh => Volatile.Read(ref _lastSummary)?.CompletedAt;
     public RefreshSummary? LastSummary => Volatile.Read(ref _lastSummary);
     public int SourceCount => _sources.Length;
@@ -111,6 +136,8 @@ public sealed class LiveCatalogStore
         await _refreshLock.WaitAsync(cancellationToken);
         try
         {
+            if (_unloaded) return Volatile.Read(ref _lastSummary) ??
+                new RefreshSummary(0, _sources.Length, 0, DateTimeOffset.UtcNow);
             cancellationToken.ThrowIfCancellationRequested();
             var next = (FileCatalog?[])_localCatalogs.Clone();
             var stamps = ((long Ticks, long Length)[])_localStamps.Clone();
@@ -161,6 +188,8 @@ public sealed class LiveCatalogStore
         await _refreshLock.WaitAsync(cancellationToken);
         try
         {
+            if (_unloaded) return Volatile.Read(ref _lastSummary) ??
+                new RefreshSummary(0, _sources.Length, 0, DateTimeOffset.UtcNow);
             var nextLocal = (FileCatalog?[])_localCatalogs.Clone();
             var nextStamps = ((long Ticks, long Length)[])_localStamps.Clone();
             var localFailures = (bool[])_localFailures.Clone();
