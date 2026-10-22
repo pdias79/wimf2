@@ -698,11 +698,23 @@ app.MapGet("/api/file-type-icon/{extension}", (string extension) =>
         : Results.File(icon, "image/x-icon");
 });
 
+// Lightweight metadata persists when large catalog entry arrays are unloaded.
+CatalogSummary[] lastCatalogSummaries = store.Snapshot.Select((c, index) =>
+    new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
+        c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
 app.MapGet("/api/catalogs", () =>
-    Results.Json(store.Snapshot.Select((c, index) =>
-        new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
-            c.Diagnostics.Count, c.Header.CreatedAt)).ToArray(),
-        WimfJsonContext.Default.CatalogSummaryArray));
+{
+    var snapshot = store.Snapshot;
+    if (!store.IsUnloaded)
+    {
+        var latest = snapshot.Select((c, index) =>
+            new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
+                c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
+        Volatile.Write(ref lastCatalogSummaries, latest);
+    }
+    return Results.Json(Volatile.Read(ref lastCatalogSummaries),
+        WimfJsonContext.Default.CatalogSummaryArray);
+});
 
 app.MapPost("/api/search", async (HttpContext http, SearchRequest request, CancellationToken cancellationToken) =>
 {
