@@ -56,6 +56,7 @@ public sealed class SequentialSearchEngine
         var singleWord = words.Length == 1 ? words[0] : null;
         if (query.MaxResults == 0) return results;
 
+        Span<char> filenameBuffer = stackalloc char[512];
         foreach (var catalog in catalogs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -64,18 +65,32 @@ public sealed class SequentialSearchEngine
             for (var id = 1; id <= catalog.RecordCount; id++)
             {
                 if (hasCancellation) cancellationToken.ThrowIfCancellationRequested();
-                if (!catalog.TryGetEntryData(id, out var entry) ||
+                if (!catalog.TryGetSearchParts(id, out var entry, out var suffixSplit) ||
                     (entry.IsDirectory && hasExtensionFilter) ||
                     (!entry.IsDirectory && hasExtensionFilter && !extensions.Contains(entry.Extension.TrimStart('.'))) ||
                     (!entry.IsDirectory && (entry.Size < query.MinSize || entry.Size > query.MaxSize)) ||
                     (hasMinDate && entry.ModifiedAt < minDate) ||
                     (hasMaxDate && entry.ModifiedAt > maxDate))
                     continue;
-                var name = query.IgnoreSeparators && !query.UseRegex ? RemoveSeparators(entry.Name) : entry.Name;
+                ReadOnlySpan<char> name = entry.Name.AsSpan();
+                if (suffixSplit)
+                {
+                    var fullLength = entry.Name.Length + entry.Extension.Length + 1;
+                    // Most filenames fit the reusable stack buffer; very long names
+                    // fall back to a temporary allocation only for this record.
+                    Span<char> target = fullLength <= filenameBuffer.Length
+                        ? filenameBuffer : new char[fullLength];
+                    entry.Name.AsSpan().CopyTo(target);
+                    target[entry.Name.Length] = '.';
+                    entry.Extension.AsSpan().CopyTo(target[(entry.Name.Length + 1)..]);
+                    name = target[..fullLength];
+                }
+                var searchableName = query.IgnoreSeparators && !query.UseRegex
+                    ? RemoveSeparators(name.ToString()).AsSpan() : name;
                 var matches = singleWord is not null
-                    ? name.Contains(singleWord, StringComparison.OrdinalIgnoreCase)
-                    : MatchesAllTerms(name, words);
-                if (!matches || (regex is not null && !regex.IsMatch(entry.Name))) continue;
+                    ? searchableName.Contains(singleWord.AsSpan(), StringComparison.OrdinalIgnoreCase)
+                    : MatchesAllTerms(searchableName, words);
+                if (!matches || (regex is not null && !regex.IsMatch(name))) continue;
                 cancellationToken.ThrowIfCancellationRequested();
                 results.Add(new SearchResult(catalog, catalog.GetEntry(id)!, catalog.GetFullPath(id)));
                 if (results.Count == query.MaxResults) return results;
@@ -84,10 +99,10 @@ public sealed class SequentialSearchEngine
         return results;
     }
 
-    private static bool MatchesAllTerms(string name, string[] words)
+    private static bool MatchesAllTerms(ReadOnlySpan<char> name, string[] words)
     {
         foreach (var word in words)
-            if (!name.Contains(word, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!name.Contains(word.AsSpan(), StringComparison.OrdinalIgnoreCase)) return false;
         return true;
     }
 
