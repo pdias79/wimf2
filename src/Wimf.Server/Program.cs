@@ -720,10 +720,12 @@ app.MapGet("/api/file-type-icon/{extension}", (string extension) =>
 CatalogSummary[] lastCatalogSummaries = store.Snapshot.Select((c, index) =>
     new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
         c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
-app.MapGet("/api/catalogs", () =>
+app.MapGet("/api/catalogs", async (CancellationToken cancellationToken) =>
 {
-    // Read-only metadata queries must never wake catalogs or reset idle activity.
-    // Only page opens and search-input changes count as user activity.
+    // Metadata polling never resets inactivity; wait only for a reload already
+    // started by an actual page open or search-input edit.
+    if (catalogLifecycle is not null)
+        await catalogLifecycle.WaitForPendingReloadAsync(cancellationToken);
     var snapshot = store.Snapshot;
     if (!store.IsUnloaded)
     {
