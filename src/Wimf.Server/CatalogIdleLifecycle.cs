@@ -24,6 +24,10 @@ public sealed class CatalogIdleLifecycle : IAsyncDisposable
     public bool IsLoading => _loading is { IsCompleted: false };
     public bool IsUnloaded => _store.IsUnloaded;
 
+    /// <summary>Observe an already scheduled reload without altering the idle clock.</summary>
+    public Task WaitForPendingReloadAsync(CancellationToken cancellationToken = default) =>
+        Volatile.Read(ref _loading)?.WaitAsync(cancellationToken) ?? Task.CompletedTask;
+
     public async Task TouchAsync()
     {
         Interlocked.Exchange(ref _lastInput, Environment.TickCount64);
