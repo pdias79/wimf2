@@ -722,10 +722,10 @@ CatalogSummary[] lastCatalogSummaries = store.Snapshot.Select((c, index) =>
         c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
 app.MapGet("/api/catalogs", async (CancellationToken cancellationToken) =>
 {
-    // This endpoint is read when the web interface opens; do not render
-    // an empty catalog list while the first background load is pending.
-    using var catalogLease = catalogLifecycle is null ? null :
-        await catalogLifecycle.BeginSearchAsync(cancellationToken);
+    // Metadata polling never resets inactivity; wait only for a reload already
+    // started by an actual page open or search-input edit.
+    if (catalogLifecycle is not null)
+        await catalogLifecycle.WaitForPendingReloadAsync(cancellationToken);
     var snapshot = store.Snapshot;
     if (!store.IsUnloaded)
     {
