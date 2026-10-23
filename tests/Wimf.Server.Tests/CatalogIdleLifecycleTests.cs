@@ -8,6 +8,33 @@ public sealed class CatalogIdleLifecycleTests
 {
 
     [Fact]
+    public async Task OptionalCollectionRunsOncePerUnload()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "wimf-gc-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var source = Path.Combine(dir, "catalog.txt");
+            File.WriteAllText(source,
+                "[WIMF Catalog]\nExample\n/root\n0\ntxt\na.txt;txt;1;0;1\n");
+            var store = new LiveCatalogStore([source], [], null, loadLocalFiles: false);
+            await using var lifecycle = new CatalogIdleLifecycle(store,
+                TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(20),
+                collectAfterUnload: true);
+            await lifecycle.TouchAsync();
+            Assert.Single(store.Snapshot);
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (lifecycle.CompletedUnloadCollections == 0)
+                await Task.Delay(20, limit.Token);
+            Assert.True(store.IsUnloaded);
+            Assert.Empty(store.Snapshot);
+            await Task.Delay(100, limit.Token);
+            Assert.Equal(1, lifecycle.CompletedUnloadCollections);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public async Task MetadataPollingDoesNotPreventIdleUnload()
     {
         var dir = Path.Combine(Path.GetTempPath(), "wimf-metadata-idle-" + Guid.NewGuid().ToString("N"));

@@ -17,6 +17,8 @@ public sealed class ServerMemoryDiagnosticsTests
         Assert.True(sample.GcTotalAvailableBytes > 0);
         Assert.True(sample.GcFragmentedBytes >= 0);
         Assert.True(sample.PagedMemoryBytes >= 0);
+        if (sample.WindowsPrivateWorkingSetBytes is long privateWorkingSet)
+            Assert.InRange(privateWorkingSet, 0, sample.WorkingSetBytes);
         // GC.GetTotalMemory(false) is a best-effort sample and may transiently be negative.
         // Other tests and the runtime may collect concurrently; counters are observational.
         Assert.True(sample.Gen2Collections >= 0);
