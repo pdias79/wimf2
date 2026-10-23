@@ -671,17 +671,24 @@ var catalogLifecycle = options.CatalogMemory?.IdleUnloadEnabled == false
 if (catalogLifecycle is not null)
     app.Lifetime.ApplicationStopped.Register(() => catalogLifecycle.DisposeAsync().AsTask().GetAwaiter().GetResult());
 
+void WakeCatalogs()
+{
+    if (catalogLifecycle is null) return;
+    _ = catalogLifecycle.TouchAsync().ContinueWith(task =>
+        Console.Error.WriteLine("[CATALOG-RELOAD] " + task.Exception?.GetBaseException().Message),
+        TaskContinuationOptions.OnlyOnFaulted);
+}
 app.MapGet("/", () =>
 {
-    if (catalogLifecycle is not null) _ = catalogLifecycle.TouchAsync();
+    WakeCatalogs();
     return WebUi.GetPage(options.ForceBirthdayCake);
 });
 
 
 app.MapPost("/api/catalog-input", async () =>
 {
-    if (catalogLifecycle is not null && options.CatalogMemory?.ReloadOnSearchInput != false)
-        _ = catalogLifecycle.TouchAsync();
+    if (options.CatalogMemory?.ReloadOnSearchInput != false)
+        WakeCatalogs();
     return Results.NoContent();
 });
 app.MapGet("/api/catalog-memory-state", () =>
