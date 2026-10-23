@@ -9,7 +9,10 @@ public static class ServerMemoryDiagnostics
     public sealed record Sample(DateTimeOffset CapturedAt, int CatalogCount, long EntryCount,
         long ManagedHeapBytes, long GcHeapSizeBytes, long GcCommittedBytes,
         long WorkingSetBytes, long PrivateBytes, int Gen0Collections,
-        int Gen1Collections, int Gen2Collections);
+        int Gen1Collections, int Gen2Collections,
+        long GcFragmentedBytes = 0, long GcTotalAvailableBytes = 0,
+        long VirtualMemoryBytes = 0, long PagedMemoryBytes = 0,
+        long NonpagedSystemMemoryBytes = 0, long PagedSystemMemoryBytes = 0);
 
     public sealed record Comparison(Sample Before, Sample After,
         long ManagedHeapReclaimedBytes, long WorkingSetChangeBytes,
@@ -46,6 +49,9 @@ public static class ServerMemoryDiagnostics
             GC.GetTotalMemory(forceFullCollection: false),
             memory.HeapSizeBytes, memory.TotalCommittedBytes,
             process.WorkingSet64, process.PrivateMemorySize64,
-            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
+            memory.FragmentedBytes, memory.TotalAvailableMemoryBytes,
+            process.VirtualMemorySize64, process.PagedMemorySize64,
+            process.NonpagedSystemMemorySize64, process.PagedSystemMemorySize64);
     }
 }
