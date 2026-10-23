@@ -13,6 +13,10 @@ public sealed class ServerMemoryDiagnosticsTests
         Assert.Equal(0, sample.EntryCount);
         Assert.True(sample.WorkingSetBytes > 0);
         Assert.True(sample.PrivateBytes > 0);
+        Assert.True(sample.VirtualMemoryBytes > 0);
+        Assert.True(sample.GcTotalAvailableBytes > 0);
+        Assert.True(sample.GcFragmentedBytes >= 0);
+        Assert.True(sample.PagedMemoryBytes >= 0);
         // GC.GetTotalMemory(false) is a best-effort sample and may transiently be negative.
         // Other tests and the runtime may collect concurrently; counters are observational.
         Assert.True(sample.Gen2Collections >= 0);
