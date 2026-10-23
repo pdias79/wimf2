@@ -42,14 +42,14 @@ public sealed class LiveCatalogStore
         bool tolerateUnavailableCatalogs = false)
         : this(Array.Empty<FileCatalog>(), sources, cacheDirectory)
     {
-        if (!loadLocalFiles) throw new ArgumentException("Use the existing snapshot constructor for preloaded catalogs.", nameof(loadLocalFiles));
+        _unloaded = !loadLocalFiles;
         _localPaths = localPaths.ToArray();
         _localCatalogs = new FileCatalog?[_localPaths.Length];
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var allowedMissing = new HashSet<string>(allowMissingCatalogs ?? [], comparer);
         _localStamps = new (long, long)[_localPaths.Length];
         _localFailures = new bool[_localPaths.Length];
-        for (var i = 0; i < _localPaths.Length; i++)
+        for (var i = 0; loadLocalFiles && i < _localPaths.Length; i++)
         {
             try
             {
