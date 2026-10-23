@@ -22,6 +22,7 @@ public sealed class CatalogMemoryConfiguration
     public bool IdleUnloadEnabled { get; init; } = true;
     public int IdleTimeoutMinutes { get; init; } = 15;
     public bool ReloadOnSearchInput { get; init; } = true;
+    public bool CollectAfterUnload { get; init; } = false;
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
