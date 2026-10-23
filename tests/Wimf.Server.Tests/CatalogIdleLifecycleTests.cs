@@ -16,7 +16,7 @@ public sealed class CatalogIdleLifecycleTests
         {
             var source = Path.Combine(dir, "source.txt");
             File.WriteAllText(source,
-                "[WIMF Catalog]\\nExample\\n/root\\n0\\ntxt\\na.txt;txt;1;0;1\\n".Replace("\\\\n", "\\n"), Encoding.UTF8);
+                "[WIMF Catalog]\nExample\n/root\n0\ntxt\na.txt;txt;1;0;1\n", Encoding.UTF8);
             var store = new LiveCatalogStore([], [source], Path.Combine(dir, "cache"));
             await using var lifecycle = new CatalogIdleLifecycle(store,
                 TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(20));
