@@ -627,7 +627,8 @@ var refreshSeconds = options.RefreshSeconds;
 var enableFileActions = options.EnableFileActions;
 
 LiveCatalogStore store;
-try { store = new LiveCatalogStore(paths, sources, cacheDirectory, loadLocalFiles: true,
+try { store = new LiveCatalogStore(paths, sources, cacheDirectory,
+    loadLocalFiles: options.CatalogMemory?.IdleUnloadEnabled == false,
     allowMissingCatalogs: options.Indexing?.Select(job => job.Output),
     tolerateUnavailableCatalogs: true); }
 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
@@ -636,8 +637,12 @@ catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or I
     Console.Error.WriteLine($"Unable to load local catalogs: {ex.Message}");
     return 2;
 }
-var initialRefresh = await store.RefreshAsync();
-Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s); {initialRefresh.FailedSources} source(s) unavailable, {initialRefresh.FailedLocalCatalogs} local catalog(s) unavailable.");
+if (options.CatalogMemory?.IdleUnloadEnabled == false)
+{
+    var initialRefresh = await store.RefreshAsync();
+    Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s).");
+}
+else Console.WriteLine("Catalog loading deferred until the web interface is opened.");
 
 var builder = WebApplication.CreateSlimBuilder(Array.Empty<string>());
 // Avoid verbose ASP.NET Core request/endpoint logs during frequent UI polling.
@@ -657,7 +662,11 @@ var app = builder.Build();
 app.UseResponseCompression();
 
 // The UI and API are deliberately bound to localhost until authentication is implemented.
-app.MapGet("/", () => WebUi.GetPage(options.ForceBirthdayCake));
+app.MapGet("/", () =>
+{
+    if (catalogLifecycle is not null) _ = catalogLifecycle.TouchAsync();
+    return WebUi.GetPage(options.ForceBirthdayCake);
+});
 app.MapGet("/favicon.svg", () => Results.Content(WebUi.LogoSvg, "image/svg+xml; charset=utf-8"));
 var engine = new SequentialSearchEngine();
 var catalogLifecycle = options.CatalogMemory?.IdleUnloadEnabled == false
@@ -670,7 +679,7 @@ if (catalogLifecycle is not null)
 app.MapPost("/api/catalog-input", async () =>
 {
     if (catalogLifecycle is not null && options.CatalogMemory?.ReloadOnSearchInput != false)
-        await catalogLifecycle.TouchAsync();
+        _ = catalogLifecycle.TouchAsync();
     return Results.NoContent();
 });
 app.MapGet("/api/catalog-memory-state", () =>
