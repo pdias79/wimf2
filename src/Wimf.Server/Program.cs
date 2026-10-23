@@ -662,11 +662,6 @@ var app = builder.Build();
 app.UseResponseCompression();
 
 // The UI and API are deliberately bound to localhost until authentication is implemented.
-app.MapGet("/", () =>
-{
-    if (catalogLifecycle is not null) _ = catalogLifecycle.TouchAsync();
-    return WebUi.GetPage(options.ForceBirthdayCake);
-});
 app.MapGet("/favicon.svg", () => Results.Content(WebUi.LogoSvg, "image/svg+xml; charset=utf-8"));
 var engine = new SequentialSearchEngine();
 var catalogLifecycle = options.CatalogMemory?.IdleUnloadEnabled == false
@@ -675,6 +670,13 @@ var catalogLifecycle = options.CatalogMemory?.IdleUnloadEnabled == false
         TimeSpan.FromMinutes(options.CatalogMemory?.IdleTimeoutMinutes ?? 15));
 if (catalogLifecycle is not null)
     app.Lifetime.ApplicationStopped.Register(() => catalogLifecycle.DisposeAsync().AsTask().GetAwaiter().GetResult());
+
+app.MapGet("/", () =>
+{
+    if (catalogLifecycle is not null) _ = catalogLifecycle.TouchAsync();
+    return WebUi.GetPage(options.ForceBirthdayCake);
+});
+
 
 app.MapPost("/api/catalog-input", async () =>
 {
