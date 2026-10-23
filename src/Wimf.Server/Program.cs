@@ -667,7 +667,8 @@ var engine = new SequentialSearchEngine();
 var catalogLifecycle = options.CatalogMemory?.IdleUnloadEnabled == false
     ? null
     : new CatalogIdleLifecycle(store,
-        TimeSpan.FromMinutes(options.CatalogMemory?.IdleTimeoutMinutes ?? 15));
+        TimeSpan.FromMinutes(options.CatalogMemory?.IdleTimeoutMinutes ?? 15),
+        collectAfterUnload: options.CatalogMemory?.CollectAfterUnload ?? false);
 if (catalogLifecycle is not null)
     app.Lifetime.ApplicationStopped.Register(() => catalogLifecycle.DisposeAsync().AsTask().GetAwaiter().GetResult());
 
