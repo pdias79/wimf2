@@ -11,6 +11,27 @@ public class LiveCatalogStoreTests
         $"[WIMF Catalog]\n{name}\nC:\\Fixture\n0\ntxt\n{name}.txt;txt;1;0;2\n";
 
     [Fact]
+    public async Task DeferredStartupDoesNotReadCatalogsUntilReload()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "wimf-cold-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var file = Path.Combine(dir, "catalog.txt");
+            File.WriteAllText(file, Fixture("Cold"), Encoding.UTF8);
+            var store = new LiveCatalogStore([file], [], null, loadLocalFiles: false);
+            Assert.True(store.IsUnloaded);
+            Assert.Empty(store.Snapshot);
+            await store.RefreshAsync(); // scheduled polling never loads catalog data
+            Assert.Empty(store.Snapshot);
+            await store.ReloadAsync();
+            Assert.False(store.IsUnloaded);
+            Assert.Equal("Cold", Assert.Single(store.Snapshot).Header.Name);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public async Task UnloadKeepsPersistentCacheAndReloadReadsLatestSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "wimf-unload-" + Guid.NewGuid().ToString("N"));
