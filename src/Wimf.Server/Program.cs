@@ -720,12 +720,10 @@ app.MapGet("/api/file-type-icon/{extension}", (string extension) =>
 CatalogSummary[] lastCatalogSummaries = store.Snapshot.Select((c, index) =>
     new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
         c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
-app.MapGet("/api/catalogs", async (CancellationToken cancellationToken) =>
+app.MapGet("/api/catalogs", () =>
 {
-    // This endpoint is read when the web interface opens; do not render
-    // an empty catalog list while the first background load is pending.
-    using var catalogLease = catalogLifecycle is null ? null :
-        await catalogLifecycle.BeginSearchAsync(cancellationToken);
+    // Read-only metadata queries must never wake catalogs or reset idle activity.
+    // Only page opens and search-input changes count as user activity.
     var snapshot = store.Snapshot;
     if (!store.IsUnloaded)
     {
