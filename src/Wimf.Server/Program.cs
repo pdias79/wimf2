@@ -627,7 +627,8 @@ var refreshSeconds = options.RefreshSeconds;
 var enableFileActions = options.EnableFileActions;
 
 LiveCatalogStore store;
-try { store = new LiveCatalogStore(paths, sources, cacheDirectory, loadLocalFiles: true,
+try { store = new LiveCatalogStore(paths, sources, cacheDirectory,
+    loadLocalFiles: options.CatalogMemory?.IdleUnloadEnabled == false,
     allowMissingCatalogs: options.Indexing?.Select(job => job.Output),
     tolerateUnavailableCatalogs: true); }
 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException
@@ -636,8 +637,12 @@ catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or I
     Console.Error.WriteLine($"Unable to load local catalogs: {ex.Message}");
     return 2;
 }
-var initialRefresh = await store.RefreshAsync();
-Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s); {initialRefresh.FailedSources} source(s) unavailable, {initialRefresh.FailedLocalCatalogs} local catalog(s) unavailable.");
+if (options.CatalogMemory?.IdleUnloadEnabled == false)
+{
+    var initialRefresh = await store.RefreshAsync();
+    Console.WriteLine($"Loaded {initialRefresh.CatalogCount} catalog(s).");
+}
+else Console.WriteLine("Catalog loading deferred until the web interface is opened.");
 
 var builder = WebApplication.CreateSlimBuilder(Array.Empty<string>());
 // Avoid verbose ASP.NET Core request/endpoint logs during frequent UI polling.
@@ -657,9 +662,39 @@ var app = builder.Build();
 app.UseResponseCompression();
 
 // The UI and API are deliberately bound to localhost until authentication is implemented.
-app.MapGet("/", () => WebUi.GetPage(options.ForceBirthdayCake));
 app.MapGet("/favicon.svg", () => Results.Content(WebUi.LogoSvg, "image/svg+xml; charset=utf-8"));
 var engine = new SequentialSearchEngine();
+var catalogLifecycle = options.CatalogMemory?.IdleUnloadEnabled == false
+    ? null
+    : new CatalogIdleLifecycle(store,
+        TimeSpan.FromMinutes(options.CatalogMemory?.IdleTimeoutMinutes ?? 15));
+if (catalogLifecycle is not null)
+    app.Lifetime.ApplicationStopped.Register(() => catalogLifecycle.DisposeAsync().AsTask().GetAwaiter().GetResult());
+
+void WakeCatalogs()
+{
+    if (catalogLifecycle is null) return;
+    _ = catalogLifecycle.TouchAsync().ContinueWith(task =>
+        Console.Error.WriteLine("[CATALOG-RELOAD] " + task.Exception?.GetBaseException().Message),
+        TaskContinuationOptions.OnlyOnFaulted);
+}
+app.MapGet("/", () =>
+{
+    WakeCatalogs();
+    return WebUi.GetPage(options.ForceBirthdayCake);
+});
+
+
+app.MapPost("/api/catalog-input", async () =>
+{
+    if (options.CatalogMemory?.ReloadOnSearchInput != false)
+        WakeCatalogs();
+    return Results.NoContent();
+});
+app.MapGet("/api/catalog-memory-state", () =>
+    Results.Json(new CatalogMemoryState(catalogLifecycle?.IsUnloaded ?? false,
+        catalogLifecycle?.IsLoading ?? false), WimfJsonContext.Default.CatalogMemoryState));
+
 
 app.MapGet("/api/memory-diagnostics", () =>
     Results.Json(ServerMemoryDiagnostics.Capture(store.Snapshot), WimfJsonContext.Default.Sample));
@@ -681,13 +716,29 @@ app.MapGet("/api/file-type-icon/{extension}", (string extension) =>
         : Results.File(icon, "image/x-icon");
 });
 
-app.MapGet("/api/catalogs", () =>
-    Results.Json(store.Snapshot.Select((c, index) =>
-        new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
-            c.Diagnostics.Count, c.Header.CreatedAt)).ToArray(),
-        WimfJsonContext.Default.CatalogSummaryArray));
+// Lightweight metadata persists when large catalog entry arrays are unloaded.
+CatalogSummary[] lastCatalogSummaries = store.Snapshot.Select((c, index) =>
+    new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
+        c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
+app.MapGet("/api/catalogs", async (CancellationToken cancellationToken) =>
+{
+    // This endpoint is read when the web interface opens; do not render
+    // an empty catalog list while the first background load is pending.
+    using var catalogLease = catalogLifecycle is null ? null :
+        await catalogLifecycle.BeginSearchAsync(cancellationToken);
+    var snapshot = store.Snapshot;
+    if (!store.IsUnloaded)
+    {
+        var latest = snapshot.Select((c, index) =>
+            new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
+                c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
+        Volatile.Write(ref lastCatalogSummaries, latest);
+    }
+    return Results.Json(Volatile.Read(ref lastCatalogSummaries),
+        WimfJsonContext.Default.CatalogSummaryArray);
+});
 
-app.MapPost("/api/search", (HttpContext http, SearchRequest request, CancellationToken cancellationToken) =>
+app.MapPost("/api/search", async (HttpContext http, SearchRequest request, CancellationToken cancellationToken) =>
 {
     if (request.Text is null || request.Text.Length > 1024 ||
         request.MaxResults < 0 || request.MaxResults > 10000 ||
@@ -711,6 +762,8 @@ app.MapPost("/api/search", (HttpContext http, SearchRequest request, Cancellatio
             ModifiedTo = request.ModifiedTo,
             MaxResults = request.MaxResults == 0 ? 0 : request.MaxResults + 1
         };
+        using var searchLease = catalogLifecycle is null ? null :
+            await catalogLifecycle.BeginSearchAsync(cancellationToken);
         var snapshot = store.Snapshot;
         var indices = CatalogSelection.Resolve(snapshot.Length, request.CatalogIndices);
         var selected = indices.Select(index => snapshot[index]).ToArray();
