@@ -713,8 +713,12 @@ app.MapGet("/api/file-type-icon/{extension}", (string extension) =>
 CatalogSummary[] lastCatalogSummaries = store.Snapshot.Select((c, index) =>
     new CatalogSummary(index, c.Header.Name, c.Header.RootPath, c.RecordCount,
         c.Diagnostics.Count, c.Header.CreatedAt)).ToArray();
-app.MapGet("/api/catalogs", () =>
+app.MapGet("/api/catalogs", async (CancellationToken cancellationToken) =>
 {
+    // This endpoint is read when the web interface opens; do not render
+    // an empty catalog list while the first background load is pending.
+    using var catalogLease = catalogLifecycle is null ? null :
+        await catalogLifecycle.BeginSearchAsync(cancellationToken);
     var snapshot = store.Snapshot;
     if (!store.IsUnloaded)
     {
