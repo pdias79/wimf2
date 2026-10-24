@@ -152,14 +152,13 @@ public static class IncrementalJournalPublisher
                 long.TryParse(parts[1], out var parsed) &&
                 long.TryParse(parts[2], out var ticks))
             {
-                // A different host may have published a new shared catalog since
-                // this host acknowledged its journal. Replaying old local events
-                // against that new snapshot is not a safe reconciliation.
-                // Fail closed; only a separately scheduled/manual full scan may
-                // re-establish a trustworthy cursor.
-                if (File.GetLastWriteTimeUtc(target).Ticks != ticks)
-                    throw new IOException("Shared catalog changed since local journal acknowledgement; incremental publication refused until a full reconciliation.");
-                position = parsed;
+                // A different writer may have published the shared catalog.
+                // Do not reuse this host's offset against a different version:
+                // replay the local journal from zero against the latest catalog.
+                // Projection is based on current filesystem state, and the
+                // catalog stamp is rechecked before the atomic publication.
+                if (File.GetLastWriteTimeUtc(target).Ticks == ticks)
+                    position = parsed;
             }
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
