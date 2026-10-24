@@ -519,6 +519,21 @@ public static class WebUi
         }
         item.append(toggle, statistics);
       }
+      if (catalog.lastIncrementalOutcome === "postponed") {
+        const postponed = document.createElement("div");
+        postponed.className = "catalog-details";
+        postponed.textContent = "Actualisation incrémentale reportée : verrou occupé" +
+          (catalog.lastIncrementalAttempt
+            ? " · Tentative : " + formatDate(catalog.lastIncrementalAttempt) : "");
+        item.appendChild(postponed);
+      } else if (catalog.lastIncrementalOutcome === "failed") {
+        const problem = document.createElement("div");
+        problem.className = "catalog-details";
+        problem.textContent = "Dernière tentative incrémentale en échec" +
+          (catalog.lastIncrementalAttempt
+            ? " · " + formatDate(catalog.lastIncrementalAttempt) : "");
+        item.appendChild(problem);
+      }
       if (catalog.lockMarker && catalog.lockMarker.present) {
         const marker = document.createElement("div");
         marker.className = "catalog-details";

@@ -11,7 +11,8 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     int SkippedEntries = 0, string[]? SkippedDetails = null,
     string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null,
     CatalogScanMetrics? ScanMetrics = null, int EnumeratedDirectories = 0,
-    DateTimeOffset? NextIncremental = null);
+    DateTimeOffset? NextIncremental = null,
+    string? LastIncrementalOutcome = null, DateTimeOffset? LastIncrementalAttempt = null);
 
 public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error,
@@ -394,7 +395,10 @@ public sealed class CatalogIndexScheduler
                     using var catalogLock = SharedCatalogLock.TryAcquire(job.Output,
                         job.LockTimeout ?? TimeSpan.FromMinutes(30));
                     if (catalogLock is null)
+                    {
+                        state = "postponed";
                         Console.WriteLine($"[CATALOG-LOCK] incremental postponed | {job.Output}");
+                    }
                     else if (await _incremental(job, token) && _afterSuccess is not null)
                         await _afterSuccess(job, token);
                 }
@@ -411,6 +415,11 @@ public sealed class CatalogIndexScheduler
                 }
                 finally
                 {
+                    Volatile.Write(ref _statuses[i], Volatile.Read(ref _statuses[i]) with
+                    {
+                        LastIncrementalOutcome = state,
+                        LastIncrementalAttempt = started
+                    });
                     var metrics = state == "completed" ? _incrementalMetrics?.Invoke(job) : null;
                     lock (_historyLock)
                     {
