@@ -26,10 +26,12 @@ public static class IncrementalJournalPublisher
         if (File.Exists(target) && File.Exists(marker))
         {
             var parts = File.ReadAllText(marker).Split('\t');
-            if (parts.Length == 3 && parts[0] == signature &&
+            if ((parts.Length == 3 || parts.Length == 4) && parts[0] == signature &&
                 long.TryParse(parts[1], out var acknowledged) &&
                 long.TryParse(parts[2], out var ticks) &&
-                ticks == File.GetLastWriteTimeUtc(target).Ticks)
+                ticks == File.GetLastWriteTimeUtc(target).Ticks &&
+                (parts.Length == 3 ||
+                 (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)))
                 offset = acknowledged;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -123,7 +125,7 @@ public static class IncrementalJournalPublisher
         try
         {
             File.WriteAllText(temp, signature + "\t" + beforeScanLength + "\t" +
-                File.GetLastWriteTimeUtc(target).Ticks);
+                File.GetLastWriteTimeUtc(target).Ticks + "\\t" + new FileInfo(target).Length);
             File.Move(temp, marker, overwrite: true);
             return true;
         }
@@ -157,7 +159,9 @@ public static class IncrementalJournalPublisher
                 // replay the local journal from zero against the latest catalog.
                 // Projection is based on current filesystem state, and the
                 // catalog stamp is rechecked before the atomic publication.
-                if (File.GetLastWriteTimeUtc(target).Ticks == ticks)
+                if (File.GetLastWriteTimeUtc(target).Ticks == ticks &&
+                    (parts.Length == 3 ||
+                     (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)))
                     position = parsed;
             }
         }
