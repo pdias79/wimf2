@@ -22,11 +22,13 @@ public static class JournalStorageStatus
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             Path.GetFullPath(journal).ToUpperInvariant())));
         var parts = File.ReadAllText(marker).Split('\t');
-        if (parts.Length != 3 || parts[0] != signature ||
+        if ((parts.Length != 3 && parts.Length != 4) || parts[0] != signature ||
             !long.TryParse(parts[1], out var offset) ||
             !long.TryParse(parts[2], out var ticks) ||
             offset < 0 || offset > length ||
-            File.GetLastWriteTimeUtc(target).Ticks != ticks)
+            File.GetLastWriteTimeUtc(target).Ticks != ticks ||
+            (parts.Length == 4 && (!long.TryParse(parts[3], out var size) ||
+                                   new FileInfo(target).Length != size)))
             return new(length, 0, length, false);
         return new(length, offset, length - offset, true);
     }
