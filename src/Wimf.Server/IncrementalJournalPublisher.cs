@@ -147,6 +147,7 @@ public static class IncrementalJournalPublisher
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             Path.GetFullPath(journal).ToUpperInvariant())));
         var position = 0L;
+        var catalogChangedSinceCursor = false;
         if (File.Exists(marker))
         {
             var parts = File.ReadAllText(marker).Split('\t');
@@ -154,15 +155,15 @@ public static class IncrementalJournalPublisher
                 long.TryParse(parts[1], out var parsed) &&
                 long.TryParse(parts[2], out var ticks))
             {
-                // A different writer may have published the shared catalog.
-                // Do not reuse this host's offset against a different version:
-                // replay the local journal from zero against the latest catalog.
-                // Projection is based on current filesystem state, and the
-                // catalog stamp is rechecked before the atomic publication.
+                // When another writer publishes a newer catalog, the local
+                // journal is no longer a trustworthy history of that snapshot.
+                // Drop the old hints rather than replay them against it.
                 if (File.GetLastWriteTimeUtc(target).Ticks == ticks &&
                     (parts.Length == 3 ||
                      (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)))
                     position = parsed;
+                else
+                    catalogChangedSinceCursor = true;
             }
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -174,6 +175,24 @@ public static class IncrementalJournalPublisher
         // Test seam for deterministic concurrent appends. The captured end is
         // immutable: notifications written afterwards belong to the next batch.
         afterJournalSnapshot?.Invoke();
+        if (catalogChangedSinceCursor)
+        {
+            // Only acknowledge records complete at the captured boundary.
+            // New arrivals after that boundary remain pending for next time.
+            token.ThrowIfCancellationRequested();
+            EnsureRootAccessible(root);
+            if (!CatalogFileStamp.Read(target).Equals(originalStamp))
+                throw new IOException("Shared catalog changed during journal reset; retry without advancing cursor.");
+            var tempCursor = marker + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(tempCursor, signature + "\t" + end + "\t" +
+                    originalStamp.LastWriteUtcTicks + "\t" + originalStamp.Length);
+                File.Move(tempCursor, marker, overwrite: true);
+            }
+            finally { if (File.Exists(tempCursor)) File.Delete(tempCursor); }
+            return new(0, 0, end, false);
+        }
         if (position > end) position = 0; // Journal rotation or truncation.
         if (position == end) return new(0, 0, position, false);
         // Snapshot the journal boundary before doing expensive work. Append-only watcher
