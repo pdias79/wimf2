@@ -97,6 +97,9 @@ public class SharedCatalogLockTests
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        start.ArgumentList.Add("exec");
+        start.ArgumentList.Add("--runtimeconfig");
+        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Wimf.Server.Tests.runtimeconfig.json"));
         start.ArgumentList.Add(typeof(Wimf.LockProbe.ProbeMarker).Assembly.Location);
         start.ArgumentList.Add(action);
         start.ArgumentList.Add(catalog);
