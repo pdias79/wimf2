@@ -27,12 +27,13 @@ public static class IncrementalJournalPublisher
         if (File.Exists(target) && File.Exists(marker))
         {
             var parts = File.ReadAllText(marker).Split('\t');
-            if ((parts.Length == 3 || parts.Length == 4) && parts[0] == signature &&
+            if ((parts.Length is >= 3 and <= 5) && parts[0] == signature &&
                 long.TryParse(parts[1], out var acknowledged) &&
                 long.TryParse(parts[2], out var ticks) &&
                 ticks == File.GetLastWriteTimeUtc(target).Ticks &&
                 (parts.Length == 3 ||
-                 (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)))
+                 (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)) &&
+                (parts.Length < 5 || parts[4] == CatalogFileStamp.SampleFingerprint(target)))
                 offset = acknowledged;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -126,7 +127,7 @@ public static class IncrementalJournalPublisher
         try
         {
             File.WriteAllText(temp, signature + "\t" + beforeScanLength + "\t" +
-                File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length);
+                File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length + "\t" + CatalogFileStamp.SampleFingerprint(target));
             File.Move(temp, marker, overwrite: true);
             return true;
         }
@@ -152,7 +153,7 @@ public static class IncrementalJournalPublisher
         if (File.Exists(marker))
         {
             var parts = File.ReadAllText(marker).Split('\t');
-            if ((parts.Length == 3 || parts.Length == 4) && parts[0] == signature &&
+            if ((parts.Length is >= 3 and <= 5) && parts[0] == signature &&
                 long.TryParse(parts[1], out var parsed) &&
                 long.TryParse(parts[2], out var ticks))
             {
@@ -161,7 +162,8 @@ public static class IncrementalJournalPublisher
                 // Drop the old hints rather than replay them against it.
                 if (File.GetLastWriteTimeUtc(target).Ticks == ticks &&
                     (parts.Length == 3 ||
-                     (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)))
+                     (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)) &&
+                    (parts.Length < 5 || parts[4] == CatalogFileStamp.SampleFingerprint(target)))
                     position = parsed;
                 else
                     catalogChangedSinceCursor = true;
@@ -188,7 +190,7 @@ public static class IncrementalJournalPublisher
             try
             {
                 File.WriteAllText(tempCursor, signature + "\t" + end + "\t" +
-                    originalStamp.LastWriteUtcTicks + "\t" + originalStamp.Length);
+                    originalStamp.LastWriteUtcTicks + "\t" + originalStamp.Length + "\t" + CatalogFileStamp.SampleFingerprint(target));
                 File.Move(tempCursor, marker, overwrite: true);
             }
             finally { if (File.Exists(tempCursor)) File.Delete(tempCursor); }
@@ -217,7 +219,7 @@ public static class IncrementalJournalPublisher
             try
             {
                 File.WriteAllText(tempMarker, signature + "\t" + end + "\t" +
-                    File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length);
+                    File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length + "\t" + CatalogFileStamp.SampleFingerprint(target));
                 File.Move(tempMarker, marker, overwrite: true);
             }
             finally { if (File.Exists(tempMarker)) File.Delete(tempMarker); }
