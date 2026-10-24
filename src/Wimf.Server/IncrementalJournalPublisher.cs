@@ -170,7 +170,7 @@ public static class IncrementalJournalPublisher
         // A truncated or replaced journal invalidates the previous byte offset.
         if (position < 0 || position > stream.Length) position = 0;
         var end = CompleteBoundary(stream, position);
-        if (end - position > MaxBatchBytes)
+        if (!catalogChangedSinceCursor && end - position > MaxBatchBytes)
             end = BatchBoundary(stream, position, end);
         // Test seam for deterministic concurrent appends. The captured end is
         // immutable: notifications written afterwards belong to the next batch.
