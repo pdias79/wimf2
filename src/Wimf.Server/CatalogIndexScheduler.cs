@@ -12,7 +12,8 @@ public sealed record IndexingJobStatus(string Name, string Root, string Output,
     string[]? EffectiveExclusions = null, DateTimeOffset? QueuedAt = null,
     CatalogScanMetrics? ScanMetrics = null, int EnumeratedDirectories = 0,
     DateTimeOffset? NextIncremental = null,
-    string? LastIncrementalOutcome = null, DateTimeOffset? LastIncrementalAttempt = null);
+    string? LastIncrementalOutcome = null, DateTimeOffset? LastIncrementalAttempt = null,
+    long? LastDiscardedJournalBytes = null, DateTimeOffset? LastDiscardedAt = null);
 
 public sealed record IndexingRunHistoryEntry(string Name, string State, DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt, int ScannedEntries, int SkippedEntries, string? Error,
@@ -38,6 +39,18 @@ public sealed class CatalogIndexScheduler
     private readonly object _historyLock = new();
     private readonly List<IndexingRunHistoryEntry> _history = [];
     private readonly IndexingHistoryStore? _historyStore;
+
+    public void ReportDiscardedJournal(IndexingJob job, long discardedBytes)
+    {
+        var index = Array.FindIndex(_jobs, candidate => ReferenceEquals(candidate, job));
+        if (index < 0) return;
+        var current = Volatile.Read(ref _statuses[index]);
+        Volatile.Write(ref _statuses[index], current with
+        {
+            LastDiscardedJournalBytes = discardedBytes,
+            LastDiscardedAt = DateTimeOffset.UtcNow
+        });
+    }
 
     public IndexingRunHistoryEntry[] History
     {
