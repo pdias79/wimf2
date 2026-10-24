@@ -223,7 +223,7 @@ public class IncrementalJournalPublisherTests
     }
 
     [Fact]
-    public void ExternalCatalogPublicationReplaysLocalJournalWithoutOverwritingForeignChanges()
+    public void ExternalCatalogPublicationDiscardsOldLocalHintsWithoutOverwritingForeignChanges()
     {
         var temp = Path.Combine(Path.GetTempPath(), "wimf-foreign-publication-" + Guid.NewGuid().ToString("N"));
         var root = Path.Combine(temp, "source");
@@ -252,7 +252,7 @@ public class IncrementalJournalPublisherTests
             File.AppendAllText(journal, "E\tchanged\t" +
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
             var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
-            Assert.True(result.Changed);
+            Assert.False(result.Changed);
             Assert.NotEqual(acknowledged, File.ReadAllBytes(cursor));
             Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             var current = LegacyCatalogReader.ReadFile(catalog);
@@ -289,7 +289,9 @@ public class IncrementalJournalPublisherTests
 
             // A timestamp-only cursor would incorrectly report no pending events.
             Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
-            IncrementalJournalPublisher.Publish(root, catalog, journal);
+            var reset = IncrementalJournalPublisher.Publish(root, catalog, journal);
+            Assert.False(reset.Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             var current = LegacyCatalogReader.ReadFile(catalog);
             Assert.Contains(current.EnumerateEntries(),
                 e => current.GetFullPath(e.Id) == foreign);
