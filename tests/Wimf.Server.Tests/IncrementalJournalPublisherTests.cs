@@ -299,4 +299,44 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(temp, true); }
     }
 
+    [Fact]
+    public void EventsAppendedDuringExternalCatalogResetRemainPending()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-reset-boundary-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "shared.txt.gz");
+            var journal = Path.Combine(temp, "events");
+            LegacyCatalogWriter.Build(root, catalog);
+            var oldFile = Path.Combine(root, "old.txt");
+            File.WriteAllText(oldFile, "old");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(oldFile)) + "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+
+            var otherFile = Path.Combine(root, "other.txt");
+            File.WriteAllText(otherFile, "other");
+            LegacyCatalogWriter.Build(root, catalog);
+            File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddSeconds(6));
+            var currentFile = Path.Combine(root, "new.txt");
+            var reset = IncrementalJournalPublisher.Publish(root, catalog, journal,
+                afterJournalSnapshot: () =>
+                {
+                    File.WriteAllText(currentFile, "new");
+                    File.AppendAllText(journal, "E\tcreated\t" +
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes(currentFile)) + "\n");
+                });
+            Assert.False(reset.Changed);
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            var current = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(current.EnumerateEntries(), e => current.GetFullPath(e.Id) == otherFile);
+            Assert.Contains(current.EnumerateEntries(), e => current.GetFullPath(e.Id) == currentFile);
+        }
+        finally { Directory.Delete(temp, true); }
+    }
+
 }
