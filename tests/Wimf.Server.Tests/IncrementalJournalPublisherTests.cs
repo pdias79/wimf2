@@ -222,4 +222,46 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(temp, recursive: true); }
     }
 
+    [Fact]
+    public void ExternalCatalogPublicationInvalidatesLocalIncrementalCursor()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-foreign-publication-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "shared.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var journal = Path.Combine(temp, "host-a.events");
+            var local = Path.Combine(root, "local.txt");
+            File.WriteAllText(local, "local");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            var cursor = IncrementalCursorPath.For(catalog, journal);
+            var acknowledged = File.ReadAllBytes(cursor);
+
+            // Host B changes the shared catalog while host A has its own cursor.
+            var foreign = Path.Combine(root, "foreign.txt");
+            File.WriteAllText(foreign, "foreign");
+            LegacyCatalogWriter.Build(root, catalog);
+            File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddSeconds(5));
+            var publishedBytes = File.ReadAllBytes(catalog);
+
+            // Host A may have more journal events, but it cannot safely replay
+            // them on a catalog version that differs from its acknowledgement.
+            File.AppendAllText(journal, "E\tchanged\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
+            var ex = Assert.Throws<IOException>(() =>
+                IncrementalJournalPublisher.Publish(root, catalog, journal));
+            Assert.Contains("full reconciliation", ex.Message);
+            Assert.Equal(publishedBytes, File.ReadAllBytes(catalog));
+            Assert.Equal(acknowledged, File.ReadAllBytes(cursor));
+            var current = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(current.EnumerateEntries(),
+                e => current.GetFullPath(e.Id) == foreign);
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
 }

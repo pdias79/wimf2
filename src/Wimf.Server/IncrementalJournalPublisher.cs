@@ -150,9 +150,17 @@ public static class IncrementalJournalPublisher
             var parts = File.ReadAllText(marker).Split('\t');
             if (parts.Length == 3 && parts[0] == signature &&
                 long.TryParse(parts[1], out var parsed) &&
-                long.TryParse(parts[2], out var ticks) &&
-                File.GetLastWriteTimeUtc(target).Ticks == ticks)
+                long.TryParse(parts[2], out var ticks))
+            {
+                // A different host may have published a new shared catalog since
+                // this host acknowledged its journal. Replaying old local events
+                // against that new snapshot is not a safe reconciliation.
+                // Fail closed; only a separately scheduled/manual full scan may
+                // re-establish a trustworthy cursor.
+                if (File.GetLastWriteTimeUtc(target).Ticks != ticks)
+                    throw new IOException("Shared catalog changed since local journal acknowledgement; incremental publication refused until a full reconciliation.");
                 position = parsed;
+            }
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         // A truncated or replaced journal invalidates the previous byte offset.
