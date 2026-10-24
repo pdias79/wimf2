@@ -10,5 +10,6 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <ProjectReference Include="../../src/Wimf.Server/Wimf.Server.csproj" />
+    <ProjectReference Include="../Wimf.LockProbe/Wimf.LockProbe.csproj" />
   </ItemGroup>
 </Project>
