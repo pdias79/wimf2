@@ -262,4 +262,39 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(temp, recursive: true); }
     }
 
+    [Fact]
+    public void ChangedCatalogLengthInvalidatesCursorEvenWithUnchangedTimestamp()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-same-timestamp-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "shared.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var journal = Path.Combine(temp, "host-a.events");
+            var local = Path.Combine(root, "local.txt");
+            File.WriteAllText(local, "local");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            var originalTime = File.GetLastWriteTimeUtc(catalog);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+
+            var foreign = Path.Combine(root, "foreign-file-with-a-long-distinct-name.txt");
+            File.WriteAllText(foreign, new string('x', 10000));
+            LegacyCatalogWriter.Build(root, catalog);
+            File.SetLastWriteTimeUtc(catalog, originalTime);
+            Assert.Equal(originalTime.Ticks, File.GetLastWriteTimeUtc(catalog).Ticks);
+
+            // A timestamp-only cursor would incorrectly report no pending events.
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            IncrementalJournalPublisher.Publish(root, catalog, journal);
+            var current = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(current.EnumerateEntries(),
+                e => current.GetFullPath(e.Id) == foreign);
+        }
+        finally { Directory.Delete(temp, true); }
+    }
+
 }
