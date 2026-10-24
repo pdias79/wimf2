@@ -341,4 +341,40 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(temp, true); }
     }
 
+    [Fact]
+    public void SampleFingerprintDetectsSameLengthAndTimestampCatalogReplacement()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-fingerprint-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "catalog.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var journal = Path.Combine(temp, "events");
+            var path = Path.Combine(root, "first.txt");
+            File.WriteAllText(path, "first");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(path)) + "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            Assert.True(JournalStorageStatus.Read(catalog, journal).CursorValid);
+
+            var timestamp = File.GetLastWriteTimeUtc(catalog);
+            var bytes = File.ReadAllBytes(catalog);
+            bytes[0] ^= 1; // Simulate a foreign replacement of identical length.
+            File.WriteAllBytes(catalog, bytes);
+            File.SetLastWriteTimeUtc(catalog, timestamp);
+            Assert.Equal(timestamp.Ticks, File.GetLastWriteTimeUtc(catalog).Ticks);
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            Assert.False(JournalStorageStatus.Read(catalog, journal).CursorValid);
+            var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
+            Assert.True(result.DiscardedStaleJournal);
+            Assert.False(result.Changed);
+            Assert.Equal(bytes, File.ReadAllBytes(catalog));
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+        }
+        finally { Directory.Delete(temp, true); }
+    }
+
 }
