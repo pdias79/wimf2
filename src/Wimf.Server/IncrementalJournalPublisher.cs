@@ -125,7 +125,7 @@ public static class IncrementalJournalPublisher
         try
         {
             File.WriteAllText(temp, signature + "\t" + beforeScanLength + "\t" +
-                File.GetLastWriteTimeUtc(target).Ticks + "\\t" + new FileInfo(target).Length);
+                File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length);
             File.Move(temp, marker, overwrite: true);
             return true;
         }
@@ -150,7 +150,7 @@ public static class IncrementalJournalPublisher
         if (File.Exists(marker))
         {
             var parts = File.ReadAllText(marker).Split('\t');
-            if (parts.Length == 3 && parts[0] == signature &&
+            if ((parts.Length == 3 || parts.Length == 4) && parts[0] == signature &&
                 long.TryParse(parts[1], out var parsed) &&
                 long.TryParse(parts[2], out var ticks))
             {
@@ -197,7 +197,7 @@ public static class IncrementalJournalPublisher
             try
             {
                 File.WriteAllText(tempMarker, signature + "\t" + end + "\t" +
-                    File.GetLastWriteTimeUtc(target).Ticks);
+                    File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length);
                 File.Move(tempMarker, marker, overwrite: true);
             }
             finally { if (File.Exists(tempMarker)) File.Delete(tempMarker); }
