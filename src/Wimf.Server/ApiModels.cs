@@ -34,7 +34,8 @@ public sealed record ManagedCatalogStatus(string Name, string Path, string? Root
     CatalogScanMetrics? ScanMetrics = null, int EnumeratedDirectories = 0,
     CatalogLockMarkerStatus? LockMarker = null,
     CatalogExtensionCount[]? ExtensionStatistics = null,
-    string? LastIncrementalOutcome = null, DateTimeOffset? LastIncrementalAttempt = null);
+    string? LastIncrementalOutcome = null, DateTimeOffset? LastIncrementalAttempt = null,
+    long? LastDiscardedJournalBytes = null, DateTimeOffset? LastDiscardedAt = null);
 public sealed record RefreshStatus(int CatalogCount, int SourceCount, DateTimeOffset? LastRefresh,
     int FailedSources = 0, int FailedLocalCatalogs = 0);
 
