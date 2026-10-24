@@ -8,7 +8,8 @@ namespace Wimf.Server;
 public static class IncrementalJournalPublisher
 {
     public sealed record Result(int Entries, int Hints, long AcknowledgedBytes, bool Changed,
-        int EventRecords = 0, int DistinctPaths = 0, long ElapsedMilliseconds = 0);
+        int EventRecords = 0, int DistinctPaths = 0, long ElapsedMilliseconds = 0,
+        bool DiscardedStaleJournal = false, long DiscardedJournalBytes = 0);
 
     public sealed record PendingResult(int Events, int Directories);
 
@@ -191,7 +192,7 @@ public static class IncrementalJournalPublisher
                 File.Move(tempCursor, marker, overwrite: true);
             }
             finally { if (File.Exists(tempCursor)) File.Delete(tempCursor); }
-            return new(0, 0, end, false);
+            return new(0, 0, end, false, DiscardedStaleJournal: true, DiscardedJournalBytes: end);
         }
         if (position > end) position = 0; // Journal rotation or truncation.
         if (position == end) return new(0, 0, position, false);
