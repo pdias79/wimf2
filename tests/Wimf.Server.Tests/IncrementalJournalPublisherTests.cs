@@ -222,4 +222,121 @@ public class IncrementalJournalPublisherTests
         finally { Directory.Delete(temp, recursive: true); }
     }
 
+    [Fact]
+    public void ExternalCatalogPublicationDiscardsOldLocalHintsWithoutOverwritingForeignChanges()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-foreign-publication-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "shared.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var journal = Path.Combine(temp, "host-a.events");
+            var local = Path.Combine(root, "local.txt");
+            File.WriteAllText(local, "local");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            var cursor = IncrementalCursorPath.For(catalog, journal);
+            var acknowledged = File.ReadAllBytes(cursor);
+
+            // Host B changes the shared catalog while host A has its own cursor.
+            var foreign = Path.Combine(root, "foreign.txt");
+            File.WriteAllText(foreign, "foreign");
+            LegacyCatalogWriter.Build(root, catalog);
+            File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddSeconds(5));
+
+            // Host A replays its own historical hints against the current catalog.
+            // It must preserve entries published by host B.
+            File.AppendAllText(journal, "E\tchanged\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
+            var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
+            Assert.False(result.Changed);
+            Assert.NotEqual(acknowledged, File.ReadAllBytes(cursor));
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            var current = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(current.EnumerateEntries(),
+                e => current.GetFullPath(e.Id) == foreign);
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
+    [Fact]
+    public void ChangedCatalogLengthInvalidatesCursorEvenWithUnchangedTimestamp()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-same-timestamp-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "shared.txt.gz");
+            LegacyCatalogWriter.Build(root, catalog);
+            var journal = Path.Combine(temp, "host-a.events");
+            var local = Path.Combine(root, "local.txt");
+            File.WriteAllText(local, "local");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            var originalTime = File.GetLastWriteTimeUtc(catalog);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+
+            var foreign = Path.Combine(root, "foreign-file-with-a-long-distinct-name.txt");
+            File.WriteAllText(foreign, new string('x', 10000));
+            LegacyCatalogWriter.Build(root, catalog);
+            File.SetLastWriteTimeUtc(catalog, originalTime);
+            Assert.Equal(originalTime.Ticks, File.GetLastWriteTimeUtc(catalog).Ticks);
+
+            // A timestamp-only cursor would incorrectly report no pending events.
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            var reset = IncrementalJournalPublisher.Publish(root, catalog, journal);
+            Assert.False(reset.Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            var current = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(current.EnumerateEntries(),
+                e => current.GetFullPath(e.Id) == foreign);
+        }
+        finally { Directory.Delete(temp, true); }
+    }
+
+    [Fact]
+    public void EventsAppendedDuringExternalCatalogResetRemainPending()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-reset-boundary-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "shared.txt.gz");
+            var journal = Path.Combine(temp, "events");
+            LegacyCatalogWriter.Build(root, catalog);
+            var oldFile = Path.Combine(root, "old.txt");
+            File.WriteAllText(oldFile, "old");
+            File.WriteAllText(journal, "E\tcreated\t" +
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(oldFile)) + "\n");
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+
+            var otherFile = Path.Combine(root, "other.txt");
+            File.WriteAllText(otherFile, "other");
+            LegacyCatalogWriter.Build(root, catalog);
+            File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddSeconds(6));
+            var currentFile = Path.Combine(root, "new.txt");
+            var reset = IncrementalJournalPublisher.Publish(root, catalog, journal,
+                afterJournalSnapshot: () =>
+                {
+                    File.WriteAllText(currentFile, "new");
+                    File.AppendAllText(journal, "E\tcreated\t" +
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes(currentFile)) + "\n");
+                });
+            Assert.False(reset.Changed);
+            Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
+            var current = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Contains(current.EnumerateEntries(), e => current.GetFullPath(e.Id) == otherFile);
+            Assert.Contains(current.EnumerateEntries(), e => current.GetFullPath(e.Id) == currentFile);
+        }
+        finally { Directory.Delete(temp, true); }
+    }
+
 }

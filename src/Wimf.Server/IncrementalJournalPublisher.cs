@@ -26,10 +26,12 @@ public static class IncrementalJournalPublisher
         if (File.Exists(target) && File.Exists(marker))
         {
             var parts = File.ReadAllText(marker).Split('\t');
-            if (parts.Length == 3 && parts[0] == signature &&
+            if ((parts.Length == 3 || parts.Length == 4) && parts[0] == signature &&
                 long.TryParse(parts[1], out var acknowledged) &&
                 long.TryParse(parts[2], out var ticks) &&
-                ticks == File.GetLastWriteTimeUtc(target).Ticks)
+                ticks == File.GetLastWriteTimeUtc(target).Ticks &&
+                (parts.Length == 3 ||
+                 (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)))
                 offset = acknowledged;
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -123,7 +125,7 @@ public static class IncrementalJournalPublisher
         try
         {
             File.WriteAllText(temp, signature + "\t" + beforeScanLength + "\t" +
-                File.GetLastWriteTimeUtc(target).Ticks);
+                File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length);
             File.Move(temp, marker, overwrite: true);
             return true;
         }
@@ -145,24 +147,52 @@ public static class IncrementalJournalPublisher
         var signature = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             Path.GetFullPath(journal).ToUpperInvariant())));
         var position = 0L;
+        var catalogChangedSinceCursor = false;
         if (File.Exists(marker))
         {
             var parts = File.ReadAllText(marker).Split('\t');
-            if (parts.Length == 3 && parts[0] == signature &&
+            if ((parts.Length == 3 || parts.Length == 4) && parts[0] == signature &&
                 long.TryParse(parts[1], out var parsed) &&
-                long.TryParse(parts[2], out var ticks) &&
-                File.GetLastWriteTimeUtc(target).Ticks == ticks)
-                position = parsed;
+                long.TryParse(parts[2], out var ticks))
+            {
+                // When another writer publishes a newer catalog, the local
+                // journal is no longer a trustworthy history of that snapshot.
+                // Drop the old hints rather than replay them against it.
+                if (File.GetLastWriteTimeUtc(target).Ticks == ticks &&
+                    (parts.Length == 3 ||
+                     (long.TryParse(parts[3], out var catalogLength) && catalogLength == new FileInfo(target).Length)))
+                    position = parsed;
+                else
+                    catalogChangedSinceCursor = true;
+            }
         }
         using var stream = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         // A truncated or replaced journal invalidates the previous byte offset.
         if (position < 0 || position > stream.Length) position = 0;
         var end = CompleteBoundary(stream, position);
-        if (end - position > MaxBatchBytes)
+        if (!catalogChangedSinceCursor && end - position > MaxBatchBytes)
             end = BatchBoundary(stream, position, end);
         // Test seam for deterministic concurrent appends. The captured end is
         // immutable: notifications written afterwards belong to the next batch.
         afterJournalSnapshot?.Invoke();
+        if (catalogChangedSinceCursor)
+        {
+            // Only acknowledge records complete at the captured boundary.
+            // New arrivals after that boundary remain pending for next time.
+            token.ThrowIfCancellationRequested();
+            EnsureRootAccessible(root);
+            if (!CatalogFileStamp.Read(target).Equals(originalStamp))
+                throw new IOException("Shared catalog changed during journal reset; retry without advancing cursor.");
+            var tempCursor = marker + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(tempCursor, signature + "\t" + end + "\t" +
+                    originalStamp.LastWriteUtcTicks + "\t" + originalStamp.Length);
+                File.Move(tempCursor, marker, overwrite: true);
+            }
+            finally { if (File.Exists(tempCursor)) File.Delete(tempCursor); }
+            return new(0, 0, end, false);
+        }
         if (position > end) position = 0; // Journal rotation or truncation.
         if (position == end) return new(0, 0, position, false);
         // Snapshot the journal boundary before doing expensive work. Append-only watcher
@@ -186,7 +216,7 @@ public static class IncrementalJournalPublisher
             try
             {
                 File.WriteAllText(tempMarker, signature + "\t" + end + "\t" +
-                    File.GetLastWriteTimeUtc(target).Ticks);
+                    File.GetLastWriteTimeUtc(target).Ticks + "\t" + new FileInfo(target).Length);
                 File.Move(tempMarker, marker, overwrite: true);
             }
             finally { if (File.Exists(tempMarker)) File.Delete(tempMarker); }
