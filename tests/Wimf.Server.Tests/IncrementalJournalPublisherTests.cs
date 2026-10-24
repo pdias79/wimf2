@@ -223,7 +223,7 @@ public class IncrementalJournalPublisherTests
     }
 
     [Fact]
-    public void ExternalCatalogPublicationInvalidatesLocalIncrementalCursor()
+    public void ExternalCatalogPublicationReplaysLocalJournalWithoutOverwritingForeignChanges()
     {
         var temp = Path.Combine(Path.GetTempPath(), "wimf-foreign-publication-" + Guid.NewGuid().ToString("N"));
         var root = Path.Combine(temp, "source");
@@ -246,17 +246,15 @@ public class IncrementalJournalPublisherTests
             File.WriteAllText(foreign, "foreign");
             LegacyCatalogWriter.Build(root, catalog);
             File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddSeconds(5));
-            var publishedBytes = File.ReadAllBytes(catalog);
 
-            // Host A may have more journal events, but it cannot safely replay
-            // them on a catalog version that differs from its acknowledgement.
+            // Host A replays its own historical hints against the current catalog.
+            // It must preserve entries published by host B.
             File.AppendAllText(journal, "E\tchanged\t" +
                 Convert.ToBase64String(Encoding.UTF8.GetBytes(local)) + "\n");
-            var ex = Assert.Throws<IOException>(() =>
-                IncrementalJournalPublisher.Publish(root, catalog, journal));
-            Assert.Contains("full reconciliation", ex.Message);
-            Assert.Equal(publishedBytes, File.ReadAllBytes(catalog));
-            Assert.Equal(acknowledged, File.ReadAllBytes(cursor));
+            var result = IncrementalJournalPublisher.Publish(root, catalog, journal);
+            Assert.True(result.Changed);
+            Assert.NotEqual(acknowledged, File.ReadAllBytes(cursor));
+            Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             var current = LegacyCatalogReader.ReadFile(catalog);
             Assert.Contains(current.EnumerateEntries(),
                 e => current.GetFullPath(e.Id) == foreign);
