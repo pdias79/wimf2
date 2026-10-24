@@ -894,7 +894,8 @@ app.MapGet("/api/catalog-management", () =>
             job?.EffectiveExclusions, job?.QueuedAt, job?.ScanMetrics, job?.EnumeratedDirectories ?? 0,
             CatalogLockMarker.Read(entry.Path),
             catalog is null ? null : catalogStatistics.GetValue(catalog, CatalogExtensionStatistics.Calculate).Extensions,
-            job?.LastIncrementalOutcome, job?.LastIncrementalAttempt);
+            job?.LastIncrementalOutcome, job?.LastIncrementalAttempt,
+            job?.LastDiscardedJournalBytes, job?.LastDiscardedAt);
     }).ToArray();
     return Results.Json(managed, WimfJsonContext.Default.ManagedCatalogStatusArray);
 });
