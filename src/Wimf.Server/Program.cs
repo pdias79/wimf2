@@ -1081,6 +1081,11 @@ if (options.Indexing is { Length: > 0 })
                 job.Root, job.Output, watcher.JournalPath, token, job.Exclude,
                 extensions: job.Extensions), token);
             incrementalMetrics[job.Output] = (result.EventRecords, result.DistinctPaths, result.Hints);
+            if (result.DiscardedStaleJournal)
+            {
+                indexingScheduler?.ReportDiscardedJournal(job, result.DiscardedJournalBytes);
+                Console.WriteLine($"[INCREMENTAL-RESET] {job.Root} | old journal discarded={result.DiscardedJournalBytes} bytes | external catalog publication");
+            }
             if (result.Changed)
                 Console.WriteLine($"[INCREMENTAL] {job.Root} | events={result.EventRecords} | distinct={result.DistinctPaths} | paths={result.Hints} | elapsed={result.ElapsedMilliseconds} ms | entries={result.Entries}");
             return result.Changed;
