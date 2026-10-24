@@ -534,6 +534,14 @@ public static class WebUi
             ? " · " + formatDate(catalog.lastIncrementalAttempt) : "");
         item.appendChild(problem);
       }
+      if (catalog.lastDiscardedAt) {
+        const discarded = document.createElement("div");
+        discarded.className = "catalog-details";
+        discarded.textContent = "Journal incrémental réinitialisé après une mise à jour extérieure : " +
+          Number(catalog.lastDiscardedJournalBytes || 0).toLocaleString("fr-FR") +
+          " octets ignorés · " + formatDate(catalog.lastDiscardedAt);
+        item.appendChild(discarded);
+      }
       if (catalog.lockMarker && catalog.lockMarker.present) {
         const marker = document.createElement("div");
         marker.className = "catalog-details";

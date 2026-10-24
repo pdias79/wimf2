@@ -329,6 +329,8 @@ public class IncrementalJournalPublisherTests
                         Convert.ToBase64String(Encoding.UTF8.GetBytes(currentFile)) + "\n");
                 });
             Assert.False(reset.Changed);
+            Assert.True(reset.DiscardedStaleJournal);
+            Assert.True(reset.DiscardedJournalBytes > 0);
             Assert.Equal(1, IncrementalJournalPublisher.Pending(catalog, journal).Events);
             Assert.True(IncrementalJournalPublisher.Publish(root, catalog, journal).Changed);
             Assert.Equal(0, IncrementalJournalPublisher.Pending(catalog, journal).Events);
