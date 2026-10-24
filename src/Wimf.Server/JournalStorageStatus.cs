@@ -27,7 +27,7 @@ public static class JournalStorageStatus
             !long.TryParse(parts[2], out var ticks) ||
             offset < 0 || offset > length ||
             File.GetLastWriteTimeUtc(target).Ticks != ticks ||
-            (parts.Length == 4 && (!long.TryParse(parts[3], out var size) ||
+            (parts.Length >= 4 && (!long.TryParse(parts[3], out var size) ||
                                    new FileInfo(target).Length != size)) ||
             (parts.Length == 5 && parts[4] != CatalogFileStamp.SampleFingerprint(target)))
             return new(length, 0, length, false);
