@@ -15,11 +15,13 @@ public sealed record CatalogExtensionStatistics(int FileCount, CatalogExtensionC
         {
             if (entry.Extension == "folder") continue;
             total++;
-            var extension = string.IsNullOrEmpty(entry.Extension) ? "(sans extension)" : entry.Extension.ToLowerInvariant();
+            // Reuse existing catalog strings while counting millions of entries.
+            // The dictionary is case-insensitive; normalize only distinct keys for output.
+            var extension = string.IsNullOrEmpty(entry.Extension) ? "(sans extension)" : entry.Extension;
             counts[extension] = counts.GetValueOrDefault(extension) + 1;
         }
         return new CatalogExtensionStatistics(total,
             counts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal)
-                .Select(pair => new CatalogExtensionCount(pair.Key, pair.Value)).ToArray());
+                .Select(pair => new CatalogExtensionCount(pair.Key.ToLowerInvariant(), pair.Value)).ToArray());
     }
 }
