@@ -395,4 +395,13 @@ public class WebUiTests
         Assert.DoesNotContain("innerHTML", WebUi.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void CatalogPanelSummarizesOperationalStates()
+    {
+        Assert.Contains("queued ? \" · \" + queued + \" en file d’attente\"", WebUi.Html);
+        Assert.Contains("deferred ? \" · \" + deferred + \" incrémentale(s) reportée(s)\"", WebUi.Html);
+        Assert.Contains("unavailable ? \" · \" + unavailable + \" indisponible(s)\"", WebUi.Html);
+        Assert.Contains("lastIncrementalOutcome === \"postponed\"", WebUi.Html);
+    }
+
 }
