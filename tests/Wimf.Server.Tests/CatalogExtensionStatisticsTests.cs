@@ -31,4 +31,28 @@ public sealed class CatalogExtensionStatisticsTests
         }
         finally { Directory.Delete(temp, recursive: true); }
     }
+    [Fact]
+    public void BenchmarkReportsFileCountWithoutMutatingCatalog()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-stats-bench-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "a.PDF"), "a");
+            File.WriteAllText(Path.Combine(root, "b.pdf"), "b");
+            var catalogPath = Path.Combine(temp, "catalog.txt.gz");
+            LegacyCatalogWriter.Build(root, catalogPath);
+            var original = File.ReadAllBytes(catalogPath);
+            var catalog = LegacyCatalogReader.ReadFile(catalogPath);
+            var result = CatalogExtensionStatisticsBenchmark.Measure(catalog);
+            Assert.Equal(2, result.Files);
+            Assert.Equal(1, result.DistinctExtensions);
+            Assert.True(result.ElapsedMilliseconds >= 0);
+            Assert.True(result.AllocatedBytes >= 0);
+            Assert.Equal(original, File.ReadAllBytes(catalogPath));
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
 }
