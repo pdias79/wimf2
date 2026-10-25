@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Wimf.Catalog;
 
 namespace Wimf.Server;
@@ -23,5 +24,22 @@ public sealed record CatalogExtensionStatistics(int FileCount, CatalogExtensionC
         return new CatalogExtensionStatistics(total,
             counts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal)
                 .Select(pair => new CatalogExtensionCount(pair.Key.ToLowerInvariant(), pair.Value)).ToArray());
+    }
+}
+
+/// <summary>Opt-in measurement: statistics execution time and current-thread allocations.</summary>
+public static class CatalogExtensionStatisticsBenchmark
+{
+    public sealed record Snapshot(int Files, int DistinctExtensions,
+        long ElapsedMilliseconds, long AllocatedBytes);
+
+    public static Snapshot Measure(Wimf.Catalog.Catalog catalog)
+    {
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var timer = Stopwatch.StartNew();
+        var result = CatalogExtensionStatistics.Calculate(catalog);
+        timer.Stop();
+        return new Snapshot(result.FileCount, result.Extensions.Length,
+            timer.ElapsedMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 }
