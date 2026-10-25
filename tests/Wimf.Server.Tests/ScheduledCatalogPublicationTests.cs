@@ -71,4 +71,42 @@ public class ScheduledCatalogPublicationTests
         finally { if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true); }
     }
 
+    [Fact]
+    public void ForeignPublicationDuringFullScanIsNotOverwrittenByStaging()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wimf-full-race-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(temp, "source");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var catalog = Path.Combine(temp, "shared.txt.gz");
+            var initial = Path.Combine(root, "first.txt");
+            File.WriteAllText(initial, "initial");
+            ScheduledCatalogPublication.Refresh(root, catalog);
+
+            var second = Path.Combine(root, "second.txt");
+            File.WriteAllText(second, "second");
+            byte[]? foreignBytes = null;
+            var foreignPublication = false;
+
+            // Simulate host B publishing while host A has staged its own scan.
+            var exception = Assert.Throws<IOException>(() =>
+                ScheduledCatalogPublication.Refresh(root, catalog, onMetrics: _ =>
+                {
+                    foreignPublication = true;
+                    LegacyCatalogWriter.Build(root, catalog);
+                    File.SetLastWriteTimeUtc(catalog, DateTime.UtcNow.AddMinutes(2));
+                    foreignBytes = File.ReadAllBytes(catalog);
+                }));
+
+            Assert.True(foreignPublication);
+            Assert.Contains("Catalog changed", exception.Message);
+            Assert.Equal(foreignBytes, File.ReadAllBytes(catalog));
+            Assert.Empty(Directory.GetFiles(temp, ".wimf-staging-*"));
+            var published = LegacyCatalogReader.ReadFile(catalog);
+            Assert.Equal(2, published.EnumerateEntries().Count());
+        }
+        finally { Directory.Delete(temp, recursive: true); }
+    }
+
 }
