@@ -440,10 +440,16 @@ public static class WebUi
     indexingList.replaceChildren();
     const runningCatalog = catalogs.find(c => c.state === "running");
     const active = catalogs.filter(c => c.state === "running").length;
+    const queued = catalogs.filter(c => c.state === "queued").length;
     const errors = catalogs.filter(c => c.state === "failed").length;
+    const deferred = catalogs.filter(c => c.lastIncrementalOutcome === "postponed").length;
+    const unavailable = catalogs.filter(c => !c.available).length;
     indexingSummary.textContent = catalogs.length + " catalogue(s)" +
       (active ? " · " + active + " en cours" : "") +
-      (errors ? " · " + errors + " en échec" : "");
+      (queued ? " · " + queued + " en file d’attente" : "") +
+      (errors ? " · " + errors + " en échec" : "") +
+      (deferred ? " · " + deferred + " incrémentale(s) reportée(s)" : "") +
+      (unavailable ? " · " + unavailable + " indisponible(s)" : "");
     if (catalogs.length === 0) {
       const note = document.createElement("p");
       note.className = "status";
