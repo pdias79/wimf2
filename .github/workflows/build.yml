@@ -47,3 +47,18 @@ jobs:
           name: Wimf-win-x64-single-exe
           path: artifacts/windows/Wimf.exe
           if-no-files-found: error
+
+      - name: Experiment Native AOT server publish (non-blocking)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: ./scripts/Test-WindowsNativeAot.ps1
+      - name: Upload Native AOT feasibility report
+        if: runner.os == 'Windows' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wimf-win-x64-aot-experiment
+          path: |
+            artifacts/windows-aot-experiment/result.txt
+            artifacts/windows-aot-experiment/publish.log
+          if-no-files-found: warn
