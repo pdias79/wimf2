@@ -23,3 +23,13 @@ GitHub Actions produit l'artefact **`Wimf-win-x64-native`** contenant `Wimf.exe`
 Le serveur AOT est extrait dans `%LOCALAPPDATA%\Wimf2\server-runtime\<SHA256>\Wimf.Server.exe` puis lancé comme processus enfant. Le menu « Messages du serveur » ouvre le journal `%LOCALAPPDATA%\Wimf2\logs\server-native.log`. L'application utilise le port local 5080. Les catalogues et caches restent extérieurs au binaire.
 
 Validation manuelle conseillée avant fusion : icône EXE et zone de notification, accents du menu et de la boîte de lancement multiple, fenêtre « À propos » avec lien GitHub, ouverture de l'interface, recherche, lecture des catalogues, arrêt propre. Ne pas faire d'essais d'indexation sur les catalogues de production.
+
+## Variante expérimentale avec serveur compressé
+
+Le build Windows normal reste `Wimf-win-x64-native` : son serveur Native AOT est stocké sans compression supplémentaire.
+
+La CI tente maintenant de créer `Wimf-win-x64-native-compressed-experiment` en compressant le serveur avec **XPRESS_HUFF** (API native Windows, `cabinet.dll`). Le lanceur C++ décompresse cette ressource en mémoire, puis écrit le serveur habituel dans le cache local identifié par SHA-256.
+
+Les mesures sont dans `sizes.txt` (octets avant/après et économie). Le résultat de cette expérience est non bloquant et **ne remplace pas** le build Windows principal.
+
+Compromis : le démarrage initial effectue une décompression et une allocation mémoire temporaire supplémentaire. Vérifier en priorité le lancement, l'extraction correcte, la recherche, le menu et la fermeture. Si l'artefact compressé n'est pas produit, consulter les logs Windows plutôt que considérer une CI verte comme une validation de cette variante.
