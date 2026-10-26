@@ -48,6 +48,9 @@ jobs:
           path: artifacts/windows/Wimf.exe
           if-no-files-found: error
 
+      - name: Initialize MSVC for experimental C++ launcher
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
       - name: Experiment Native AOT server publish (non-blocking)
         if: runner.os == 'Windows'
         continue-on-error: true
@@ -62,4 +65,5 @@ jobs:
             artifacts/windows-aot-experiment/result.txt
             artifacts/windows-aot-experiment/publish.log
             artifacts/windows-aot-experiment/Wimf-AOT.exe
+            artifacts/windows-aot-experiment/Wimf-Native.exe
           if-no-files-found: warn
