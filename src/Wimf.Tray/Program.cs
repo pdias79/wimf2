@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
 
@@ -86,6 +87,7 @@ internal sealed class TrayApplication : ApplicationContext
             }
             else forwarded.Add(args[i]);
         }
+        server ??= EmbeddedServer.ExtractIfPresent();
         server ??= new[] {
             Path.Combine(AppContext.BaseDirectory, "Wimf.Server.exe"),
             Path.Combine(AppContext.BaseDirectory, "Wimf.Server.dll"),
@@ -241,5 +243,42 @@ internal sealed class TrayApplication : ApplicationContext
         }
         _server.Dispose();
         base.ExitThreadCore();
+    }
+}
+
+internal static class EmbeddedServer
+{
+    private const string ResourceName = "Wimf.EmbeddedServer.exe";
+
+    public static string? ExtractIfPresent()
+    {
+        using var resource = typeof(Program).Assembly.GetManifestResourceStream(ResourceName);
+        if (resource is null) return null;
+
+        // Version the cache by content so updates never overwrite a running server.
+        using var bytes = new MemoryStream();
+        resource.CopyTo(bytes);
+        var payload = bytes.ToArray();
+        var digest = Convert.ToHexString(SHA256.HashData(payload));
+        var directory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Wimf2", "server-runtime", digest);
+        Directory.CreateDirectory(directory);
+        var target = Path.Combine(directory, "Wimf.Server.exe");
+        if (File.Exists(target) &&
+            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(target))) == digest)
+            return target;
+
+        var staging = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            File.WriteAllBytes(staging, payload);
+            File.Move(staging, target, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(staging)) File.Delete(staging);
+        }
+        return target;
     }
 }
