@@ -256,23 +256,26 @@ internal static class EmbeddedServer
         if (resource is null) return null;
 
         // Version the cache by content so updates never overwrite a running server.
-        using var bytes = new MemoryStream();
-        resource.CopyTo(bytes);
-        var payload = bytes.ToArray();
-        var digest = Convert.ToHexString(SHA256.HashData(payload));
+        // Stream the resource instead of allocating a second copy of a large EXE.
+        var digest = Convert.ToHexString(SHA256.HashData(resource));
         var directory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Wimf2", "server-runtime", digest);
         Directory.CreateDirectory(directory);
         var target = Path.Combine(directory, "Wimf.Server.exe");
-        if (File.Exists(target) &&
-            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(target))) == digest)
-            return target;
+        if (File.Exists(target))
+        {
+            using var existing = File.OpenRead(target);
+            if (Convert.ToHexString(SHA256.HashData(existing)) == digest)
+                return target;
+        }
 
         var staging = Path.Combine(directory, Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            File.WriteAllBytes(staging, payload);
+            using (var input = typeof(Program).Assembly.GetManifestResourceStream(ResourceName)!)
+            using (var output = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                input.CopyTo(output);
             File.Move(staging, target, overwrite: true);
         }
         finally
