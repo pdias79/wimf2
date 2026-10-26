@@ -28,3 +28,22 @@ jobs:
         run: dotnet test Wimf.slnx --configuration Release --no-build
       - name: Benchmark smoke test
         run: dotnet run --project benchmarks/Wimf.Benchmarks --configuration Release --no-build -- --count 1000 --folders 100 --depth 8 --iterations 1 --profile-refresh
+
+      - name: Publish single Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/Publish-WindowsSingleExe.ps1
+      - name: Verify portable Windows bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = "artifacts/windows/Wimf.exe"
+          if (-not (Test-Path $exe)) { throw "Wimf.exe missing" }
+          if ((Get-ChildItem artifacts/windows -File).Count -ne 1) { throw "Expected one distributable file" }
+      - name: Upload portable Windows executable
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wimf-win-x64-single-exe
+          path: artifacts/windows/Wimf.exe
+          if-no-files-found: error

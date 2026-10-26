@@ -9,6 +9,9 @@
     <ApplicationIcon>$(IntermediateOutputPath)wimf.ico</ApplicationIcon>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup Condition="'$(EmbeddedServerExecutable)' != ''">
+    <EmbeddedResource Include="$(EmbeddedServerExecutable)" LogicalName="Wimf.EmbeddedServer.exe" />
+  </ItemGroup>
   <Target Name="GenerateWimfIcon" BeforeTargets="CoreCompile;_CreateAppHost;GenerateWin32Resources">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/GenerateIcon.ps1&quot; -Output &quot;$(MSBuildProjectDirectory)/$(ApplicationIcon)&quot;" />
   </Target>
