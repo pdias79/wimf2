@@ -19,8 +19,13 @@
 #define CMD_LOGS 1002
 #define CMD_ABOUT 1003
 #define CMD_EXIT 1004
+#define APP_ICON 102
+#define CMD_GITHUB 1005
+#define WIMF_VERSION L"2.0.0"
 
 static HWND windowHandle = nullptr;
+static HWND aboutHandle = nullptr;
+static HINSTANCE applicationInstance = nullptr;
 static NOTIFYICONDATAW tray = {};
 static HANDLE child = nullptr, childThread = nullptr, childInput = nullptr, mutexHandle = nullptr;
 static std::wstring logsPath;
@@ -179,6 +184,53 @@ static void StopServer() {
     if (childInput) { CloseHandle(childInput); childInput = nullptr; }
     if (childThread) { CloseHandle(childThread); childThread = nullptr; }
 }
+static LRESULT CALLBACK AboutProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+    if (message == WM_COMMAND && LOWORD(wp) == CMD_GITHUB && HIWORD(wp) == STN_CLICKED) {
+        ShellExecuteW(window, L"open", L"https://github.com/pdias79/wimf2", nullptr, nullptr, SW_SHOWNORMAL);
+        return 0;
+    }
+    if (message == WM_CLOSE) { DestroyWindow(window); return 0; }
+    if (message == WM_DESTROY) { aboutHandle = nullptr; return 0; }
+    return DefWindowProcW(window, message, wp, lp);
+}
+static void OpenAbout() {
+    if (aboutHandle) { ShowWindow(aboutHandle, SW_SHOW); SetForegroundWindow(aboutHandle); return; }
+    static bool registered = false;
+    if (!registered) {
+        WNDCLASSW wc = {};
+        wc.lpfnWndProc = AboutProcedure;
+        wc.hInstance = applicationInstance;
+        wc.lpszClassName = L"Wimf2NativeAbout";
+        wc.hIcon = LoadIconW(applicationInstance, MAKEINTRESOURCEW(APP_ICON));
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return;
+        registered = true;
+    }
+    aboutHandle = CreateWindowExW(WS_EX_DLGMODALFRAME, L"Wimf2NativeAbout",
+        L"\u00c0 propos de Wimf 2", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+        CW_USEDEFAULT, CW_USEDEFAULT, 440, 280, windowHandle, nullptr, applicationInstance, nullptr);
+    if (!aboutHandle) return;
+    HWND image = CreateWindowW(L"STATIC", nullptr, WS_CHILD | WS_VISIBLE | SS_ICON,
+        174, 18, 80, 80, aboutHandle, nullptr, applicationInstance, nullptr);
+    HICON icon = static_cast<HICON>(LoadImageW(applicationInstance, MAKEINTRESOURCEW(APP_ICON),
+        IMAGE_ICON, 64, 64, LR_DEFAULTCOLOR));
+    SendMessageW(image, STM_SETICON, reinterpret_cast<WPARAM>(icon), 0);
+    CreateWindowW(L"STATIC", L"Wimf 2 - Version " WIMF_VERSION,
+        WS_CHILD | WS_VISIBLE | SS_CENTER, 55, 110, 315, 25,
+        aboutHandle, nullptr, applicationInstance, nullptr);
+    CreateWindowW(L"STATIC", L"Philippe DIAS", WS_CHILD | WS_VISIBLE | SS_CENTER,
+        55, 145, 315, 24, aboutHandle, nullptr, applicationInstance, nullptr);
+    HWND link = CreateWindowW(L"STATIC", L"https://github.com/pdias79/wimf2",
+        WS_CHILD | WS_VISIBLE | SS_CENTER | SS_NOTIFY,
+        55, 183, 315, 27, aboutHandle,
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(CMD_GITHUB)), applicationInstance, nullptr);
+    HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
+    SendMessageW(link, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+    ShowWindow(aboutHandle, SW_SHOW);
+    UpdateWindow(aboutHandle);
+}
+
 static void Menu() {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, CMD_OPEN, L"Ouvrir la recherche");
@@ -202,7 +254,7 @@ static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wp, LP
         switch (LOWORD(wp)) {
             case CMD_OPEN: ShellExecuteW(window, L"open", SERVER_URL, nullptr, nullptr, SW_SHOWNORMAL); break;
             case CMD_LOGS: ShellExecuteW(window, L"open", L"notepad.exe", Quote(logsPath).c_str(), nullptr, SW_SHOWNORMAL); break;
-            case CMD_ABOUT: MessageBoxW(window, L"Wimf 2 - lanceur C++ natif expérimental\nPhilippe DIAS", L"À propos de Wimf 2", MB_OK); break;
+            case CMD_ABOUT: OpenAbout(); break;
             case CMD_EXIT: DestroyWindow(window); break;
         }
         return 0;
@@ -216,6 +268,7 @@ static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM wp, LP
     return DefWindowProcW(window, message, wp, lp);
 }
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+    applicationInstance = instance;
     // Same instance name as the .NET tray: do not run the two variants concurrently.
     mutexHandle = CreateMutexW(nullptr, TRUE, L"Local\\Wimf2.Tray.Instance");
     if (!mutexHandle || GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -225,6 +278,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WindowProcedure;
+    wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(APP_ICON));
     wc.hInstance = instance;
     wc.lpszClassName = CLASS_NAME;
     RegisterClassW(&wc);
@@ -235,7 +289,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     tray.uID = 1;
     tray.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     tray.uCallbackMessage = WM_TRAY;
-    tray.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    tray.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(APP_ICON));
     wcscpy_s(tray.szTip, L"Wimf 2 - Recherche de fichiers");
     if (!Shell_NotifyIconW(NIM_ADD, &tray)) { Failure(L"Impossible d'afficher l'icône de notification."); DestroyWindow(windowHandle); return 3; }
     tray.uVersion = NOTIFYICON_VERSION_4;
