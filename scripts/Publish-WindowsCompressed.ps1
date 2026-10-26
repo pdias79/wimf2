@@ -7,7 +7,7 @@ $server = Join-Path $serverDir "Wimf.Server.exe"
 $target = Join-Path $root "artifacts/windows-compressed"
 New-Item -ItemType Directory -Force $target | Out-Null
 if (-not (Test-Path $server)) { throw "Build normal native version first" }
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "Compress-NativeServer.ps1") -InputFile $server -OutputFile (Join-Path $serverDir "Wimf.Server.xpress")
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot "Compress-NativeServer.ps1") -InputFile $server -OutputFile (Join-Path $serverDir "Wimf.Server.xpress")
 if ($LASTEXITCODE -ne 0) { throw "Compression failed" }
 $resource = Join-Path $root "src/Wimf.NativeTray/server.rc"
 $source = Join-Path $root "src/Wimf.NativeTray/main.cpp"
