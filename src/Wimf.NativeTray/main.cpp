@@ -12,6 +12,7 @@
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "user32.lib")
+#pragma comment(lib, "gdi32.lib")
 
 #define SERVER_RESOURCE 101
 #define WM_TRAY (WM_APP + 1)
