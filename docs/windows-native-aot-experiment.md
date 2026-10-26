@@ -49,3 +49,18 @@ La validation Windows x64 réelle doit précéder toute décision d'adopter AOT 
 7. Signaler toute exception, erreur de sérialisation, absence d'interface ou crash. En cas d'échec, revenir au `Wimf.exe` classique sans modification de la configuration.
 
 Le serveur extrait est placé dans un sous-dossier de `%LOCALAPPDATA%\\Wimf2\\server-runtime` distinct pour chaque empreinte binaire.
+
+## Deux variantes Windows en parallèle
+
+- **Wimf-AOT.exe** : lanceur Windows Forms .NET, avec serveur Native AOT embarqué.
+- **Wimf-Native.exe** : lanceur Win32 **C++ natif**, avec le **même serveur Native AOT** embarqué comme ressource RCDATA. Son interface est volontairement minimale : icône Windows, recherche dans le navigateur, menu contextuel, accès au journal via Bloc-notes, boîte À propos et arrêt du serveur.
+
+L'application Windows historique **Wimf.exe** est toujours produite par les CI indépendamment des deux variantes expérimentales.
+
+Le script utilise `cl.exe` et `rc.exe` du compilateur Visual C++ sur le runner Windows. La compilation C++ requiert l'environnement MSVC (préparé par le workflow).
+
+Le serveur natif est extrait, au premier lancement, sous `%LOCALAPPDATA%\Wimf2\server-runtime\<SHA256>\Wimf.Server.exe`, puis démarré en processus enfant. Le journal stdout/stderr du serveur est stocké dans `%LOCALAPPDATA%\Wimf2\logs\server-native.log` : le menu **Messages du serveur** ouvre ce fichier dans le Bloc-notes.
+
+**Tester les variantes une par une** : elles partagent volontairement le mutex global au profil utilisateur et le port local 5080. Les fichiers de configuration restent externes, avec découverte automatique d'un `wimf.json` à côté du lanceur.
+
+La génération en CI prouve la compilation et la présence des deux binaires ; les détails ergonomiques et l'arrêt propre de la variante C++ doivent être validés manuellement avant promotion en version stable.
