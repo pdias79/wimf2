@@ -1,2 +1,4 @@
 #include <windows.h>
 101 RCDATA "Wimf.Server.exe"
+
+102 ICON "wimf.ico"
