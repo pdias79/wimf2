@@ -21,29 +21,43 @@ jobs:
         run: dotnet restore Wimf.slnx
       - name: Build
         run: dotnet build Wimf.slnx --configuration Release --no-restore
-      - name: Build Windows tray launcher
-        if: runner.os == 'Windows'
-        run: dotnet build src/Wimf.Tray/Wimf.Tray.csproj --configuration Release
       - name: Test
         run: dotnet test Wimf.slnx --configuration Release --no-build
       - name: Benchmark smoke test
         run: dotnet run --project benchmarks/Wimf.Benchmarks --configuration Release --no-build -- --count 1000 --folders 100 --depth 8 --iterations 1 --profile-refresh
 
-      - name: Publish single Windows executable
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Publish native Windows executable (required)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/Publish-WindowsSingleExe.ps1
-      - name: Verify portable Windows bundle
+        run: ./scripts/Test-WindowsNativeAot.ps1
+      - name: Verify native Windows artifact
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $exe = "artifacts/windows/Wimf.exe"
-          if (-not (Test-Path $exe)) { throw "Wimf.exe missing" }
-          if ((Get-ChildItem artifacts/windows -File).Count -ne 1) { throw "Expected one distributable file" }
-      - name: Upload portable Windows executable
+          if (-not (Test-Path $exe)) { throw "Native Wimf.exe missing" }
+          if ((Get-ChildItem artifacts/windows -File).Count -ne 1) { throw "Expected exactly one distributable file" }
+      - name: Upload native Windows executable
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: Wimf-win-x64-single-exe
+          name: Wimf-win-x64-native
           path: artifacts/windows/Wimf.exe
+          if-no-files-found: error
+
+      - name: Build compressed AOT server variant (required)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/Publish-WindowsCompressed.ps1
+      - name: Upload compressed experimental Windows executable
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wimf-win-x64-native-compressed-experiment
+          path: |
+            artifacts/windows-compressed/Wimf.exe
+            artifacts/windows-compressed/sizes.txt
           if-no-files-found: error

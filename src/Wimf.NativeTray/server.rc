@@ -1,0 +1,7 @@
+#include <windows.h>
+#ifdef WIMF_COMPRESSED_SERVER
+103 RCDATA "Wimf.Server.xpress"
+#else
+101 RCDATA "Wimf.Server.exe"
+#endif
+102 ICON "wimf.ico"
