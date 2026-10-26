@@ -1,70 +1,39 @@
 param(
-    [string] $OutputDirectory = "artifacts/windows-aot-experiment"
+    [string] $OutputDirectory = "artifacts/windows"
 )
 
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$target = [System.IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
-$serverOutput = Join-Path $target "server"
-$logPath = Join-Path $target "publish.log"
-New-Item -ItemType Directory -Force $serverOutput | Out-Null
+$target = [IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
+$stage = Join-Path $root "artifacts/.windows-native-build"
+$serverOutput = Join-Path $stage "server"
+New-Item -ItemType Directory -Force $target, $serverOutput | Out-Null
 
-# Probe only: AOT is not enabled in the production project.
-# Preserve warnings and exit status for evaluation without affecting the stable JIT bundle.
-$arguments = @(
-    "publish", (Join-Path $root "src/Wimf.Server/Wimf.Server.csproj"),
-    "-c", "Release", "-r", "win-x64", "--self-contained", "true",
-    "-p:PublishAot=true", "-p:StripSymbols=true",
-    "-p:DebugType=None", "-p:DebugSymbols=false",
-    "-o", $serverOutput
-)
-& dotnet @arguments 2>&1 | Tee-Object -FilePath $logPath
-$exitCode = $LASTEXITCODE
-$binary = Join-Path $serverOutput "Wimf.Server.exe"
-if ($exitCode -eq 0 -and (Test-Path $binary)) {
-    $size = (Get-Item $binary).Length
-    "result=success`nserverBytes=$size" | Set-Content (Join-Path $target "result.txt")
-    Write-Host "AOT server compilation succeeded, size=$size bytes"
+# Mandatory native Windows package: AOT server + C++ tray in one distributable EXE.
+dotnet publish (Join-Path $root "src/Wimf.Server/Wimf.Server.csproj") -c Release -r win-x64 --self-contained true "-p:PublishAot=true" "-p:StripSymbols=true" "-p:DebugType=None" "-p:DebugSymbols=false" -o $serverOutput
+if ($LASTEXITCODE -ne 0) { throw "Native AOT server publication failed" }
+$server = Join-Path $serverOutput "Wimf.Server.exe"
+if (-not (Test-Path $server)) { throw "Native AOT server executable missing" }
 
-    # Keep stable build unchanged: package the native server inside a separate tray EXE.
-    $trayOutput = Join-Path $target "tray"
-    New-Item -ItemType Directory -Force $trayOutput | Out-Null
-    & dotnet publish (Join-Path $root "src/Wimf.Tray/Wimf.Tray.csproj") -c Release -r win-x64 --self-contained true "-p:PublishSingleFile=true" "-p:IncludeNativeLibrariesForSelfExtract=true" "-p:DebugType=None" "-p:DebugSymbols=false" "-p:EmbeddedServerExecutable=$binary" -o $trayOutput 2>&1 | Tee-Object -FilePath $logPath -Append
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $trayOutput "Wimf.Tray.exe"))) {
-        throw "Native AOT trial launcher publication failed."
-    }
-    $trial = Join-Path $target "Wimf-AOT.exe"
-    Copy-Item (Join-Path $trayOutput "Wimf.Tray.exe") $trial -Force
-    $trialBytes = (Get-Item $trial).Length
-    Add-Content (Join-Path $target "result.txt") "packageBytes=$trialBytes"
-    Write-Host "Native AOT trial package: $trial ($trialBytes bytes)"
-
-    # Second alternative: tiny Win32 C++ tray, linking the same AOT server as RCDATA.
-    # Runs from the server directory so rc.exe can locate Wimf.Server.exe.
-    $nativeSource = Join-Path $root "src/Wimf.NativeTray/main.cpp"
-    $nativeResource = Join-Path $root "src/Wimf.NativeTray/server.rc"
-    $resourceOutput = Join-Path $target "server.res"
-    $nativeOutput = Join-Path $target "Wimf-Native.exe"
-    if ((Get-Command rc.exe -ErrorAction SilentlyContinue) -and (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "src/Wimf.Tray/GenerateIcon.ps1") -Output (Join-Path $serverOutput "wimf.ico")
-        if ($LASTEXITCODE -ne 0) { throw "Native tray icon generation failed" }
-        Push-Location $serverOutput
-        try {
-            & rc.exe /nologo "/fo$resourceOutput" $nativeResource 2>&1 | Tee-Object -FilePath $logPath -Append
-            if ($LASTEXITCODE -ne 0) { throw "Native launcher resource compilation failed" }
-        }
-        finally { Pop-Location }
-        & cl.exe /nologo /std:c++17 /utf-8 /EHsc /O2 /DUNICODE /D_UNICODE $nativeSource $resourceOutput "/Fe:$nativeOutput" /link /SUBSYSTEM:WINDOWS 2>&1 | Tee-Object -FilePath $logPath -Append
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $nativeOutput)) { throw "Native launcher C++ compilation failed" }
-        $nativeBytes = (Get-Item $nativeOutput).Length
-        Add-Content (Join-Path $target "result.txt") "nativePackageBytes=$nativeBytes"
-        Write-Host "Native C++ launcher package: $nativeOutput ($nativeBytes bytes)"
-    } else {
-        Add-Content (Join-Path $target "result.txt") "nativeLauncher=compiler-unavailable"
-        Write-Host "MSVC compiler not available: native launcher skipped."
-    }
-} else {
-    "result=failed`nexitCode=$exitCode" | Set-Content (Join-Path $target "result.txt")
-    Write-Host "AOT server compilation failed: inspect publish.log (exit=$exitCode)"
+if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue) -or -not (Get-Command rc.exe -ErrorAction SilentlyContinue)) {
+    throw "MSVC and Windows resource compiler are required"
 }
-# Deliberately do not fail the regular Windows CI: report AOT feasibility separately.
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "src/Wimf.Tray/GenerateIcon.ps1") -Output (Join-Path $serverOutput "wimf.ico")
+if ($LASTEXITCODE -ne 0) { throw "Native icon generation failed" }
+
+$resourceOutput = Join-Path $stage "server.res"
+$source = Join-Path $root "src/Wimf.NativeTray/main.cpp"
+$resource = Join-Path $root "src/Wimf.NativeTray/server.rc"
+$built = Join-Path $stage "Wimf.exe"
+Push-Location $serverOutput
+try {
+    rc.exe /nologo "/fo$resourceOutput" $resource
+    if ($LASTEXITCODE -ne 0) { throw "Native resource compilation failed" }
+}
+finally { Pop-Location }
+cl.exe /nologo /std:c++17 /utf-8 /EHsc /O2 $source $resourceOutput "/Fe:$built" /link /SUBSYSTEM:WINDOWS
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $built)) { throw "Native C++ launcher compilation failed" }
+
+Copy-Item $built (Join-Path $target "Wimf.exe") -Force
+$size = (Get-Item (Join-Path $target "Wimf.exe")).Length
+Write-Host "Windows native single-file executable: $size bytes"
