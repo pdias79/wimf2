@@ -209,7 +209,7 @@ static void OpenAbout() {
     }
     aboutHandle = CreateWindowExW(WS_EX_DLGMODALFRAME, L"Wimf2NativeAbout",
         L"\u00c0 propos de Wimf 2", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 440, 280, windowHandle, nullptr, applicationInstance, nullptr);
+        CW_USEDEFAULT, CW_USEDEFAULT, 440, 280, nullptr, nullptr, applicationInstance, nullptr);
     if (!aboutHandle) return;
     HWND image = CreateWindowW(L"STATIC", nullptr, WS_CHILD | WS_VISIBLE | SS_ICON,
         174, 18, 80, 80, aboutHandle, nullptr, applicationInstance, nullptr);
