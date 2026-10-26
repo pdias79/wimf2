@@ -61,4 +61,5 @@ jobs:
           path: |
             artifacts/windows-aot-experiment/result.txt
             artifacts/windows-aot-experiment/publish.log
+            artifacts/windows-aot-experiment/Wimf-AOT.exe
           if-no-files-found: warn
