@@ -5,6 +5,7 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include <bcrypt.h>
+#include <compressapi.h>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "cabinet.lib")
 
 #define SERVER_RESOURCE 101
 #define WM_TRAY (WM_APP + 1)
@@ -86,13 +88,33 @@ static bool WriteAll(HANDLE file, const BYTE* data, DWORD length) {
     return true;
 }
 static bool ExtractServer(std::wstring& output) {
+#ifdef WIMF_COMPRESSED_SERVER
+    HRSRC resource = FindResourceW(nullptr, MAKEINTRESOURCEW(103), RT_RCDATA);
+#else
     HRSRC resource = FindResourceW(nullptr, MAKEINTRESOURCEW(SERVER_RESOURCE), RT_RCDATA);
+#endif
     if (!resource) return false;
     HGLOBAL loaded = LoadResource(nullptr, resource);
     if (!loaded) return false;
     auto data = static_cast<const BYTE*>(LockResource(loaded));
     DWORD size = SizeofResource(nullptr, resource);
     if (!data || !size) return false;
+#ifdef WIMF_COMPRESSED_SERVER
+    if (size < 9) return false;
+    unsigned long long originalSize = 0;
+    memcpy(&originalSize, data, sizeof(originalSize));
+    if (originalSize == 0 || originalSize > 512ULL * 1024 * 1024) return false;
+    DECOMPRESSOR_HANDLE decompressor = nullptr;
+    if (!CreateDecompressor(COMPRESS_ALGORITHM_XPRESS_HUFF, nullptr, &decompressor)) return false;
+    std::vector<BYTE> decompressed(static_cast<size_t>(originalSize));
+    SIZE_T produced = 0;
+    bool success = Decompress(decompressor, data + 8, size - 8,
+                              decompressed.data(), decompressed.size(), &produced);
+    CloseDecompressor(decompressor);
+    if (!success || produced != originalSize) return false;
+    data = decompressed.data();
+    size = static_cast<DWORD>(originalSize);
+#endif
     auto digest = HexDigest(data, size);
     if (digest.empty()) return false;
 
