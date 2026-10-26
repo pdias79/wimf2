@@ -46,13 +46,15 @@ if ($exitCode -eq 0 -and (Test-Path $binary)) {
     $resourceOutput = Join-Path $target "server.res"
     $nativeOutput = Join-Path $target "Wimf-Native.exe"
     if ((Get-Command rc.exe -ErrorAction SilentlyContinue) -and (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "src/Wimf.Tray/GenerateIcon.ps1") -Output (Join-Path $serverOutput "wimf.ico")
+        if ($LASTEXITCODE -ne 0) { throw "Native tray icon generation failed" }
         Push-Location $serverOutput
         try {
             & rc.exe /nologo "/fo$resourceOutput" $nativeResource 2>&1 | Tee-Object -FilePath $logPath -Append
             if ($LASTEXITCODE -ne 0) { throw "Native launcher resource compilation failed" }
         }
         finally { Pop-Location }
-        & cl.exe /nologo /std:c++17 /EHsc /O2 /DUNICODE /D_UNICODE $nativeSource $resourceOutput "/Fe:$nativeOutput" /link /SUBSYSTEM:WINDOWS 2>&1 | Tee-Object -FilePath $logPath -Append
+        & cl.exe /nologo /std:c++17 /utf-8 /EHsc /O2 /DUNICODE /D_UNICODE $nativeSource $resourceOutput "/Fe:$nativeOutput" /link /SUBSYSTEM:WINDOWS 2>&1 | Tee-Object -FilePath $logPath -Append
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $nativeOutput)) { throw "Native launcher C++ compilation failed" }
         $nativeBytes = (Get-Item $nativeOutput).Length
         Add-Content (Join-Path $target "result.txt") "nativePackageBytes=$nativeBytes"
