@@ -48,17 +48,16 @@ jobs:
           path: artifacts/windows/Wimf.exe
           if-no-files-found: error
 
-      - name: Experiment compressed AOT server resource
+      - name: Build compressed AOT server variant (required)
         if: runner.os == 'Windows'
-        continue-on-error: true
         shell: pwsh
         run: ./scripts/Publish-WindowsCompressed.ps1
       - name: Upload compressed experimental Windows executable
-        if: runner.os == 'Windows' && always()
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: Wimf-win-x64-native-compressed-experiment
           path: |
             artifacts/windows-compressed/Wimf.exe
             artifacts/windows-compressed/sizes.txt
-          if-no-files-found: warn
+          if-no-files-found: error
