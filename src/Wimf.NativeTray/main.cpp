@@ -186,6 +186,10 @@ static void StopServer() {
     if (childThread) { CloseHandle(childThread); childThread = nullptr; }
 }
 static LRESULT CALLBACK AboutProcedure(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+    if (message == WM_CTLCOLORSTATIC) {
+        SetBkMode(reinterpret_cast<HDC>(wp), TRANSPARENT);
+        return reinterpret_cast<LRESULT>(GetSysColorBrush(COLOR_WINDOW));
+    }
     if (message == WM_COMMAND && LOWORD(wp) == CMD_GITHUB && HIWORD(wp) == STN_CLICKED) {
         ShellExecuteW(window, L"open", L"https://github.com/pdias79/wimf2", nullptr, nullptr, SW_SHOWNORMAL);
         return 0;
